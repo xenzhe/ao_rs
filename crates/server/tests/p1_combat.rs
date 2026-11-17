@@ -74,7 +74,8 @@ fn players_fight_until_one_is_a_ghost() {
     let s = server(FIELD, 3);
     let (mut a, mut b) = duel(&s);
     let bid = b.id();
-    for _ in 0..12 {
+    // Official creation gives Constitution (~20) hit points; bare hands hit 0..2.
+    for _ in 0..300 {
         if b.hp() == 0 {
             break;
         }
@@ -118,13 +119,14 @@ fn players_fight_until_one_is_a_ghost() {
 fn no_pvp_in_safe_zones() {
     let s = server(CITY, 3);
     let (mut a, mut b) = duel(&s);
+    let hp_before = b.hp();
     for _ in 0..4 {
         melee(&mut a);
         s.advance(ATTACK_INTERVAL_MS);
     }
     a.sync();
     b.sync();
-    assert_eq!(b.hp(), 3);
+    assert_eq!(b.hp(), hp_before);
     assert!(attacks_by(&a, a.id()).iter().all(|(hit, _)| !hit));
     assert!(a.console().any(|t| t.contains("zona segura")));
 }

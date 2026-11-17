@@ -238,12 +238,6 @@ impl World {
         healed
     }
 
-    pub(crate) fn send_vitals(&self, id: u32) {
-        if let Some(p) = self.player(id) {
-            self.send(id, &S2C::Vitals { sta: p.stats.sta, max_sta: p.stats.max_sta, food: p.stats.food, water: p.stats.water, gold: p.inv.gold });
-        }
-    }
-
     // ------------------------------------------------------------ creatures
 
     /// Combat values of a creature. Its official definition is the npcs.dat entry with the
