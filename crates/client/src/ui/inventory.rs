@@ -27,6 +27,7 @@ use std::collections::HashMap;
 
 /// Size (in UI units) each item window needs. `ui/frame.rs` (integrator) has the table:
 /// `default_size` should return these for Inventory, Bank, Shop and Trade.
+#[allow(dead_code)] // until the integrator calls it from `WindowId::default_size` (see the report)
 pub fn wanted_size(w: WindowId) -> Option<Vec2> {
     match w {
         WindowId::Inventory => Some(vec2(680.0, 520.0)),
@@ -991,7 +992,7 @@ pub(crate) fn draw_grid(ui: &Ui, assets: &mut Assets, g: &Grid, o: Vec2, v: &Gri
             glow = !v.query.is_empty() && ok_q && ok_cat;
         }
         let badge = if v.sale_badges && it.is_some() { it.map(|i| if i.equipped { 0 } else { assets.objs.get(i.obj as u32).map_or(0, |ob| sale_value(ob, 1)) }) } else { None };
-        let opts = CellOpts { selected: v.selected == slot && it.is_some(), hover, dim, glow, locked: i >= v.locked_from, ghost: drag_src == Some(slot) && ui.drag.is_some(), drop_ok: fits, badge, no_amount: false };
+        let opts = CellOpts { selected: v.selected == slot && it.is_some(), hover, dim, glow, locked: i >= v.locked_from, ghost: drag_src == Some(slot) && ui.drag.is_some(), drop_ok: fits && i < v.locked_from, badge, no_amount: false };
         draw_cell(assets, r, it, &opts, u);
         if v.from == WindowId::Inventory {
             zones.push((Zone::InvCell(slot), r));
@@ -1758,12 +1759,14 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let search_r = Rect::new(rx + 22.0 * u, ry, (sl_x - 12.0 * u) - (rx + 22.0 * u), rowh2);
     glyph(Glyph::Search, vec2(rx + 8.0 * u, ry + rowh2 / 2.0), 7.0 * u, alpha(GOLD, 0.8));
     let mut q = st(|s| std::mem::take(&mut s.search));
-    widgets::text_field(ui, "inv_search", &mut q, search_r, 24, false, |c| !c.is_control());
+    let enter = widgets::text_field(ui, "inv_search", &mut q, search_r, 24, false, |c| !c.is_control());
     if q.is_empty() && ui.focus.as_deref() != Some("inv_search") {
         widgets::placeholder(search_r, "Buscar…", u);
     }
-    if ui.focus.as_deref() == Some("inv_search") && is_key_pressed(KeyCode::Escape) {
-        q.clear();
+    // The field gives the keyboard back (so the character can walk) on Enter, Esc, and a
+    // click anywhere else in the window.
+    let clicked_elsewhere = lmb_pressed() && !search_r.contains(m) && ui.focus.as_deref() == Some("inv_search");
+    if ui.focus.as_deref() == Some("inv_search") && (enter || is_key_pressed(KeyCode::Escape) || clicked_elsewhere) {
         ui.focus = None;
     }
     if !q.is_empty() {
@@ -1917,6 +1920,7 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
     .collect();
     let gifts: Vec<(u16, u32)> = if mode == "inv" { gifts } else { gifts.into_iter().take(7).chain(std::iter::once((12u16, 10_000u32))).collect() };
     let slot_of = |g: &Game, ty: T| g.local.inventory.iter().position(|i| i.is_some_and(|i| assets.objs.get(i.obj as u32).is_some_and(|o| o.obj_type == ty))).map(|p| p as u8 + 1);
+    let when = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok());
     if mode == "trade_peer" {
         // The other player: gives itself two objects, accepts the invitation, offers.
         match step {
@@ -1940,6 +1944,16 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
                 game.trade_confirm();
                 advance();
             }
+            // `AO_DEMO_WIPE=<t>`: changes the gold after both confirmed (wipes the seals).
+            4 if when("AO_DEMO_WIPE").is_some_and(|w| t > w) && game.local.social.trade.player.is_some() => {
+                game.trade_offer_gold(1700);
+                advance();
+            }
+            // `AO_DEMO_ACCEPT=1`: confirms again and accepts, to see the deal close.
+            4 if std::env::var("AO_DEMO_ACCEPT").is_ok() && game.plan_accept().is_ok() => {
+                game.trade_accept();
+                advance();
+            }
             _ => {}
         }
         return;
@@ -1950,7 +1964,6 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
     thread_local! {
         static DEALT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
-    let when = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok());
     if !DEALT.with(|d| d.get()) && game.local.social.trade.shop.is_some() {
         if when("AO_DEMO_BUY").is_some_and(|b| t > b) {
             DEALT.with(|d| d.set(true));            if let Some((slot, it)) = game.local.social.trade.shop.as_ref().and_then(|s| s.items.iter().next().map(|(k, v)| (*k, *v))) {
@@ -2095,6 +2108,10 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
                     st(|s| s.menu = Some(Menu { win: WindowId::Inventory, hit, pos: mouse(), fresh: false }));
                 }
             }
+            advance();
+        }
+        s if s == n + 8 && gap > 1.0 && std::env::var("AO_DEMO_ACCEPT").is_ok() && game.plan_accept().is_ok() => {
+            game.trade_accept();
             advance();
         }
         s if s == n + 7 && gap > 0.5 => {

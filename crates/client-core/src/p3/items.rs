@@ -393,6 +393,11 @@ pub struct Viewer {
     pub faction: Option<u8>,
     /// Skill levels, index 0 = skill id 1.
     pub skills: Vec<u8>,
+    /// Class, race (Balance.dat ids) and sex (1 = male, 2 = female) of the player. Known only
+    /// when the character list of the account has him; `None` marks nothing in red.
+    pub class: Option<u8>,
+    pub race: Option<u8>,
+    pub gender: Option<u8>,
 }
 
 /// Tooltip of an object as lines for the item windows. Conventions (drawn by
@@ -474,20 +479,31 @@ pub fn rich_tooltip(o: &ObjData, amount: u32, equipped: bool, v: &Viewer) -> Vec
     if o.chaos != 0 {
         req(v.faction.is_none_or(ao_rules::faction::is_chaos), "Solo para la Legión Oscura".into());
     }
-    // The client does not know the own class, race or sex: shown, never marked red.
-    if o.male_only {
-        out.push("Solo hombres".into());
-    }
-    if o.female_only {
-        out.push("Solo mujeres".into());
+    // Class, race and sex are known only when the account's character list has the player
+    // (the development login has none): then a ban on them is red, otherwise just shown.
+    for (only, label, mine) in [(o.male_only, "hombres", 1u8), (o.female_only, "mujeres", 2u8)] {
+        if only {
+            out.push(match v.gender {
+                Some(g) if g != mine => format!("!Solo para {label}"),
+                _ => format!("Solo {label}"),
+            });
+        }
     }
     if !o.forbidden_classes.is_empty() {
         let names: Vec<&str> = o.forbidden_classes.iter().map(|c| c.spanish_name()).collect();
-        out.push(format!("Vetado a: {}", names.join(", ")));
+        let banned = v.class.and_then(|c| o.forbidden_classes.iter().find(|f| f.id() == c));
+        out.push(match banned {
+            Some(c) => format!("!Tu clase ({}) no puede usarlo", c.spanish_name()),
+            None => format!("Vetado a: {}", names.join(", ")),
+        });
     }
     if !o.forbidden_races.is_empty() {
         let names: Vec<&str> = o.forbidden_races.iter().map(|r| r.spanish_name()).collect();
-        out.push(format!("Vetado a razas: {}", names.join(", ")));
+        let banned = v.race.and_then(|c| o.forbidden_races.iter().find(|f| f.id() == c));
+        out.push(match banned {
+            Some(r) => format!("!Tu raza ({}) no puede usarlo", r.spanish_name()),
+            None => format!("Vetado a razas: {}", names.join(", ")),
+        });
     }
     if o.value > 0 {
         let sale = sale_value(o, 1);
@@ -744,10 +760,13 @@ impl Game {
         self.send(&C2S::PickUp);
     }
 
-    /// Who the tooltips talk to: level, faction (once known) and skills.
+    /// Who the tooltips talk to: level, faction (once known), skills and, when the account's
+    /// character list has him (matched by name), class, race and sex.
     pub fn viewer(&self) -> Viewer {
         let f = &self.local.social.faction;
-        Viewer { level: self.stats.level as i32, faction: f.known.then_some(f.status), skills: self.local.skills.clone() }
+        let name = self.me().map(|m| m.name.split('<').next().unwrap_or("").trim().to_lowercase());
+        let me = name.and_then(|n| self.characters.iter().find(|c| c.name.to_lowercase() == n));
+        Viewer { level: self.stats.level as i32, faction: f.known.then_some(f.status), skills: self.local.skills.clone(), class: me.map(|c| c.class), race: me.map(|c| c.race), gender: me.map(|c| c.gender) }
     }
 
     /// The swaps "Ordenar" would send now (`usable` = unlocked slots).
@@ -1436,7 +1455,7 @@ mod tests {
     #[test]
     fn rich_tooltip_marks_what_the_player_does_not_meet() {
         let o = ObjData { name: "Espada Real".into(), obj_type: ObjType::Weapon, min_hit: 4, max_hit: 9, value: 3000, min_level: 12, royal: 1, text: "Para combatir.".into(), ..Default::default() };
-        let weak = Viewer { level: 5, faction: Some(ao_rules::faction::CHAOS), skills: vec![] };
+        let weak = Viewer { level: 5, faction: Some(ao_rules::faction::CHAOS), ..Default::default() };
         let t = rich_tooltip(&o, 1, false, &weak);
         assert_eq!(t[0], "Espada Real");
         assert!(t[1].contains("Arma") && t[1].contains("Raro"));
@@ -1445,10 +1464,29 @@ mod tests {
         assert!(t.iter().any(|l| l.starts_with('!') && l.contains("nivel 12") && l.contains("tienes 5")));
         assert!(t.iter().any(|l| l.starts_with('!') && l.contains("Ejército Real")));
         assert!(t.iter().any(|l| l.starts_with('$') && l.contains("3000") && l.contains("1000")));
-        let strong = Viewer { level: 20, faction: Some(ao_rules::faction::ROYAL), skills: vec![] };
+        let strong = Viewer { level: 20, faction: Some(ao_rules::faction::ROYAL), ..Default::default() };
         assert!(!rich_tooltip(&o, 1, true, &strong).iter().any(|l| l.starts_with('!')));
         let none = ObjData { name: "Pan".into(), obj_type: ObjType::UseOnce, ..Default::default() };
         assert!(rich_tooltip(&none, 3, false, &strong)[2].starts_with('~'), "a role phrase when obj.dat has no text");
+    }
+
+    #[test]
+    fn class_race_and_sex_come_from_the_character_list() {
+        use ao_formats::dat::balance::Class;
+        let mut g = game();
+        g.my_id = 1;
+        g.ents.insert(1, Ent::new("Merlín <Clan>".into(), EntityKind::Player, 1, 1, 10, 10, ao_rules::Dir::Down, 10, 10));
+        assert_eq!(g.viewer().class, None, "no character list (development login)");
+        g.characters = vec![ao_protocol::CharacterSummary { name: "merlín".into(), level: 5, race: 2, class: 1, gender: 2, body: 1, head: 1, map: 1 }];
+        let v = g.viewer();
+        assert_eq!((v.class, v.race, v.gender), (Some(1), Some(2), Some(2)));
+        let o = ObjData { name: "Cota".into(), obj_type: ObjType::Armor, forbidden_classes: vec![Class::Mage], male_only: true, ..Default::default() };
+        let t = rich_tooltip(&o, 1, false, &v);
+        assert!(t.iter().any(|l| l.starts_with('!') && l.contains("Mago")), "{t:?}");
+        assert!(t.iter().any(|l| l.starts_with('!') && l.contains("hombres")));
+        let t = rich_tooltip(&o, 1, false, &Viewer::default());
+        assert!(!t.iter().any(|l| l.starts_with('!')), "unknown class: shown, not red");
+        assert!(t.iter().any(|l| l.contains("Vetado a")));
     }
 
     #[test]

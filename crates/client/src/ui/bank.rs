@@ -90,6 +90,10 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     if gtxt.is_empty() && ui.focus.as_deref() != Some("bank_gold") {
         widgets::placeholder(field, "cantidad", u);
     }
+    // The field gives the keyboard back on Enter and on a click anywhere else.
+    if ui.focus.as_deref() == Some("bank_gold") && (enter || (inv::lmb_pressed() && !field.contains(m))) {
+        ui.focus = None;
+    }
     let amount = client_core::p3::items::parse_qty(&gtxt, u32::MAX);
     let (bw, bh) = (116.0 * u, 34.0 * u);
     let take = Rect::new(field.x - 8.0 * u - bw, field.y, bw, bh);

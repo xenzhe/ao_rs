@@ -62,8 +62,10 @@ fn watch(game: &Game) {
     match (cur, seen) {
         (Some(t), Some(s)) if s.name == t.name => {
             let (dm, dt) = (diff_offers(&s.mine, &t.mine), diff_offers(&s.theirs, &t.theirs));
+            // The confirmations dropped while the trade stayed open: a change wiped them (the
+            // offer and the status may reach us in different frames, so the diff is not required).
             let had_seal = s.i_confirmed || s.they_confirmed || s.i_accepted || s.they_accepted;
-            let wiped = had_seal && !(t.i_confirmed || t.they_confirmed) && (!dm.is_empty() || !dt.is_empty());
+            let wiped = had_seal && !(t.i_confirmed || t.they_confirmed);
             aux(|a| {
                 if !dm.is_empty() {
                     a.trade_flash[0] = now;
@@ -95,8 +97,8 @@ fn watch(game: &Game) {
             });
         }
         (None, Some(s)) => {
-            // It ended: closed with a deal (both accepted) or cancelled.
-            if s.i_accepted && s.they_accepted {
+            // It ended: the server says whether the deal was done or the trade cancelled.
+            if game.local.social.trade.last_done == Some(true) {
                 toast(format!("Trato cerrado con {}", s.name), ToastKind::Good);
             } else {
                 toast(format!("Comercio con {} cancelado", s.name), ToastKind::Warn);
@@ -456,7 +458,7 @@ fn steps(game: &mut Game, t: &PlayerTrade, phase: TradePhase, assets: &Assets, p
     let can_confirm = game.plan_confirm().is_ok();
     let can_accept = game.plan_accept().is_ok();
     let step1_kind = if can_confirm { Kind::Primary } else { Kind::Secondary };
-    if ibtn_kind(Rect::new(p.x, by, p.w, bh), "Confirmar oferta", step1_kind, can_confirm, act, u) {
+    if ibtn_kind(Rect::new(p.x, by, p.w, bh), "Confirmar", step1_kind, can_confirm, act, u) {
         game.trade_confirm();
     }
     let step2_kind = if can_accept { Kind::Primary } else { Kind::Secondary };

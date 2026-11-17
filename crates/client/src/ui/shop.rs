@@ -256,6 +256,9 @@ fn counter(ui: &mut Ui, game: &mut Game, assets: &mut Assets, bar: Rect, d: &Dea
         qt = d.max.to_string();
     }
     let enter = widgets::text_field(ui, "shop_qty", &mut qt, field, 6, false, |c| c.is_ascii_digit());
+    if ui.focus.as_deref() == Some("shop_qty") && (enter || (inv::lmb_pressed() && !field.contains(mouse()))) {
+        ui.focus = None;
+    }
     if qt.is_empty() && ui.focus.as_deref() != Some("shop_qty") {
         let s = n.to_string();
         let dm = measure(&s, 18.0 * u);
