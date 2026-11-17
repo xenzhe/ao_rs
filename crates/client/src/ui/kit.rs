@@ -773,6 +773,7 @@ fn opaque_bounds(tex: &Texture2D, g: &ao_formats::graphics::Grh) -> Rect {
 }
 
 /// A round medallion with the character's head (or its initial when unknown) inside.
+#[allow(clippy::too_many_arguments)]
 pub fn medallion(assets: &mut crate::assets::Assets, head_id: Option<u16>, name: &str, cx: f32, cy: f32, rad: f32, ring: Color, u: f32) {
     draw_circle(cx + 1.5 * u, cy + 2.0 * u, rad, Color::new(0.0, 0.0, 0.0, 0.35));
     draw_circle(cx, cy, rad, Color::new(0.06, 0.045, 0.03, 1.0));
