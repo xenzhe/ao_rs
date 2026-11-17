@@ -715,10 +715,9 @@ impl World {
         }
     }
 
-    /// `Status(UserIndex)`: 0 criminal, 1 citizen, 2 chaos, 3 royal army... Factions and
-    /// criminality are P2: everyone is a citizen for now.
-    fn player_faction_status(&self, _pid: EntityId) -> i32 {
-        1
+    /// `Status(UserIndex)`: 0 criminal, 1 citizen, 2 chaos, 3 royal army... (faction system).
+    fn player_faction_status(&self, pid: EntityId) -> i32 {
+        self.faction_status(pid) as i32
     }
 
     // ------------------------------------------------------------ hooks for others

@@ -75,9 +75,9 @@ pub struct FactionPiece {
     pub recent_killers: Vec<(String, GameTime)>,
 }
 
-/// `ConnectUser` turns the citizen seguro ON at login. Kept OFF until the P1 PvP tests
-/// (fresh citizens fighting each other) are adapted: see the P2 report.
-pub const SAFE_ON_LOGIN: bool = false;
+/// `ConnectUser` turns the citizen seguro ON at login (a citizen must switch it off to hit
+/// other citizens).
+pub const SAFE_ON_LOGIN: bool = true;
 
 impl Default for FactionPiece {
     fn default() -> Self {

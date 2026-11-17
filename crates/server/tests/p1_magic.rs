@@ -44,6 +44,9 @@ fn said(bot: &Bot, text: &str) -> bool {
 
 fn ready(bot: &mut Bot) {
     bot.wait_until("libro de hechizos", |b| !b.game.spells.is_empty() && b.mana() > 0);
+    // Citizens log in with the seguro on (ConnectUser): switch it off to cast on others.
+    bot.send(&C2S::Faction(ao_protocol::FactionC2S::ToggleSafe));
+    bot.sync();
 }
 
 #[test]

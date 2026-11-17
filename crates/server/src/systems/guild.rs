@@ -510,14 +510,20 @@ impl World {
     /// `Status(UserIndex)`. Factions belong to Opus C (`Player.faction` is still empty):
     /// everyone is a citizen until the integrator connects it.
     fn guild_status_of(&self, id: u32) -> FactionStatus {
-        let _ = id;
-        FactionStatus::Citizen
+        use ao_rules::faction as f;
+        match self.faction_status(id) {
+            f::CRIMINAL => FactionStatus::Criminal,
+            f::CHAOS => FactionStatus::Chaos,
+            f::ROYAL => FactionStatus::Armada,
+            f::COUNCIL_CHAOS => FactionStatus::Conclave,
+            f::COUNCIL_ROYAL => FactionStatus::Council,
+            _ => FactionStatus::Citizen,
+        }
     }
 
-    /// `flags.Seguro`. Not in P1 (no PvP safety toggle yet): always on.
+    /// `flags.Seguro` (faction system).
     fn guild_safe_on(&self, id: u32) -> bool {
-        let _ = id;
-        true
+        self.player(id).is_some_and(|p| p.faction.safe)
     }
 
     /// `m_PuedeSalirDeClan`: `by` may take `cid` out of `gid` if `by` is its leader or `cid`

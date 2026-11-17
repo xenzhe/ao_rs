@@ -178,6 +178,10 @@ impl World {
             Source::Npc(map, nid) => self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or_else(String::new, |n| n.name.clone()),
             Source::Named(n) => n.to_string(),
         };
+        if let Source::Player(a) = source {
+            // UsuarioAtacadoPorUsuario: every hit, not only the killing one.
+            self.faction_on_player_attacked(a, id);
+        }
         let p = self.player_mut(id);
         p.hp = (p.hp - dmg.max(0)).max(0);
         let (map, hp, max_hp) = (p.map, p.hp, p.max_hp);
@@ -277,6 +281,12 @@ impl World {
         }
         let exp_total = c.exp;
         if self.player(attacker).is_some() {
+            let number = self.maps[&map].npcs[&nid].def;
+            if let Some(why) = self.faction_npc_attack_refusal(attacker, number) {
+                self.console(attacker, why, Tone::Warn);
+                return false;
+            }
+            self.faction_on_npc_attacked(attacker, number);
             self.npc_attacked_by(map, nid, attacker);
         }
         let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&nid)) else { return false };
@@ -414,6 +424,8 @@ mod tests {
         let p = w.player_mut(id);
         p.stats.sta = 1000;
         p.stats.max_sta = 1000;
+        // Test fighters: seguro off (citizens log in with it on).
+        p.faction.safe = false;
     }
 
     fn wolf(w: &mut World, nid: u32, x: i32, y: i32, hp: i32) {

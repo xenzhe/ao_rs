@@ -63,6 +63,9 @@ pub struct User<'a> {
     pub level: u32,
     /// Index 0 = skill 1.
     pub skills: &'a [u8],
+    /// `e_Facciones` status (crate::faction) and the rank in the player's faction.
+    pub faction_status: u8,
+    pub faction_rank: u8,
 }
 
 /// Why an object cannot be used (CanUseObject's codes, first match wins).
@@ -100,10 +103,21 @@ pub fn can_use(o: &ObjData, u: &User) -> Result<(), Denied> {
     if o.max_level > 0 && u.level as i32 > o.max_level {
         return Err(Denied::MaxLevel(o.max_level));
     }
-    // `Not FaccionPuedeUsarItem And JerarquiaPuedeUsarItem`: without factions nobody is
-    // armada/caos and nobody has rewards, so faction items with rank 0 are refused.
-    if (o.royal == 1 || o.chaos == 1) && o.rank <= 0 {
-        return Err(Denied::Faction);
+    // FaccionPuedeUsarItem + JerarquiaPuedeUsarItem: royal items need the army (or its
+    // council when leaders-only), chaos items the legion, and the item's rank at least.
+    if o.royal == 1 || o.chaos == 1 {
+        use crate::faction::{is_chaos, is_royal, COUNCIL_CHAOS, COUNCIL_ROYAL};
+        let s = u.faction_status;
+        let faction_ok = if o.royal == 1 {
+            if o.leaders_only { s == COUNCIL_ROYAL } else { is_royal(s) }
+        } else if o.leaders_only {
+            s == COUNCIL_CHAOS
+        } else {
+            is_chaos(s)
+        };
+        if !faction_ok || (u.faction_rank as i32) < o.rank {
+            return Err(Denied::Faction);
+        }
     }
     if !class_can_use(o, u.class) {
         return Err(Denied::Class);
@@ -214,7 +228,7 @@ mod tests {
     use super::*;
 
     fn user(level: u32) -> User<'static> {
-        User { race: 1, class: 1, gender: 1, level, skills: &[0; 24] }
+        User { race: 1, class: 1, gender: 1, level, skills: &[0; 24], faction_status: crate::faction::CITIZEN, faction_rank: 0 }
     }
 
     #[test]

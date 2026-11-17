@@ -45,6 +45,9 @@ fn equipped_warrior(s: &TestServer, name: &str) -> Bot {
     assert!(c.create_character(name, 1, WARRIOR, 1, 1));
     c.play(name);
     c.wait_until("equipo inicial recibido", |b| b.game.local.inventory.iter().flatten().any(|i| i.equipped));
+    // Citizens log in with the seguro on (ConnectUser): switch it off to fight.
+    c.send(&C2S::Faction(ao_protocol::FactionC2S::ToggleSafe));
+    c.sync();
     c
 }
 

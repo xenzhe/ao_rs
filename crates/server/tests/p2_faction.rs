@@ -173,7 +173,9 @@ fn a_citizen_killing_a_citizen_turns_criminal() {
     let mut a = armed(play(create(&s, "Asesino"), "Asesino"));
     let mut v = strip(play(create(&s, "Inocente"), "Inocente"));
     assert_eq!(a.game.local.social.faction.status, rules::CITIZEN);
-    assert!(!a.game.local.social.faction.safe, "seguro off by default (see faction_on_enter)");
+    assert!(a.game.local.social.faction.safe, "ConnectUser: citizens log in with the seguro on");
+    a.send(&C2S::Faction(FactionC2S::ToggleSafe));
+    a.wait_until("sin seguro", |b| !b.game.local.social.faction.safe);
     let aid = a.id();
     adjacent(&mut a, &mut v);
     assert!(fight(&s, &mut a, &mut v, 300), "the victim died");
@@ -250,8 +252,7 @@ fn the_seguro_and_the_royal_army_refuse_attacks_on_citizens() {
     // A citizen with the seguro on cannot hit the army either; off, he can (and turns criminal).
     let to = a.pos();
     face(&mut v, to);
-    v.send(&C2S::Faction(FactionC2S::ToggleSafe));
-    v.wait_until("seguro", |b| b.game.local.social.faction.safe);
+    assert!(v.game.local.social.faction.safe, "logged in with the seguro on");
     let hp = a.hp();
     assert!(!fight(&s, &mut v, &mut a, 4));
     assert_eq!(a.hp(), hp);
@@ -334,6 +335,10 @@ fn enlisting_at_the_royal_recruiter() {
     // DarRecompensas: rank 1 of the army is obj 4340 "Uniforme Imperial (1ª Jerarquía)"
     // (Real=1, forbidden only for pirate, thief and worker).
     a.wait_until("uniforme", |b| b.game.local.inventory.iter().flatten().any(|i| i.obj == UNIFORM));
+    // A soldier of rank 1 can wear it (FaccionPuedeUsarItem + JerarquiaPuedeUsarItem).
+    let slot = a.game.local.inventory.iter().position(|i| i.is_some_and(|i| i.obj == UNIFORM)).unwrap() as u8 + 1;
+    a.send(&C2S::EquipItem { slot });
+    a.wait_until("uniforme puesto", |b| b.game.local.slot(slot).is_some_and(|i| i.equipped));
 
     // Talking again asks for the next rank (1500 points).
     a.send(&C2S::Interact { tx: npc.0, ty: npc.1 });

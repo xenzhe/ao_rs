@@ -8,7 +8,7 @@ pub mod channel;
 
 pub use trade::{TradeC2S, TradeS2C};
 pub use guild::{GuildC2S, GuildS2C};
-pub use party::{PartyC2S, PartyS2C};
+pub use party::{PartyC2S, PartyMember, PartyS2C};
 pub use faction::{FactionC2S, FactionS2C};
 pub use quest::{QuestC2S, QuestS2C};
 pub use channel::{ChannelC2S, ChannelKind, ChannelS2C};

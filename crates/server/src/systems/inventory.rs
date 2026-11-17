@@ -14,6 +14,14 @@ const PIRATE: u8 = 10;
 const USE_TIMER: i32 = -1;
 const USE_INTERVAL_MS: u64 = 276;
 
+/// What `CanUseObject` needs to know about a player, faction and rank included.
+fn item_user(p: &crate::world::entities::Player) -> items::User<'_> {
+    use ao_rules::faction::{is_chaos, is_royal};
+    let f = &p.faction.rec;
+    let rank = if is_royal(f.status) { f.royal_rank } else if is_chaos(f.status) { f.chaos_rank } else { 0 };
+    items::User { race: p.race, class: p.class, gender: p.gender, level: p.level, skills: &p.stats.skills, faction_status: f.status, faction_rank: rank }
+}
+
 impl World {
     // ---------------------------------------------------------------- hooks (contract)
 
@@ -273,7 +281,7 @@ impl World {
         let Some(o) = ao.objs.get(item.obj as u32) else {
             return self.console(id, "Ese objeto no existe.", Tone::Warn);
         };
-        let user = items::User { race: p.race, class: p.class, gender: p.gender, level: p.level, skills: &p.stats.skills };
+        let user = item_user(p);
         if let Err(why) = items::can_use(o, &user) {
             return self.console(id, why.message(), Tone::Info);
         }
@@ -481,7 +489,7 @@ impl World {
         let ao = self.ao.clone();
         let Some(o) = ao.objs.get(item.obj as u32) else { return };
         let p = self.player(id).unwrap();
-        let user = items::User { race: p.race, class: p.class, gender: p.gender, level: p.level, skills: &p.stats.skills };
+        let user = item_user(p);
         if let Err(why) = items::can_use(o, &user) {
             return self.console(id, why.message(), Tone::Info);
         }
@@ -799,7 +807,7 @@ mod tests {
     /// First obj.dat object of a type this player can use, matching `extra`.
     fn find(w: &World, id: u32, t: ObjType, extra: impl Fn(&ObjData) -> bool) -> u16 {
         let (race, class, gender, level, skills) = user(w, id);
-        let u = items::User { race, class, gender, level, skills: &skills };
+        let u = items::User { race, class, gender, level, skills: &skills, faction_status: ao_rules::faction::CITIZEN, faction_rank: 0 };
         w.ao.objs
             .iter()
             .find(|(_, o)| o.obj_type == t && extra(o) && items::can_use(o, &u).is_ok() && o.destroys == 0 && o.non_droppable == 0 && o.newbie == 0)

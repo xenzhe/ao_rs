@@ -82,8 +82,6 @@ impl World {
         if killer == victim || self.player(killer).is_none() || self.player(victim).is_none() || self.faction_safe_fight(killer, victim) {
             return;
         }
-        // The hit that killed is an attack: UsuarioAtacadoPorUsuario first.
-        self.faction_on_player_attacked(killer, victim);
         // ContarMuerte
         let now = self.now();
         let rekill_ms = self.ao.balance.extra.faction_rekill_time.max(0) as u64;
@@ -113,12 +111,11 @@ impl World {
         self.faction_save(killer);
     }
 
-    /// HOOK (combat): `killer` killed an NPC of npcs.dat `npc_number` (faction NPC kills).
-    /// `MuereNpc` keeps no faction counters; what remains is `UserCanAttackNpc.TurnPK`
-    /// (a citizen attacking an army NPC turns criminal), applied here on the kill until
-    /// combat calls [`World::faction_on_npc_attacked`].
+    /// HOOK (combat): `killer` killed an NPC of npcs.dat `npc_number`. `MuereNpc` keeps no
+    /// faction counters; `UserCanAttackNpc.TurnPK` runs on every hit
+    /// ([`World::faction_on_npc_attacked`], called by combat).
     pub(crate) fn faction_on_npc_killed(&mut self, killer: u32, npc_number: u16) {
-        self.faction_on_npc_attacked(killer, npc_number);
+        let _ = (killer, npc_number);
     }
 
     /// Called when the player enters the world (after everything else is sent).
@@ -219,7 +216,14 @@ impl World {
         let (safe, legion_safe, map) = (p.faction.safe, p.faction.legion_safe, p.map);
         self.send(id, &S2C::Faction(FactionS2C::Safe { on: safe }));
         self.send(id, &S2C::Faction(FactionS2C::LegionSafe { on: legion_safe }));
-        // Everyone's faction status on the map, both ways (RefreshCharStatus).
+        let _ = map;
+        self.faction_map_statuses(id);
+    }
+
+    /// Everyone's faction status on the player's map, both ways (`RefreshCharStatus`).
+    /// Called on entering the world and on every map change (session).
+    pub(crate) fn faction_map_statuses(&mut self, id: u32) {
+        let Some(map) = self.player(id).map(|p| p.map) else { return };
         let others: Vec<(u32, u8)> = self.sessions.iter().filter_map(|(k, s)| s.player.as_ref().filter(|o| o.map == map && *k != id).map(|o| (*k, o.faction.rec.status))).collect();
         for (other, status) in others {
             self.send(id, &S2C::Faction(FactionS2C::Status { id: other, status }));

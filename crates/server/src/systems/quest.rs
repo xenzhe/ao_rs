@@ -51,8 +51,16 @@ impl World {
     /// (P2, Opus C) owns the status; until it is wired every character is a citizen.
     /// INTEGRATOR: map `Player.faction` here (royal army 2, royal council 4, criminal 8,
     /// chaos legion 16, chaos council 32).
-    fn quest_faction_bit(&self, _id: u32) -> i32 {
-        quest::faction::CITIZEN
+    fn quest_faction_bit(&self, id: u32) -> i32 {
+        use ao_rules::faction as f;
+        match self.faction_status(id) {
+            f::CRIMINAL => quest::faction::CRIMINAL,
+            f::CHAOS => quest::faction::CHAOS_LEGION,
+            f::ROYAL => quest::faction::ROYAL_ARMY,
+            f::COUNCIL_CHAOS => quest::faction::CHAOS_COUNCIL,
+            f::COUNCIL_ROYAL => quest::faction::ROYAL_COUNCIL,
+            _ => quest::faction::CITIZEN,
+        }
     }
 
     fn quest_say(&self, id: u32, nid: u32, text: impl Into<String>) {

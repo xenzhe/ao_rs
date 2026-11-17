@@ -851,7 +851,8 @@ impl World {
             let dmg = rules::damage_vs_user(dmg, 0, pen, s.anti_magic_resistance != 0);
             let tname = self.player(t).unwrap().name.clone();
             self.console(id, format!("Le has quitado {dmg} puntos de vida a {tname}."), Tone::Combat);
-            self.damage_player(t, dmg, &caster_name);
+            // As a player hit (not a named source): faction and kill credit apply to spells too.
+            self.hurt_player(t, dmg, super::combat::Source::Player(id));
             ok = true;
         }
         if self.player(t).is_none() {
@@ -1093,6 +1094,8 @@ mod tests {
         w.on_event(Event::Connected { id, addr: "127.0.0.1:1".parse().unwrap(), tx });
         w.handle(id, C2S::Login { name: name.into(), version: PROTOCOL_VERSION });
         assert!(w.player(id).is_some(), "dev login");
+        // Test casters: seguro off (citizens log in with it on).
+        w.player_mut(id).faction.safe = false;
         Conn { rx }
     }
 
