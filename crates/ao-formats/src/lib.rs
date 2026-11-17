@@ -6,6 +6,7 @@
 //! - `ini` — the INI dialect used by AO
 //! - `paths` — locating the `Recursos` folder
 pub mod csm;
+pub mod dat;
 pub mod graphics;
 pub mod ini;
 pub mod paths;
