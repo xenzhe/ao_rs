@@ -272,6 +272,7 @@ pub fn text_field(ui: &mut super::Ui, id: &str, value: &mut String, r: Rect, max
         if is_key_pressed(KeyCode::Backspace) {
             value.pop();
         }
+        paste_into(value, max, &filter);
         enter = is_key_pressed(KeyCode::Enter);
     }
     let shown = if mask { "•".repeat(value.chars().count()) } else { value.clone() };
@@ -286,6 +287,25 @@ pub fn text_field(ui: &mut super::Ui, id: &str, value: &mut String, r: Rect, max
         // nothing: placeholders are drawn by the caller with `placeholder`
     }
     enter
+}
+
+/// For any focused text field: Ctrl+V (or Shift+Insert) pastes the clipboard, keeping the
+/// field's character filter and length limit (a trailing newline is dropped).
+pub fn paste_into(value: &mut String, max: usize, filter: &dyn Fn(char) -> bool) {
+    let ctrl = is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl);
+    let shift = is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift);
+    if !((ctrl && is_key_pressed(KeyCode::V)) || (shift && is_key_pressed(KeyCode::Insert))) {
+        return;
+    }
+    let Some(clip) = macroquad::miniquad::window::clipboard_get() else { return };
+    for ch in clip.trim_end_matches(['\r', '\n']).chars() {
+        if value.chars().count() >= max {
+            break;
+        }
+        if !ch.is_control() && filter(ch) {
+            value.push(ch);
+        }
+    }
 }
 
 /// Faint hint text inside an empty field.

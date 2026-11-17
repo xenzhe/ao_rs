@@ -373,6 +373,7 @@ fn chat_input(ui: &mut Ui, game: &mut Game, st: &mut State, ir: Rect, u: f32) {
     if is_key_pressed(KeyCode::Backspace) {
         t.pop();
     }
+    crate::ui::widgets::paste_into(t, MAX_CHAT, &|_| true);
     if is_key_pressed(KeyCode::Up) {
         if let Some(prev) = st.history.up(t) {
             *t = prev;

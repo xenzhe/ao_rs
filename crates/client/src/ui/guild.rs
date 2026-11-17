@@ -140,6 +140,7 @@ fn letter_field(ui: &mut Ui, id: &str, value: &mut String, r: Rect, max: usize, 
         if is_key_pressed(KeyCode::Backspace) {
             value.pop();
         }
+        crate::ui::widgets::paste_into(value, max, &accept);
         enter = is_key_pressed(KeyCode::Enter);
         if is_key_pressed(KeyCode::Escape) {
             ui.focus = None;

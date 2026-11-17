@@ -399,6 +399,7 @@ fn ink_field(ui: &mut Ui, id: &str, label: &str, value: &mut String, r: Rect, ma
         if is_key_pressed(KeyCode::Backspace) {
             value.pop();
         }
+        super::widgets::paste_into(value, max, &accept);
         enter = is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter);
     }
     let shown = if mask { "•".repeat(value.chars().count()) } else { value.clone() };
