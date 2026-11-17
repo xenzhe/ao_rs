@@ -1,18 +1,32 @@
 //! Window: the vault (deposit/withdraw items and gold). OWNER: Sonnet 2 (docs/P3_CONTRATO.md).
 //!
-//! Two grids (the vault and the inventory): drag from one to the other, double click, the
-//! right-click menu or the buttons under each grid. A quantity prompt asks "how many" when
-//! there is more than one unit. Closing sends `BankClose`.
-use super::inventory::{self as inv, active, btn_w, draw_grid, fmt_gold, handle, ibtn, item_tip, mouse, open_prompt, selected_inv, selected_other, track, Grid, GridView, Op, Pending};
+//! Two chests side by side: the vault on the left, your bag on the right. Drag from one to
+//! the other (or double click, the right-click menu); a quantity prompt asks "how many" when
+//! there is more than one unit. The gold sits under them: what is kept and what you carry,
+//! and between them a field with "Retirar" and "Guardar". Closing sends `BankClose`.
+use super::inventory::{self as inv, active, btn_w, chip, draw_grid, fmt_gold, glyph, handle, ibtn, ibtn_kind, item_tip, mouse, selected_inv, selected_other, settle_tx, aux, track, watch_gold, Glyph, Grid, GridView};
 use crate::assets::Assets;
 use crate::game::Game;
-use crate::ui::theme::{GOLD_TEXT, MUTED, TEXT};
-use crate::ui::widgets::{text, text_fit};
+use crate::ui::fx_ui::{toast, ToastKind};
+use crate::ui::theme::{self, FontKind, GOLD, GOLD_BRIGHT, TEXT, TEXT_DIM, TEXT_FAINT};
+use crate::ui::widgets::{self, measure, text, text_with, Kind};
 use crate::ui::{Ui, WindowId};
+use client_core::p3::items::usable_slots;
 use macroquad::prelude::*;
 
-pub(crate) fn item_name(assets: &Assets, obj: u16) -> String {
-    assets.objs.get(obj as u32).map(|o| o.name.clone()).unwrap_or_else(|| format!("Objeto {obj}"))
+pub(crate) use super::inventory::item_name;
+
+/// One gold figure: coin, big number, caption.
+fn gold_block(x: f32, y: f32, amount: u32, caption: &str, right: bool, u: f32) -> f32 {
+    let s = fmt_gold(amount as u64);
+    let size = 26.0 * u;
+    let tw = widgets::measure_with(FontKind::Title, &s, size).width;
+    let total = 38.0 * u + tw;
+    let x0 = if right { x - total } else { x };
+    glyph(Glyph::Coin, vec2(x0 + 14.0 * u, y + 14.0 * u), 13.0 * u, GOLD_BRIGHT);
+    text_with(FontKind::Title, &s, x0 + 36.0 * u, y + 23.0 * u, size, GOLD_BRIGHT);
+    text(caption, x0 + 36.0 * u, y + 42.0 * u, 14.0 * u, TEXT_DIM);
+    total
 }
 
 /// Draws the content of the window inside `r` (the frame is already drawn).
@@ -20,6 +34,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let u = ui.u;
     let w = WindowId::Bank;
     inv::begin(ui, game, assets);
+    settle_tx(game, assets);
     let Some(bank) = game.local.bank.as_ref() else { return };
     let (vault, vgold) = (bank.slots.clone(), bank.gold);
     let inventory = game.local.inventory.clone();
@@ -27,71 +42,102 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let m = mouse();
     let mut zones = Vec::new();
     let mut tip: Option<Vec<String>> = None;
-    let grid = Grid { cols: 11, rows: 4, cell: 26.0 * u, gap: 2.0 * u };
-    let ox = r.x + (r.w - grid.size().x) / 2.0;
+    let bp = game.local.inventory.iter().flatten().any(|i| i.equipped && assets.objs.get(i.obj as u32).is_some_and(|o| o.obj_type == ao_formats::dat::obj::ObjType::Backpack));
+    let usable = usable_slots(bp);
 
-    // ---- the vault ----
-    text("Bóveda", r.x + 4.0 * u, r.y + 16.0 * u, 19.0 * u, GOLD_TEXT);
-    let s = format!("{} oro guardado", fmt_gold(vgold as u64));
-    text(&s, r.right() - 4.0 * u - crate::ui::widgets::measure(&s, 17.0 * u).width, r.y + 16.0 * u, 17.0 * u, TEXT);
-    let vo = vec2(ox, r.y + 22.0 * u);
+    let pane_w = (r.w - 30.0 * u) / 2.0;
+    let (lx, rx) = (r.x, r.x + pane_w + 30.0 * u);
+    // ---- headings ----
+    let used_v = vault.iter().filter(|s| s.is_some()).count();
+    let used_i = inventory.iter().take(usable).filter(|s| s.is_some()).count();
+    let top = theme::section("Tu bóveda", lx, r.y - 4.0 * u, pane_w, u);
+    theme::section("Tu mochila", rx, r.y - 4.0 * u, pane_w, u);
+    for (x, s) in [(lx, format!("{used_v} / {}", vault.len())), (rx, format!("{used_i} / {usable}"))] {
+        let d = measure(&s, 16.0 * u);
+        text(&s, x + pane_w - d.width, r.y + 14.0 * u, 16.0 * u, TEXT_DIM);
+    }
+    // ---- the two chests ----
+    let gh = r.h - (top - r.y) - 130.0 * u;
+    let grid = Grid::fit(7, 6, pane_w - 12.0 * u, gh, 3.0 * u, 50.0 * u);
+    let vo = vec2(lx + 6.0 * u + (pane_w - 12.0 * u - grid.size().x) / 2.0, top + 6.0 * u);
+    let io = vec2(rx + 6.0 * u + (pane_w - 12.0 * u - grid.size().x) / 2.0, top + 6.0 * u);
     let sel_v = selected_other(w);
-    let (h1, z1) = draw_grid(ui, assets, &grid, vo, &GridView { slots: &vault, from: WindowId::Bank, selected: sel_v, locked_from: usize::MAX }, act);
+    let (h1, z1) = draw_grid(ui, assets, &grid, vo, &GridView::plain(&vault, WindowId::Bank, sel_v, usize::MAX), act);
     zones.extend(z1);
-    let ay = vo.y + grid.size().y + 4.0 * u;
-    let sel_item = vault.get(sel_v.wrapping_sub(1) as usize).copied().flatten();
-    let (b1, b2) = (btn_w("Retirar", u), btn_w("Retirar oro", u));
-    let name_w = r.w - b1 - b2 - 12.0 * u;
-    match sel_item {
-        Some(it) => text_fit(&format!("{} x{}", item_name(assets, it.obj), it.amount), r.x + 4.0 * u, ay + 17.0 * u, 16.0 * u, name_w, TEXT),
-        None => text_fit("Elige un objeto", r.x + 4.0 * u, ay + 17.0 * u, 16.0 * u, name_w, MUTED),
-    }
-    let by = Rect::new(r.right() - b2, ay, b2, 24.0 * u);
-    if ibtn(by, "Retirar oro", vgold > 0, act, u) {
-        open_prompt(w, Pending::WithdrawGold, "Retirar oro", vgold, vgold.min(1), None);
-    }
-    let bi = Rect::new(by.x - 4.0 * u - b1, ay, b1, 24.0 * u);
-    if ibtn(bi, "Retirar", sel_item.is_some(), act, u) {
-        if let Some(it) = sel_item {
-            let hit = inv::Hit { from: WindowId::Bank, slot: sel_v, obj: it.obj, amount: it.amount };
-            inv::start(game, assets, Op::Withdraw, hit, w);
-        }
-    }
-
-    // ---- the inventory ----
-    let y2 = ay + 52.0 * u;
-    text("Tu inventario", r.x + 4.0 * u, y2 + 14.0 * u, 19.0 * u, GOLD_TEXT);
-    let s = format!("{} oro encima", fmt_gold(game.local.gold as u64));
-    text(&s, r.right() - 4.0 * u - crate::ui::widgets::measure(&s, 17.0 * u).width, y2 + 14.0 * u, 17.0 * u, TEXT);
-    let io = vec2(ox, y2 + 20.0 * u);
-    let sel_i = selected_inv();
-    let (h2, z2) = draw_grid(ui, assets, &grid, io, &GridView { slots: &inventory, from: WindowId::Inventory, selected: sel_i, locked_from: usize::MAX }, act);
+    let (h2, z2) = draw_grid(ui, assets, &grid, io, &GridView::plain(&inventory, WindowId::Inventory, selected_inv(), usable), act);
     zones.extend(z2);
-    let ay2 = io.y + grid.size().y + 4.0 * u;
-    let sel_inv_item = inventory.get(sel_i.wrapping_sub(1) as usize).copied().flatten();
-    let (c1, c2, c3) = (btn_w("Guardar", u), btn_w("Guardar oro", u), btn_w("Cerrar", u));
-    let can_store = sel_inv_item.is_some_and(|i| !i.equipped);
-    let close = Rect::new(r.right() - c3, ay2, c3, 24.0 * u);
-    if ibtn(close, "Cerrar", true, act, u) {
-        game.bank_close();
+    // An arrow pair between the chests says it goes both ways.
+    let mid = vec2((lx + pane_w + rx) / 2.0, vo.y + grid.size().y / 2.0);
+    for (dy, dir) in [(-9.0, 1.0f32), (9.0, -1.0)] {
+        let a = vec2(mid.x, mid.y + dy * u);
+        draw_triangle(a + vec2(-dir * 7.0 * u, -6.0 * u), a + vec2(-dir * 7.0 * u, 6.0 * u), a + vec2(dir * 7.0 * u, 0.0), Color::new(GOLD.r, GOLD.g, GOLD.b, 0.7));
     }
-    let gold_b = Rect::new(close.x - 4.0 * u - c2, ay2, c2, 24.0 * u);
-    if ibtn(gold_b, "Guardar oro", game.local.gold > 0, act, u) {
-        open_prompt(w, Pending::DepositGold, "Guardar oro", game.local.gold, game.local.gold.min(1), None);
+    let hy = vo.y + grid.size().y + 22.0 * u;
+    text("Arrastra aquí lo que quieras guardar", lx, hy, 14.0 * u, TEXT_FAINT);
+    text("Arrastra aquí lo que quieras sacar", rx, hy, 14.0 * u, TEXT_FAINT);
+
+    // ---- the gold: what is kept, what you carry, and how much to move ----
+    let gy = hy + 14.0 * u;
+    theme::divider(r.x + r.w / 2.0, gy, r.w * 0.96, u);
+    let gy = gy + 12.0 * u;
+    gold_block(lx, gy, vgold, "en la bóveda", false, u);
+    gold_block(r.right(), gy, game.local.gold, "contigo", true, u);
+    let cw = 120.0 * u;
+    let cx = r.x + r.w / 2.0;
+    let field = Rect::new(cx - cw / 2.0, gy + 2.0 * u, cw, 34.0 * u);
+    let mut gtxt = aux(|a| std::mem::take(&mut a.gold_text));
+    let enter = widgets::text_field(ui, "bank_gold", &mut gtxt, field, 9, false, |c| c.is_ascii_digit());
+    if gtxt.is_empty() && ui.focus.as_deref() != Some("bank_gold") {
+        widgets::placeholder(field, "cantidad", u);
     }
-    let item_b = Rect::new(gold_b.x - 4.0 * u - c1, ay2, c1, 24.0 * u);
-    if ibtn(item_b, "Guardar", can_store, act, u) {
-        if let Some(it) = sel_inv_item {
-            let hit = inv::Hit { from: WindowId::Inventory, slot: sel_i, obj: it.obj, amount: it.amount };
-            inv::start(game, assets, Op::Deposit, hit, w);
+    let amount = client_core::p3::items::parse_qty(&gtxt, u32::MAX);
+    let (bw, bh) = (116.0 * u, 34.0 * u);
+    let take = Rect::new(field.x - 8.0 * u - bw, field.y, bw, bh);
+    let put = Rect::new(field.right() + 8.0 * u, field.y, bw, bh);
+    let can_take = amount.is_some() && vgold > 0;
+    let can_put = amount.is_some() && game.local.gold > 0;
+    if ibtn(take, "Retirar", can_take, act, u) {
+        if let Some(n) = amount {
+            watch_gold(game, false);
+            game.bank_withdraw_gold(n);
         }
     }
+    if ibtn_kind(put, "Guardar", Kind::Primary, can_put, act, u) || (enter && can_put) {
+        if let Some(n) = amount {
+            watch_gold(game, true);
+            game.bank_deposit_gold(n);
+        }
+    }
+    if enter && !can_put && amount.is_some() {
+        toast("No llevas oro para guardar", ToastKind::Warn);
+    }
+    // Quick amounts and "everything".
+    let qy = field.bottom() + 8.0 * u;
+    let mut x = cx - (3.0 * 62.0 * u + 2.0 * 4.0 * u) / 2.0;
+    for (label, v) in [("1.000", 1_000u32), ("10.000", 10_000), ("100.000", 100_000)] {
+        if chip(Rect::new(x, qy, 62.0 * u, 24.0 * u), label, gtxt == v.to_string(), act, u) {
+            gtxt = v.to_string();
+        }
+        x += 66.0 * u;
+    }
+    aux(|a| a.gold_text = gtxt);
+    let tw = btn_w("Retirar todo", u);
+    if ibtn_kind(Rect::new(lx + 24.0 * u, qy + 12.0 * u, tw, 24.0 * u), "Retirar todo", Kind::Ghost, vgold > 0, act, u) {
+        watch_gold(game, false);
+        game.bank_withdraw_gold(vgold);
+    }
+    let tw2 = btn_w("Guardar todo", u);
+    if ibtn_kind(Rect::new(r.right() - tw2 - 14.0 * u, qy + 12.0 * u, tw2, 24.0 * u), "Guardar todo", Kind::Ghost, game.local.gold > 0, act, u) {
+        watch_gold(game, true);
+        game.bank_deposit_gold(game.local.gold);
+    }
+    // The window's X closes the vault (`ui::auto_windows` tells the server).
 
     // ---- input ----
     let hit = h1.or(h2);
     if let (Some(h), None) = (hit, &ui.drag) {
         let eq = h.from == WindowId::Inventory && game.local.slot(h.slot).is_some_and(|i| i.equipped);
-        let extra = if h.from == WindowId::Inventory { "Doble clic: guardar" } else { "Doble clic: retirar" };
+        let extra = if h.from == WindowId::Inventory { "Doble clic: guardar · arrastra a la bóveda" } else { "Doble clic: retirar · arrastra a tu mochila" };
         tip = Some(item_tip(game, assets, h.obj, h.amount, eq, &[extra.to_string()]));
     }
     if let Some(ev) = track(ui, w, act, hit) {
@@ -99,10 +145,11 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     }
     inv::register(w, r, u, zones);
     inv::menu_ui(ui, game, assets, w);
-    inv::prompt_ui(ui, game, w, r);
+    inv::prompt_ui(ui, game, assets, w, r);
     if let Some(t) = tip {
         if ui.drag.is_none() && act {
             inv::tooltip_at(&t, m, u);
         }
     }
+    let _ = (GOLD, TEXT);
 }
