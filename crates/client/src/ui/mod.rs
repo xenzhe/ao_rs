@@ -23,6 +23,11 @@ pub mod party;
 pub mod quests;
 pub mod worldmap;
 pub mod options;
+// P4 windows
+pub mod craft;
+pub mod gm;
+pub mod events;
+pub mod auction;
 
 pub use frame::{Drag, Ui, WindowId};
 
@@ -51,6 +56,10 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
             WindowId::Quests => quests::draw(ui, game, assets, r),
             WindowId::WorldMap => worldmap::draw(ui, game, assets, r),
             WindowId::Options => options::draw(ui, game, assets, r),
+            WindowId::Crafting => craft::draw(ui, game, assets, r),
+            WindowId::Gm => gm::draw(ui, game, assets, r),
+            WindowId::Events => events::draw(ui, game, assets, r),
+            WindowId::Auction => auction::draw(ui, game, assets, r),
         }
     }
     // Floating "X invites you to trade" and orphan prompts.

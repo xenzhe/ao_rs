@@ -50,6 +50,11 @@ pub struct Player {
     pub party: super::party::PartyPiece,
     pub faction: super::faction::FactionPiece,
     pub quest: super::quest::QuestPiece,
+    /// P4 pieces (docs/P4_CONTRATO.md).
+    pub work: super::work::WorkPiece,
+    pub craft: super::craft::CraftPiece,
+    pub gm: super::gm::GmPiece,
+    pub event: super::event::EventPiece,
 }
 
 impl Player {

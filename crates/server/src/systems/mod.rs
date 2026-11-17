@@ -21,6 +21,11 @@ mod quest;
 mod social;
 mod trade;
 pub(crate) mod weather;
+// P4 (docs/P4_CONTRATO.md)
+mod work;
+mod craft;
+mod gm;
+mod event;
 
 use crate::world::World;
 use ao_protocol::C2S;
@@ -61,6 +66,10 @@ impl World {
             C2S::Faction(m) => self.on_faction(id, m),
             C2S::Quest(m) => self.on_quest(id, m),
             C2S::Channel(m) => self.on_channel(id, m),
+            C2S::Work(m) => self.on_work(id, m),
+            C2S::Craft(m) => self.on_craft(id, m),
+            C2S::Gm(m) => self.on_gm(id, m),
+            C2S::Event(m) => self.on_game_event(id, m),
         }
     }
 }

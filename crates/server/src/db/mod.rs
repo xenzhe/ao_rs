@@ -10,6 +10,11 @@ mod factions;
 mod guilds;
 mod quests;
 mod trade;
+// P4
+mod work;
+mod craft;
+mod gm;
+mod event;
 
 pub use accounts::{Account, CharacterRecord, CharacterState, NewCharacter};
 
@@ -24,6 +29,10 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0004_factions.sql"),
     include_str!("../../migrations/0005_quests.sql"),
     include_str!("../../migrations/0006_trade.sql"),
+    include_str!("../../migrations/0007_work.sql"),
+    include_str!("../../migrations/0008_craft.sql"),
+    include_str!("../../migrations/0009_gm.sql"),
+    include_str!("../../migrations/0010_events.sql"),
 ];
 
 #[derive(Debug, PartialEq)]

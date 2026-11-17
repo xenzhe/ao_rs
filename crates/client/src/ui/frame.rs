@@ -26,10 +26,15 @@ pub enum WindowId {
     Quests,
     WorldMap,
     Options,
+    // P4
+    Crafting,
+    Gm,
+    Events,
+    Auction,
 }
 
 impl WindowId {
-    pub const ALL: [WindowId; 11] = [
+    pub const ALL: [WindowId; 15] = [
         WindowId::Inventory,
         WindowId::Bank,
         WindowId::Shop,
@@ -41,6 +46,10 @@ impl WindowId {
         WindowId::Quests,
         WindowId::WorldMap,
         WindowId::Options,
+        WindowId::Crafting,
+        WindowId::Gm,
+        WindowId::Events,
+        WindowId::Auction,
     ];
 
     pub fn title(self) -> &'static str {
@@ -56,6 +65,10 @@ impl WindowId {
             WindowId::Quests => "Misiones",
             WindowId::WorldMap => "Mapa del mundo",
             WindowId::Options => "Opciones",
+            WindowId::Crafting => "Artesanía",
+            WindowId::Gm => "Panel de GM",
+            WindowId::Events => "Eventos",
+            WindowId::Auction => "Subastas",
         }
     }
 
@@ -70,6 +83,9 @@ impl WindowId {
             WindowId::Quests => Some(KeyCode::Q),
             WindowId::WorldMap => Some(KeyCode::M),
             WindowId::Options => Some(KeyCode::O),
+            WindowId::Events => Some(KeyCode::V),
+            WindowId::Auction => Some(KeyCode::U),
+            WindowId::Gm => Some(KeyCode::F10),
             _ => None,
         }
     }
@@ -86,6 +102,10 @@ impl WindowId {
             WindowId::Quests => vec2(560.0, 440.0),
             WindowId::WorldMap => vec2(720.0, 560.0),
             WindowId::Options => vec2(420.0, 400.0),
+            WindowId::Crafting => vec2(620.0, 480.0),
+            WindowId::Gm => vec2(620.0, 520.0),
+            WindowId::Events => vec2(560.0, 460.0),
+            WindowId::Auction => vec2(640.0, 480.0),
         }
     }
 }

@@ -29,6 +29,9 @@ impl World {
         };
         // Empty / control-only lines are dropped silently (VB: `LenB(chat) <> 0`).
         let Some(clean) = sanitize_chat(text, MAX_CHAT) else { return };
+        if self.gm_is_silenced(id) {
+            return self.console(id, "Estás silenciado.", Tone::Warn);
+        }
         let now = self.now();
         let Some(p) = self.sessions.get_mut(&id).and_then(|s| s.player.as_mut()) else { return };
         if !p.chat.allow(now) {
@@ -132,8 +135,11 @@ impl World {
 
     pub(crate) fn on_say(&mut self, id: u32, text: String) {
         let Some(clean) = sanitize_chat(&text, MAX_CHAT) else { return };
-        if clean.starts_with('/') && self.dev_command(id, &clean) {
+        if clean.starts_with('/') && (self.gm_command(id, &clean) || self.dev_command(id, &clean)) {
             return;
+        }
+        if self.gm_is_silenced(id) {
+            return self.console(id, "Estás silenciado.", Tone::Warn);
         }
         let now = self.now();
         let p = self.player_mut(id);

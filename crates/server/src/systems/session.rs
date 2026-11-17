@@ -176,6 +176,10 @@ impl World {
             party: Default::default(),
             faction: Default::default(),
             quest: Default::default(),
+            work: Default::default(),
+            craft: Default::default(),
+            gm: Default::default(),
+            event: Default::default(),
         };
         let name = c.name.clone();
         info!(id, %name, map = c.map, x, y, "entra");

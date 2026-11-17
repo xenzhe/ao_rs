@@ -6,13 +6,15 @@
 //! Bump [`PROTOCOL_VERSION`] on any change to the message definitions.
 pub mod framing;
 pub mod messages;
+pub mod p4;
 pub mod social;
 
 pub use framing::{encode, FrameError, FrameReader};
 pub use messages::*;
+pub use p4::*;
 pub use social::*;
 
-pub const PROTOCOL_VERSION: u16 = 7;
+pub const PROTOCOL_VERSION: u16 = 8;
 /// Hard cap on a single client frame; anything bigger is an attack.
 pub const MAX_CLIENT_FRAME: usize = 512;
 /// Cap for server frames read by the client.

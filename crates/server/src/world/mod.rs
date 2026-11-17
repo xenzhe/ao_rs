@@ -17,6 +17,11 @@ pub mod guild;
 pub mod party;
 pub mod quest;
 pub mod trade;
+// P4 (docs/P4_CONTRATO.md)
+pub mod work;
+pub mod craft;
+pub mod gm;
+pub mod event;
 
 use crate::clock::{Clock, GameTime, VirtualClock};
 use crate::config::ServerConfig;
@@ -92,6 +97,11 @@ pub struct World {
     pub trades: trade::Trades,
     /// World weather (systems/weather.rs).
     pub weather: crate::systems::weather::Weather,
+    /// P4 world-wide state, each owned by its system.
+    pub works: work::WorkWorld,
+    pub crafts: craft::CraftWorld,
+    pub gms: gm::GmWorld,
+    pub events: event::EventWorld,
 }
 
 impl World {
@@ -122,6 +132,10 @@ impl World {
             parties: Default::default(),
             trades: Default::default(),
             weather: Default::default(),
+            works: Default::default(),
+            crafts: Default::default(),
+            gms: Default::default(),
+            events: Default::default(),
         }
     }
 
@@ -289,6 +303,10 @@ impl World {
     pub fn tick(&mut self, now: GameTime) {
         self.tick_npcs(now);
         self.tick_weather(now);
+        self.tick_work(now);
+        self.tick_craft(now);
+        self.tick_gm(now);
+        self.tick_event(now);
         self.tick_magic(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);

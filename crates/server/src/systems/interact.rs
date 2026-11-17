@@ -76,9 +76,12 @@ impl World {
             if self.npc_alive_and_near(id, dead, dist, 4) {
                 self.faction_npc(id, nid, kind);
             }
+        } else if d.crafts > 0 {
+            if self.npc_alive_and_near(id, dead, dist, 4) {
+                self.craft_npc(id, nid);
+            }
         } else if !dead
-            && (d.crafts > 0
-                || matches!(
+            && (matches!(
                     kind,
                     NpcType::Pirate | NpcType::Auctioneer | NpcType::Quest | NpcType::Recruiter | NpcType::Governor | NpcType::FishDelivery | NpcType::Ao20Shop | NpcType::Ao20ShopPjs | NpcType::EventMaster | NpcType::Transporter
                 ))

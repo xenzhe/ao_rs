@@ -203,6 +203,8 @@ impl World {
         if let Source::Player(a) = source {
             self.faction_on_player_killed(a, id);
         }
+        let killer = if let Source::Player(a) = source { Some(a) } else { None };
+        self.event_on_player_killed(killer, id);
         true
     }
 
@@ -214,7 +216,9 @@ impl World {
         // the resurrection is the naked one, then the ghost.
         self.close_bank(id);
         self.close_trades(id);
-        self.drop_inventory_on_death(id);
+        if !self.event_keeps_items_on_death(id) {
+            self.drop_inventory_on_death(id);
+        }
         let p = self.player_mut(id);
         p.hp = 0;
         p.stats.sta = 0;

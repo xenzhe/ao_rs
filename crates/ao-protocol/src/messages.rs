@@ -90,6 +90,12 @@ pub enum C2S {
     Faction(crate::social::FactionC2S),
     Quest(crate::social::QuestC2S),
     Channel(crate::social::ChannelC2S),
+
+    // P4 (docs/P4_CONTRATO.md)
+    Work(crate::p4::WorkC2S),
+    Craft(crate::p4::CraftC2S),
+    Gm(crate::p4::GmC2S),
+    Event(crate::p4::EventC2S),
 }
 
 /// Server -> client.
@@ -171,6 +177,12 @@ pub enum S2C {
     Faction(crate::social::FactionS2C),
     Quest(crate::social::QuestS2C),
     Channel(crate::social::ChannelS2C),
+
+    // P4 (docs/P4_CONTRATO.md)
+    Work(crate::p4::WorkS2C),
+    Craft(crate::p4::CraftS2C),
+    Gm(crate::p4::GmS2C),
+    Event(crate::p4::EventS2C),
 }
 
 /// Bits of `S2C::Status::flags`.

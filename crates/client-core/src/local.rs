@@ -41,6 +41,8 @@ pub struct Local {
     pub weather: (u8, bool),
     /// Bumped on every thunder (the frontend plays it when it changes).
     pub thunders: u32,
+    /// P4: work, crafting, GM, events.
+    pub p4: crate::p4::P4,
 }
 
 #[derive(Debug, Default)]
@@ -107,7 +109,7 @@ impl Local {
             S2C::BankClosed => self.bank = None,
             S2C::Weather { fog, precipitation } => self.weather = (*fog, *precipitation),
             S2C::Thunder => self.thunders += 1,
-            _ => return self.social.apply(msg),
+            _ => return self.social.apply(msg) || self.p4.apply(msg),
         }
         true
     }
