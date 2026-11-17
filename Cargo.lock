@@ -45,6 +45,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ao-snap"
+version = "0.1.0"
+dependencies = [
+ "ao-formats",
+ "image",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
