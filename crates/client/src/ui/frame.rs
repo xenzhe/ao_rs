@@ -186,6 +186,7 @@ impl Ui {
     /// Start of the frame: hotkeys and capture flags.
     pub fn begin_frame(&mut self, u: f32) {
         self.u = u;
+        super::fx_ui::begin_frame();
         self.mouse_captured = self.drag.is_some() || self.moving.is_some() || self.hits.iter().any(|(_, r)| r.contains(mouse_position().into()));
         self.keyboard_captured = self.focus.is_some();
         self.hits.clear();
@@ -211,7 +212,8 @@ impl Ui {
         let p = self.open.get_mut(&w)?;
         let r = Rect::new(p.pos.x.clamp(0.0, (screen_width() - size.x).max(0.0)), p.pos.y.clamp(0.0, (screen_height() - size.y).max(0.0)), size.x, size.y);
         let title = Rect::new(r.x, r.y, r.w, 30.0 * u);
-        let close = Rect::new(r.right() - 28.0 * u, r.y + 4.0 * u, 22.0 * u, 22.0 * u);
+        // Matches `Theme::window_frame` (engraved X in the top-right corner).
+        let close = Rect::new(r.right() - 30.0 * u, r.y + 8.0 * u, 22.0 * u, 22.0 * u);
         let m: Vec2 = mouse_position().into();
         let front = topmost_under_mouse == Some(w);
         if front && is_mouse_button_pressed(MouseButton::Left) {

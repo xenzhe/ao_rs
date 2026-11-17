@@ -27,14 +27,14 @@ use render::Renderer;
 
 fn window_conf() -> Conf {
     let cfg = ClientConfig::load();
-    Conf { window_title: "Argentum (Rust)".into(), window_width: cfg.video.width, window_height: cfg.video.height, window_resizable: true, ..Default::default() }
+    Conf { window_title: "Numic AO".into(), window_width: cfg.video.width, window_height: cfg.video.height, window_resizable: true, ..Default::default() }
 }
 
 #[macroquad::main(window_conf)]
 async fn main() {
     let cfg = ClientConfig::load();
     clear_background(BLACK);
-    draw_text("Cargando recursos de Argentum Online...", 40.0, 60.0, 30.0, WHITE);
+    draw_text("Numic AO - cargando...", 40.0, 60.0, 30.0, Color::new(0.92, 0.76, 0.44, 1.0));
     next_frame().await;
 
     let mut assets = Assets::load(cfg.recursos_path());
@@ -96,10 +96,14 @@ async fn main() {
                 ui::frame(&mut ui, &mut game, &mut assets, &lay, hour, renderer.pixel_perfect);
                 input::update(&mut game, &mut renderer, &lay, now, &ui, &assets);
                 dev.update(&mut game, &mut renderer, &mut ui, now);
+                ui::fx_ui::draw_toasts(lay.u);
                 if dev.maybe_capture(now) {
                     break;
                 }
             }
+        }
+        if game.screen != Screen::Game {
+            ui::fx_ui::draw_toasts(lay.u);
         }
         next_frame().await;
     }

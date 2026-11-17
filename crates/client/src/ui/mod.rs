@@ -2,6 +2,7 @@
 //! state, `theme`, `widgets`) is kept by the integrator; each window and screen is a file
 //! with one owner.
 pub mod frame;
+pub mod fx_ui;
 pub mod theme;
 pub mod widgets;
 
