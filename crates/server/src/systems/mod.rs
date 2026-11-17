@@ -1,7 +1,12 @@
 //! Gameplay systems, one file each, all as `impl World` blocks. A new feature (inventory,
 //! trade, guilds...) is a new file here plus its messages in `ao-protocol`.
 mod account;
+mod bank;
 mod chat;
+mod interact;
+mod inventory;
+mod melee;
+mod progression;
 mod combat;
 mod magic;
 mod movement;
@@ -23,7 +28,24 @@ impl World {
             C2S::Login { name, version } => self.on_login(id, name, version),
             _ if !logged => self.kick(id, "paquete antes del login"),
             C2S::Walk { dir, seq } => self.on_walk(id, dir, seq),
+            C2S::Turn { dir } => self.on_turn(id, dir),
+            C2S::Melee { seq } => self.on_melee(id, seq),
+            C2S::Shoot { tx, ty, seq } => self.on_shoot(id, tx, ty, seq),
             C2S::Cast { spell, tx, ty, seq } => self.on_cast(id, spell, tx, ty, seq),
+            C2S::Meditate => self.on_meditate(id),
+            C2S::UseItem { slot } => self.on_use_item(id, slot),
+            C2S::EquipItem { slot } => self.on_equip_item(id, slot),
+            C2S::DropItem { slot, amount } => self.on_drop_item(id, slot, amount),
+            C2S::DropGold { amount } => self.on_drop_gold(id, amount),
+            C2S::PickUp => self.on_pick_up(id),
+            C2S::SwapSlots { a, b } => self.on_swap_slots(id, a, b),
+            C2S::Interact { tx, ty } => self.on_interact(id, tx, ty),
+            C2S::BankDeposit { slot, amount } => self.on_bank_deposit(id, slot, amount),
+            C2S::BankWithdraw { slot, amount } => self.on_bank_withdraw(id, slot, amount),
+            C2S::BankDepositGold { amount } => self.on_bank_deposit_gold(id, amount),
+            C2S::BankWithdrawGold { amount } => self.on_bank_withdraw_gold(id, amount),
+            C2S::BankClose => self.on_bank_close(id),
+            C2S::AssignSkill { skill, points } => self.on_assign_skill(id, skill, points),
             C2S::Say { text } => self.on_say(id, text),
         }
     }

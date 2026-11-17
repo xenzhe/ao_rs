@@ -10,7 +10,7 @@ pub mod messages;
 pub use framing::{encode, FrameError, FrameReader};
 pub use messages::*;
 
-pub const PROTOCOL_VERSION: u16 = 4;
+pub const PROTOCOL_VERSION: u16 = 5;
 /// Hard cap on a single client frame; anything bigger is an attack.
 pub const MAX_CLIENT_FRAME: usize = 512;
 /// Cap for server frames read by the client.

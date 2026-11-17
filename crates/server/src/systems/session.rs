@@ -1,5 +1,10 @@
 //! Login, logout, map entry/transitions, kicks and cheat strikes.
-use crate::db::CharacterRecord;
+use crate::db::{CharacterRecord, CharacterState};
+use crate::world::bank::BankState;
+use crate::world::combat_state::CombatState;
+use crate::world::inventory::{InvItem, Inventory};
+use crate::world::spellbook::{Spellbook, StatusEffects};
+use crate::world::stats::CharStats;
 use crate::security::{RateLimiter, SeqGuard, Strikes, WalkLimiter};
 use crate::world::entities::Player;
 use crate::world::World;
@@ -8,6 +13,70 @@ use ao_rules::progression::exp_for_level;
 use ao_rules::{valid_name, Dir, WALK_MS};
 use std::collections::HashMap;
 use tracing::{info, warn};
+
+// ---------------------------------------------------------------- db <-> player pieces
+
+fn stats_from(s: &CharacterState) -> CharStats {
+    let mut skills = [0u8; 24];
+    for (i, v) in s.skills.iter().take(24).enumerate() {
+        skills[i] = *v;
+    }
+    CharStats { attributes: s.attributes, skills, skill_points: s.skill_points, sta: s.sta, max_sta: s.max_sta, food: s.food, water: s.water }
+}
+
+fn inventory_from(s: &CharacterState) -> Inventory {
+    let mut inv = Inventory { gold: s.gold, ..Inventory::default() };
+    for &(slot, obj, amount, equipped) in &s.inventory {
+        if let Some(cell) = inv.slots.get_mut((slot as usize).wrapping_sub(1)) {
+            *cell = Some(InvItem { obj, amount });
+            if equipped {
+                // Which equipment slot it fills (weapon, armor...) is decided from obj.dat
+                // by the inventory system when the player enters the world.
+                inv.pending_equipped.push(slot);
+            }
+        }
+    }
+    inv
+}
+
+fn bank_from(s: &CharacterState) -> BankState {
+    let mut bank = BankState { gold: s.bank_gold, ..BankState::default() };
+    for &(slot, obj, amount) in &s.bank {
+        if let Some(cell) = bank.slots.get_mut((slot as usize).wrapping_sub(1)) {
+            *cell = Some(InvItem { obj, amount });
+        }
+    }
+    bank
+}
+
+fn spellbook_from(s: &CharacterState) -> Spellbook {
+    let mut book = Spellbook::default();
+    for &(slot, spell) in &s.spells {
+        if let Some(cell) = book.slots.get_mut((slot as usize).wrapping_sub(1)) {
+            *cell = spell;
+        }
+    }
+    book
+}
+
+/// Everything persistent about a player, for `Db::save_full`.
+pub(crate) fn state_of(p: &Player) -> CharacterState {
+    let slots = |v: &[Option<InvItem>]| v.iter().enumerate().filter_map(|(i, s)| s.map(|it| ((i + 1) as u8, it))).collect::<Vec<_>>();
+    CharacterState {
+        attributes: p.stats.attributes,
+        skills: p.stats.skills.to_vec(),
+        skill_points: p.stats.skill_points,
+        sta: p.stats.sta,
+        max_sta: p.stats.max_sta,
+        food: p.stats.food,
+        water: p.stats.water,
+        gold: p.inv.gold,
+        bank_gold: p.bank.gold,
+        inventory: slots(&p.inv.slots).into_iter().map(|(s, it)| (s, it.obj, it.amount, p.inv.equipped.is_equipped(s))).collect(),
+        bank: slots(&p.bank.slots).into_iter().map(|(s, it)| (s, it.obj, it.amount)).collect(),
+        spells: p.spells.slots.iter().enumerate().filter(|(_, s)| **s != 0).map(|(i, s)| ((i + 1) as u8, *s)).collect(),
+    }
+}
 
 impl World {
     /// Development login without an account (`dev_login` in config): a throwaway character.
@@ -56,14 +125,14 @@ impl World {
             x,
             y,
         };
-        if !self.spawn_player(id, &record, None) {
+        if !self.spawn_player(id, &record, &CharacterState::default(), None) {
             self.sessions.remove(&id);
         }
     }
 
     /// Puts a character in the world (account or dev login). Returns false if its map
     /// could not be loaded (the connection is then closed).
-    pub(crate) fn spawn_player(&mut self, id: u32, c: &CharacterRecord, char_id: Option<i64>) -> bool {
+    pub(crate) fn spawn_player(&mut self, id: u32, c: &CharacterRecord, state: &CharacterState, char_id: Option<i64>) -> bool {
         if !self.ensure_map(c.map) {
             self.send(id, &S2C::Kicked { reason: "El servidor no encuentra los mapas de AO.".into() });
             self.close(id);
@@ -84,7 +153,8 @@ impl World {
             dir: Dir::Down,
             body: c.body,
             head: c.head,
-            hp: c.hp.clamp(1, c.max_hp),
+            // hp 0 = dead (ghost): logging out does not resurrect anyone.
+            hp: c.hp.clamp(0, c.max_hp),
             max_hp: c.max_hp,
             mana: c.mana.clamp(0, c.max_mana),
             max_mana: c.max_mana,
@@ -95,6 +165,12 @@ impl World {
             cooldowns: HashMap::new(),
             strikes: Strikes::new(sec.strike_decay_secs * 1000, now),
             chat: RateLimiter::new(4, 3000),
+            stats: stats_from(state),
+            inv: inventory_from(state),
+            bank: bank_from(state),
+            spells: spellbook_from(state),
+            status: StatusEffects::default(),
+            combat: CombatState { dead: c.hp <= 0, ..CombatState::default() },
         };
         let name = c.name.clone();
         info!(id, %name, map = c.map, x, y, "entra");
@@ -102,6 +178,8 @@ impl World {
         self.send(id, &S2C::SpellBook { spells: self.data.spells.clone() });
         self.sessions.get_mut(&id).unwrap().player = Some(player);
         self.enter_map(id, c.map, x, y);
+        self.restore_equipment(id);
+        self.send_look(id);
         self.send_stats(id);
         self.console(id, "Bienvenido a Argentum (prototipo en Rust, mapas de AO20).", Tone::Good);
         self.broadcast_all(&S2C::Console { text: format!("{name} se conecto."), color: Tone::Info }, Some(id));
@@ -181,6 +259,13 @@ impl World {
         self.broadcast(old, &S2C::Despawn { id }, Some(id));
         let (fx, fy) = self.free_tile_near(map, x, y, 2);
         self.enter_map(id, map, fx, fy);
+    }
+
+    /// Tells everyone on the map how this player looks (equipment, death...).
+    pub(crate) fn send_look(&self, id: u32) {
+        let Some(p) = self.player(id) else { return };
+        let (body, head, weapon, shield, helmet) = self.look_of(id);
+        self.broadcast(p.map, &S2C::Look { id, body, head, weapon, shield, helmet }, None);
     }
 
     pub(crate) fn send_stats(&self, id: u32) {

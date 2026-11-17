@@ -57,6 +57,17 @@ impl World {
         self.send_stats(id);
     }
 
+    /// Hook (contract): called by the inventory system when a spell scroll is used.
+    /// Returns true if the spell was learned (the scroll is then consumed).
+    #[allow(dead_code)]
+    pub(crate) fn learn_spell_from_item(&mut self, _id: u32, _obj: u16) -> bool {
+        false
+    }
+
+    pub(crate) fn on_meditate(&mut self, id: u32) {
+        self.console(id, "La meditacion todavia no esta disponible.", Tone::Warn);
+    }
+
     fn spend(&mut self, id: u32, spell: u16, mana: i32, cooldown_ms: u64) {
         let now = self.now();
         let p = self.player_mut(id);

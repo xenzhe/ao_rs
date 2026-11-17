@@ -3,8 +3,14 @@
 //!
 //! Time comes from [`World::now`] (the world's [`Clock`]): real time in production, or a
 //! virtual clock that only moves when a test sends [`Control::Advance`].
+pub mod ao_data;
+pub mod bank;
+pub mod combat_state;
 pub mod entities;
 pub mod instance;
+pub mod inventory;
+pub mod spellbook;
+pub mod stats;
 
 use crate::clock::{Clock, GameTime, VirtualClock};
 use crate::config::ServerConfig;
@@ -64,6 +70,8 @@ pub struct World {
     pub rng: Rng,
     pub next_npc: EntityId,
     pub db: Db,
+    /// Official AO20 data (obj.dat, npcs.dat, Hechizos.dat, Balance.dat).
+    pub ao: std::sync::Arc<ao_data::AoData>,
     pub clock: Clock,
     pub next_tick: GameTime,
     pub next_regen: GameTime,
@@ -78,8 +86,10 @@ impl World {
         let b = &data.balance;
         let start = start.unwrap_or((b.start_map, b.start_x, b.start_y));
         let db = Db::open(&config.database).unwrap_or_else(|e| panic!("no se pudo abrir la base de datos '{}': {e:?}", config.database));
+        let ao = ao_data::AoData::shared(&recursos);
         World {
             db,
+            ao,
             cfg: config,
             data,
             recursos,

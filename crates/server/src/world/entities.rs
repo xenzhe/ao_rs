@@ -1,4 +1,9 @@
 //! Players and creatures as the server sees them.
+use super::bank::BankState;
+use super::combat_state::CombatState;
+use super::inventory::Inventory;
+use super::spellbook::{Spellbook, StatusEffects};
+use super::stats::CharStats;
 use crate::security::{RateLimiter, SeqGuard, Strikes, WalkLimiter};
 use ao_protocol::{EntityKind, S2C};
 use ao_rules::Dir;
@@ -31,6 +36,13 @@ pub struct Player {
     pub cooldowns: HashMap<u16, GameTime>,
     pub strikes: Strikes,
     pub chat: RateLimiter,
+    /// One piece per system, each owned by its system's file (see docs/P1_CONTRATO.md).
+    pub stats: CharStats,
+    pub inv: Inventory,
+    pub bank: BankState,
+    pub spells: Spellbook,
+    pub status: StatusEffects,
+    pub combat: CombatState,
 }
 
 impl Player {

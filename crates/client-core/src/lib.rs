@@ -11,8 +11,10 @@
 pub mod actions;
 pub mod events;
 pub mod guard;
+pub mod local;
 pub mod net;
 pub mod state;
 
 pub use events::{ClientEvent, Pt};
+pub use local::{ItemSlot, Local};
 pub use state::{tile_center, Ent, Game, Screen, Stats, TILE};

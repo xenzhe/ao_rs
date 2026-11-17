@@ -188,7 +188,14 @@ impl World {
             return self.reply(id, false, "Ese personaje ya esta conectado.");
         }
         let char_id = record.id;
-        self.spawn_player(id, &record, Some(char_id));
+        let state = match self.db.load_state(char_id) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(?e, "no se pudo cargar el estado del personaje");
+                return self.reply(id, false, "Error del servidor al cargar el personaje.");
+            }
+        };
+        self.spawn_player(id, &record, &state, Some(char_id));
     }
 
     /// Writes an account character back to the database (logout, and later autosave).
@@ -213,7 +220,7 @@ impl World {
             x: p.x,
             y: p.y,
         };
-        if let Err(e) = self.db.save_character(&record) {
+        if let Err(e) = self.db.save_full(&record, &super::session::state_of(p)) {
             warn!(?e, name = %p.name, "no se pudo guardar el personaje");
         }
     }

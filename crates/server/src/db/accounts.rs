@@ -34,6 +34,53 @@ pub struct CharacterRecord {
     pub y: i32,
 }
 
+/// The rest of a character: attributes, skills, vitals, gold, inventory, vault, spells.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CharacterState {
+    pub attributes: [u8; 5],
+    pub skills: Vec<u8>,
+    pub skill_points: u16,
+    pub sta: i32,
+    pub max_sta: i32,
+    pub food: i32,
+    pub water: i32,
+    pub gold: u32,
+    pub bank_gold: u32,
+    /// (slot 1-based, obj, amount, equipped)
+    pub inventory: Vec<(u8, u16, u32, bool)>,
+    /// (slot 1-based, obj, amount)
+    pub bank: Vec<(u8, u16, u32)>,
+    /// (slot 1-based, Hechizos.dat id)
+    pub spells: Vec<(u8, u16)>,
+}
+
+impl Default for CharacterState {
+    fn default() -> Self {
+        CharacterState {
+            attributes: [18; 5],
+            skills: vec![0; 24],
+            skill_points: 0,
+            sta: 40,
+            max_sta: 40,
+            food: 100,
+            water: 100,
+            gold: 0,
+            bank_gold: 0,
+            inventory: Vec::new(),
+            bank: Vec::new(),
+            spells: Vec::new(),
+        }
+    }
+}
+
+fn csv<T: ToString>(v: &[T]) -> String {
+    v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")
+}
+
+fn parse_csv(s: &str) -> Vec<u8> {
+    s.split(',').filter_map(|p| p.trim().parse().ok()).collect()
+}
+
 /// Everything needed to insert a new character (already validated by the caller).
 pub struct NewCharacter<'a> {
     pub name: &'a str,
@@ -138,6 +185,54 @@ impl Db {
         Ok(())
     }
 
+    pub fn load_state(&self, char_id: i64) -> DbResult<CharacterState> {
+        let (attrs, skills, skill_points, sta, max_sta, food, water, gold, bank_gold): (String, String, u16, i32, i32, i32, i32, u32, u32) = self.conn.query_row(
+            "SELECT attributes, skills, skill_points, sta, max_sta, food, water, gold, bank_gold FROM character WHERE id = ?1",
+            params![char_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?)),
+        )?;
+        let mut s = CharacterState { skill_points, sta, max_sta, food, water, gold, bank_gold, ..CharacterState::default() };
+        let a = parse_csv(&attrs);
+        if a.len() == 5 {
+            s.attributes.copy_from_slice(&a);
+        }
+        let k = parse_csv(&skills);
+        if k.len() == 24 {
+            s.skills = k;
+        }
+        let mut st = self.conn.prepare("SELECT slot, obj, amount, equipped FROM inventory_item WHERE character_id = ?1 ORDER BY slot")?;
+        s.inventory = st.query_map(params![char_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? != 0)))?.collect::<rusqlite::Result<_>>()?;
+        let mut st = self.conn.prepare("SELECT slot, obj, amount FROM bank_item WHERE character_id = ?1 ORDER BY slot")?;
+        s.bank = st.query_map(params![char_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<rusqlite::Result<_>>()?;
+        let mut st = self.conn.prepare("SELECT slot, spell FROM spell WHERE character_id = ?1 ORDER BY slot")?;
+        s.spells = st.query_map(params![char_id], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+        Ok(s)
+    }
+
+    /// Saves the row and the full state atomically (a crash never leaves half a save).
+    pub fn save_full(&self, c: &CharacterRecord, s: &CharacterState) -> DbResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        self.save_character(c)?;
+        tx.execute(
+            "UPDATE character SET attributes = ?2, skills = ?3, skill_points = ?4, sta = ?5, max_sta = ?6, food = ?7, water = ?8, gold = ?9, bank_gold = ?10 WHERE id = ?1",
+            params![c.id, csv(&s.attributes), csv(&s.skills), s.skill_points, s.sta, s.max_sta, s.food, s.water, s.gold, s.bank_gold],
+        )?;
+        tx.execute("DELETE FROM inventory_item WHERE character_id = ?1", params![c.id])?;
+        tx.execute("DELETE FROM bank_item WHERE character_id = ?1", params![c.id])?;
+        tx.execute("DELETE FROM spell WHERE character_id = ?1", params![c.id])?;
+        for (slot, obj, amount, equipped) in &s.inventory {
+            tx.execute("INSERT INTO inventory_item (character_id, slot, obj, amount, equipped) VALUES (?1, ?2, ?3, ?4, ?5)", params![c.id, slot, obj, amount, *equipped as i64])?;
+        }
+        for (slot, obj, amount) in &s.bank {
+            tx.execute("INSERT INTO bank_item (character_id, slot, obj, amount) VALUES (?1, ?2, ?3, ?4)", params![c.id, slot, obj, amount])?;
+        }
+        for (slot, spell) in &s.spells {
+            tx.execute("INSERT INTO spell (character_id, slot, spell) VALUES (?1, ?2, ?3)", params![c.id, slot, spell])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn save_character(&self, c: &CharacterRecord) -> DbResult<()> {
         let n = self.conn.execute(
             "UPDATE character SET body = ?2, head = ?3, level = ?4, exp = ?5, hp = ?6, max_hp = ?7, mana = ?8, max_mana = ?9, \
@@ -162,7 +257,7 @@ mod tests {
     #[test]
     fn accounts_and_passwords() {
         let db = Db::open(":memory:").unwrap();
-        assert_eq!(db.schema_version(), 1);
+        assert_eq!(db.schema_version(), 2);
         let a = db.create_account("Xenzhe", "secreta1").unwrap();
         assert_eq!(db.create_account("xenzhe", "otra1234").unwrap_err(), DbError::Taken, "names ignore case");
         assert_eq!(db.verify_account("XENZHE", "secreta1").unwrap().id, a.id);
@@ -191,6 +286,37 @@ mod tests {
     }
 
     #[test]
+    fn full_state_roundtrip() {
+        let db = Db::open(":memory:").unwrap();
+        assert_eq!(db.schema_version(), 2);
+        let a = db.create_account("estado", "secreta1").unwrap();
+        let c = db.create_character(a.id, &new_char("Lleno")).unwrap();
+        assert_eq!(db.load_state(c.id).unwrap(), CharacterState::default(), "new characters start with defaults");
+        let mut skills = vec![0; 24];
+        skills[3] = 50;
+        let s = CharacterState {
+            attributes: [19, 20, 18, 15, 21],
+            skills,
+            skill_points: 7,
+            sta: 33,
+            max_sta: 60,
+            food: 80,
+            water: 70,
+            gold: 1500,
+            bank_gold: 99_000,
+            inventory: vec![(1, 2, 1, true), (5, 30, 250, false)],
+            bank: vec![(1, 201, 3)],
+            spells: vec![(1, 1), (2, 12)],
+        };
+        db.save_full(&c, &s).unwrap();
+        assert_eq!(db.load_state(c.id).unwrap(), s);
+        // Saving again replaces (an item moved out of slot 5 disappears from it).
+        let s2 = CharacterState { inventory: vec![(1, 2, 1, true)], ..s.clone() };
+        db.save_full(&c, &s2).unwrap();
+        assert_eq!(db.load_state(c.id).unwrap().inventory, s2.inventory);
+    }
+
+    #[test]
     fn max_ten_characters() {
         let db = Db::open(":memory:").unwrap();
         let a = db.create_account("muchos", "secreta1").unwrap();
@@ -210,7 +336,7 @@ mod tests {
             db.create_account("persiste", "secreta1").unwrap();
         }
         let db = Db::open(path.to_str().unwrap()).unwrap();
-        assert_eq!(db.schema_version(), 1);
+        assert_eq!(db.schema_version(), 2);
         assert!(db.verify_account("persiste", "secreta1").is_ok());
         drop(db);
         let _ = std::fs::remove_dir_all(dir);

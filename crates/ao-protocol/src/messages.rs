@@ -41,8 +41,45 @@ pub enum C2S {
     Login { name: String, version: u16 },
     // Movement
     Walk { dir: Dir, seq: u32 },
+    /// Face a direction without moving.
+    Turn { dir: Dir },
+
+    // Combat
+    /// Melee attack on the tile in front (current heading).
+    Melee { seq: u32 },
+    /// Ranged attack (bow, throwing weapon) at a tile.
+    Shoot { tx: i32, ty: i32, seq: u32 },
+
     // Magic
+    /// `spell` is the official Hechizos.dat id; the caster must know it.
     Cast { spell: u16, tx: i32, ty: i32, seq: u32 },
+    /// Toggle meditation (mana regeneration, AO style).
+    Meditate,
+
+    // Inventory (slots are 1-based like AO)
+    UseItem { slot: u8 },
+    EquipItem { slot: u8 },
+    DropItem { slot: u8, amount: u32 },
+    DropGold { amount: u32 },
+    /// Pick up whatever lies on the player's tile.
+    PickUp,
+    SwapSlots { a: u8, b: u8 },
+
+    // World interaction
+    /// Click/double-click on a tile: talk to an NPC (banker, priest, merchant...), etc.
+    Interact { tx: i32, ty: i32 },
+
+    // Bank (vault), only while a banker is open
+    BankDeposit { slot: u8, amount: u32 },
+    BankWithdraw { slot: u8, amount: u32 },
+    BankDepositGold { amount: u32 },
+    BankWithdrawGold { amount: u32 },
+    BankClose,
+
+    // Progression
+    /// Spend free skill points.
+    AssignSkill { skill: u8, points: u16 },
+
     // Chat
     Say { text: String },
 }
@@ -70,15 +107,61 @@ pub enum S2C {
     /// Walk rejected: authoritative position for the client to snap back to.
     Correct { seq: u32, x: i32, y: i32 },
 
+    /// Visible equipment changed (or death/resurrection: ghost body). 0 = none.
+    Look { id: u32, body: u16, head: u16, weapon: u16, shield: u16, helmet: u16 },
+    /// Status flags of a character (see `status` bits), for visuals.
+    Status { id: u32, flags: u32 },
+
     // Character
     Stats { hp: i32, max_hp: i32, mana: i32, max_mana: i32, level: u32, exp: u32, next_exp: u32 },
+    /// Secondary stats.
+    Vitals { sta: i32, max_sta: i32, food: i32, water: i32, gold: u32 },
+    Attributes { values: [u8; 5] },
+    /// 24 skills (official order) and points left to assign.
+    Skills { values: Vec<u8>, free_points: u16 },
     Hp { id: u32, hp: i32, max_hp: i32 },
+
+    // Combat
+    /// A melee/ranged attack happened (animation, sound, floating number).
+    Attack { attacker: u32, target: u32, hit: bool, damage: i32, critical: bool },
 
     // Magic
     Effect { spell: u16, from: u32, tx: i32, ty: i32 },
+    /// The 40 spell slots (official Hechizos.dat ids, 0 = empty).
+    SpellSlots { slots: Vec<u16> },
+    /// Plays an official FX (FXs.ini) on an entity.
+    Fx { id: u32, fx: u16, loops: u8 },
+
+    // Inventory (slots 1-based; obj 0 = empty slot)
+    InventorySlot { slot: u8, obj: u16, amount: u32, equipped: bool },
+    GroundItem { x: i32, y: i32, obj: u16, amount: u32 },
+    GroundItemRemoved { x: i32, y: i32 },
+
+    // Bank
+    BankOpen { slots: Vec<(u8, u16, u32)>, gold: u32 },
+    BankSlot { slot: u8, obj: u16, amount: u32 },
+    BankGold { gold: u32 },
+    BankClosed,
+
+    // NPCs
+    /// An NPC says something (overhead and console).
+    NpcSay { id: u32, text: String },
 
     // Chat / console
     Console { text: String, color: Tone },
+}
+
+/// Bits of `S2C::Status::flags`.
+pub mod status {
+    pub const DEAD: u32 = 1 << 0;
+    pub const PARALYZED: u32 = 1 << 1;
+    pub const INVISIBLE: u32 = 1 << 2;
+    pub const POISONED: u32 = 1 << 3;
+    pub const MEDITATING: u32 = 1 << 4;
+    pub const HIDDEN: u32 = 1 << 5;
+    pub const IMMOBILIZED: u32 = 1 << 6;
+    pub const BLIND: u32 = 1 << 7;
+    pub const DUMB: u32 = 1 << 8;
 }
 
 /// Console message category; the client picks the colour.

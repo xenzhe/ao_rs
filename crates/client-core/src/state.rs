@@ -1,6 +1,7 @@
 //! Entities, stats and the handling of every server message.
 use crate::events::{pt, ClientEvent, Pt};
 use crate::guard::Guarded;
+use crate::local::Local;
 use crate::net::Net;
 use ao_formats::AoMap;
 use ao_protocol::{CharacterSummary, EntityKind, Tone, C2S, PROTOCOL_VERSION, S2C};
@@ -26,12 +27,20 @@ pub struct Ent {
     pub hp: i32,
     pub max_hp: i32,
     pub walk_ms: f32,
+    /// Visible equipment (official weapon/shield/helmet animation ids, 0 = none).
+    pub weapon: u16,
+    pub shield: u16,
+    pub helmet: u16,
+    /// `ao_protocol::status` bits.
+    pub status: u32,
+    /// Last thing it said (NPC speech) and when, for overhead text.
+    pub said: Option<(String, f64)>,
 }
 
 impl Ent {
     #[allow(clippy::too_many_arguments)]
     pub fn new(name: String, kind: EntityKind, body: u16, head: u16, x: i32, y: i32, dir: Dir, hp: i32, max_hp: i32) -> Ent {
-        Ent { name, kind, body, head, x, y, px: x, py: y, t: 1.0, dir, hp, max_hp, walk_ms: 0.0 }
+        Ent { name, kind, body, head, x, y, px: x, py: y, t: 1.0, dir, hp, max_hp, walk_ms: 0.0, weapon: 0, shield: 0, helmet: 0, status: 0, said: None }
     }
 
     /// Interpolated top-left of the character's tile, in world pixels.
@@ -118,6 +127,8 @@ pub struct Game {
     pub characters: Vec<CharacterSummary>,
     /// Visual events produced by `poll`, drained by the frontend.
     pub events: Vec<ClientEvent>,
+    /// Own inventory, equipment, vitals, skills, spells, bank, ground items.
+    pub local: Local,
 }
 
 impl Game {
@@ -146,6 +157,7 @@ impl Game {
             tampered: false,
             characters: Vec::new(),
             events: Vec::new(),
+            local: Local::new(),
         }
     }
 
@@ -235,6 +247,7 @@ impl Game {
                 self.selected = self.selected.min(self.spells.len().saturating_sub(1));
             }
             S2C::EnterMap { map, x, y } => {
+                self.local.on_map_change();
                 if self.map.as_ref().map(|m| m.number) != Some(map) {
                     self.load_map(map);
                 }
@@ -318,6 +331,38 @@ impl Game {
             S2C::CharacterList { characters } => self.characters = characters,
             S2C::Console { text, color } => self.say(text, color),
             S2C::Kicked { reason } => self.screen = Screen::Kicked(reason),
+            S2C::Look { id, body, head, weapon, shield, helmet } => {
+                if let Some(e) = self.ents.get_mut(&id) {
+                    (e.body, e.head, e.weapon, e.shield, e.helmet) = (body, head, weapon, shield, helmet);
+                }
+            }
+            S2C::Status { id, flags } => {
+                if let Some(e) = self.ents.get_mut(&id) {
+                    e.status = flags;
+                }
+            }
+            S2C::NpcSay { id, text } => {
+                let name = self.ents.get(&id).map(|e| e.name.clone()).unwrap_or_default();
+                if let Some(e) = self.ents.get_mut(&id) {
+                    e.said = Some((text.clone(), self.now));
+                }
+                self.say(format!("{name}: {text}"), Tone::Chat);
+            }
+            S2C::Attack { target, hit, damage, .. } => {
+                // Health itself arrives as S2C::Hp; this only marks misses for the frontend.
+                if !hit {
+                    if let Some(e) = self.ents.get(&target) {
+                        self.events.push(ClientEvent::FloatText { at: e.world_pos() - pt(0.0, 56.0), amount: 0 });
+                    }
+                }
+                let _ = damage;
+            }
+            S2C::Fx { .. } => {}
+            other => {
+                if !self.local.apply(&other) {
+                    self.say(format!("(mensaje sin manejar: {other:?})"), Tone::Warn);
+                }
+            }
         }
     }
 

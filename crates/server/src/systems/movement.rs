@@ -5,6 +5,17 @@ use ao_protocol::S2C;
 use ao_rules::{walk, Dir};
 
 impl World {
+    /// Faces a direction without moving (others see the new heading).
+    pub(crate) fn on_turn(&mut self, id: u32, dir: Dir) {
+        let p = self.player_mut(id);
+        if p.dir == dir {
+            return;
+        }
+        p.dir = dir;
+        let (map, x, y) = (p.map, p.x, p.y);
+        self.broadcast(map, &S2C::Moved { id, x, y, dir }, Some(id));
+    }
+
     pub(crate) fn on_walk(&mut self, id: u32, dir: Dir, seq: u32) {
         let now = self.now();
         let (map, x, y, seq_ok, pace_ok) = {

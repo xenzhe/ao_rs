@@ -6,13 +6,16 @@
 //! - `":memory:"` opens a private in-memory database (tests).
 mod accounts;
 
-pub use accounts::{Account, CharacterRecord, NewCharacter};
+pub use accounts::{Account, CharacterRecord, CharacterState, NewCharacter};
 
 use rusqlite::Connection;
 use std::path::Path;
 
 /// Migrations in order. Never edit an applied one: add a new file.
-const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_accounts.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../../migrations/0001_accounts.sql"),
+    include_str!("../../migrations/0002_character_state.sql"),
+];
 
 #[derive(Debug, PartialEq)]
 pub enum DbError {
