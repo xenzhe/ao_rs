@@ -95,8 +95,8 @@ impl WindowId {
         match self {
             WindowId::Inventory | WindowId::Bank | WindowId::Shop => vec2(330.0, 420.0),
             WindowId::Trade => vec2(560.0, 420.0),
-            WindowId::Spells => vec2(300.0, 440.0),
-            WindowId::Character => vec2(420.0, 480.0),
+            WindowId::Spells => vec2(720.0, 560.0),
+            WindowId::Character => vec2(780.0, 580.0),
             WindowId::Guild => vec2(560.0, 480.0),
             WindowId::Party => vec2(300.0, 320.0),
             WindowId::Quests => vec2(560.0, 440.0),
