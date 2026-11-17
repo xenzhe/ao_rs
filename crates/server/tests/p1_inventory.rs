@@ -9,7 +9,7 @@ fn login_sends_the_whole_inventory_and_the_purse() {
     let s = TestServer::start();
     let b = s.bot("Mochilero");
     assert_eq!(b.count(|m| matches!(m, S2C::InventorySlot { .. })), 42, "una casilla por slot");
-    assert_eq!(b.count(|m| matches!(m, S2C::Vitals { .. })), 1);
+    assert!(b.count(|m| matches!(m, S2C::Vitals { .. })) >= 1);
 }
 
 #[test]

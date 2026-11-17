@@ -10,6 +10,9 @@ use ao_rules::items::{self, potion, Role, GOLD_OBJ, MAX_FOOD, MAX_STACK};
 
 /// Pirates may throw gold into the water (TirarOro).
 const PIRATE: u8 = 10;
+/// Key of the generic use interval in `inv.cooldowns` (obj.dat CD types are >= 0).
+const USE_TIMER: i32 = -1;
+const USE_INTERVAL_MS: u64 = 276;
 
 impl World {
     // ---------------------------------------------------------------- hooks (contract)
@@ -95,7 +98,7 @@ impl World {
     #[allow(dead_code)]
     pub(crate) fn drop_inventory_on_death(&mut self, id: u32) {
         let Some(p) = self.player(id) else { return };
-        let (map, x, y, level, gold, usable) = (p.map, p.x, p.y, p.level, p.inv.gold, p.inv.usable_slots());
+        let (map, x, y, level, gold) = (p.map, p.x, p.y, p.level, p.inv.gold);
         let safe = self.maps.get(&map).is_none_or(|i| i.map.safe);
         if !safe {
             // The wallet keeps OroPorNivelBilletera per level; the rest falls.
@@ -105,7 +108,7 @@ impl World {
             }
             let ao = self.ao.clone();
             let newbie = items::is_newbie(level);
-            for slot in 1..=usable {
+            for slot in 1..=MAX_INVENTORY_SLOTS as u8 {
                 let Some(item) = self.player(id).and_then(|p| p.inv.get(slot)) else { continue };
                 let Some(o) = ao.objs.get(item.obj as u32) else { continue };
                 if !items::falls_on_death(o) || (newbie && o.newbie == 1) {
@@ -119,7 +122,14 @@ impl World {
                 }
             }
         }
-        let equipped: Vec<u8> = self.player(id).map(|p| p.inv.equipped.all().iter().flatten().copied().collect()).unwrap_or_default();
+        // UserDie unequips everything but the backpack and the ship.
+        let equipped: Vec<u8> = self
+            .player(id)
+            .map(|p| {
+                let e = p.inv.equipped;
+                [e.armor, e.weapon, e.shield, e.helmet, e.ring, e.tool, e.saddle, e.ammo, e.amulet].into_iter().flatten().collect()
+            })
+            .unwrap_or_default();
         for slot in equipped {
             self.unequip(id, slot);
         }
@@ -218,12 +228,16 @@ impl World {
     /// QuitarUserInvItem + UpdateUserInv: an emptied equipped stack is unequipped first.
     pub(crate) fn remove_from_slot(&mut self, id: u32, slot: u8, amount: u32) {
         let Some(item) = self.player(id).and_then(|p| p.inv.get(slot)) else { return };
-        if item.amount <= amount && self.player(id).unwrap().inv.equipped.is_equipped(slot) {
+        let unequipped = item.amount <= amount && self.player(id).unwrap().inv.equipped.is_equipped(slot);
+        if unequipped {
             self.unequip(id, slot);
         }
         let cell = self.player_mut(id).inv.cell_mut(slot).unwrap();
         *cell = (item.amount > amount).then(|| InvItem { obj: item.obj, amount: item.amount - amount });
         self.send_slot(id, slot);
+        if unequipped {
+            self.send_look(id);
+        }
     }
 
     // ---------------------------------------------------------------- equipment
@@ -437,13 +451,15 @@ impl World {
     // ---------------------------------------------------------------- validation
 
     /// Slot number check shared by every message: 0 or above the maximum is something no
-    /// honest client sends (strike); a locked slot (no backpack) is a plain refusal.
+    /// honest client sends (strike); a locked slot (no backpack) is a plain refusal. An
+    /// occupied slot is always reachable, so objects left above 24 after taking the
+    /// backpack off are never lost: the limit only decides where new things go.
     fn checked_slot(&mut self, id: u32, slot: u8) -> bool {
         if slot == 0 || slot as usize > MAX_INVENTORY_SLOTS {
             self.strike(id, "casilla de inventario invalida");
             return false;
         }
-        slot <= self.player(id).map_or(0, |p| p.inv.usable_slots())
+        self.player(id).is_some_and(|p| slot <= p.inv.usable_slots() || p.inv.get(slot).is_some())
     }
 
     fn dead(&self, id: u32) -> bool {
@@ -468,8 +484,14 @@ impl World {
         if let Err(why) = items::can_use(o, &user) {
             return self.console(id, why.message(), Tone::Info);
         }
-        // Per-type cooldown (CdTimes(obj.cdType) vs obj.Cooldown, in ms).
+        // IntervaloPermiteUsarClick (intervalos.ini IntervaloUserPuedeUsarClic = 276 ms).
         let now = self.now();
+        if p.inv.cooldowns.get(&USE_TIMER).is_some_and(|t| now < *t) {
+            return;
+        }
+        self.player_mut(id).inv.cooldowns.insert(USE_TIMER, now.after_ms(USE_INTERVAL_MS));
+        let p = self.player(id).unwrap();
+        // Per-type cooldown (CdTimes(obj.cdType) vs obj.Cooldown, in ms).
         if o.cooldown > 0 {
             if p.inv.cooldowns.get(&o.cooldown_type).is_some_and(|t| now < *t) {
                 return;
@@ -856,6 +878,11 @@ mod tests {
         let food = find(&w, 1, ObjType::UseOnce, |o| o.min_hunger > 0);
         w.dev_give(1, food, 1);
         w.player_mut(1).stats.food = 10;
+        // Right after the potion the use interval (276 ms) refuses it.
+        let slot = slot_of(&w, 1, food);
+        send(&mut w, 1, C2S::UseItem { slot });
+        assert_eq!(w.player(1).unwrap().stats.food, 10, "IntervaloPermiteUsarClick");
+        w.player_mut(1).inv.cooldowns.clear();
         let slot = slot_of(&w, 1, food);
         send(&mut w, 1, C2S::UseItem { slot });
         assert!(w.player(1).unwrap().stats.food > 10);
@@ -931,6 +958,40 @@ mod tests {
         }
         assert!(w.player(1).is_none(), "expulsado por casillas invalidas");
         assert!(!w.dev_give(9, food, 1), "dar a quien no existe");
+    }
+
+    #[test]
+    fn dropping_the_equipped_weapon_updates_the_look() {
+        let mut w = world();
+        let _a = login(&mut w, 1, "Desarmado");
+        let mut b = login(&mut w, 2, "Observa");
+        let sword = find(&w, 1, ObjType::Weapon, |o| o.weapon_anim > 0 && o.two_handed == 0);
+        w.dev_give(1, sword, 1);
+        let slot = slot_of(&w, 1, sword);
+        send(&mut w, 1, C2S::EquipItem { slot });
+        b.pump();
+        send(&mut w, 1, C2S::DropItem { slot, amount: 1 });
+        assert!(b.pump().iter().any(|m| matches!(m, S2C::Look { id: 1, weapon: 0, .. })));
+        assert_eq!(w.player(1).unwrap().inv.equipped.weapon, None);
+    }
+
+    #[test]
+    fn backpack_unlocks_42_slots_and_nothing_gets_stuck() {
+        let mut w = world();
+        let _a = login(&mut w, 1, "Viajero");
+        let (race, _, gender, ..) = user(&w, 1);
+        let bag = find(&w, 1, ObjType::Backpack, |o| items::clothing_for(o, race, gender) > 0);
+        w.dev_give(1, bag, 1);
+        let slot = slot_of(&w, 1, bag);
+        assert_eq!(w.player(1).unwrap().inv.usable_slots(), 24);
+        send(&mut w, 1, C2S::EquipItem { slot });
+        assert_eq!(w.player(1).unwrap().inv.usable_slots(), 42);
+        // Move the bag to slot 40, take it off: slot 40 is still reachable.
+        send(&mut w, 1, C2S::SwapSlots { a: slot, b: 40 });
+        send(&mut w, 1, C2S::EquipItem { slot: 40 });
+        assert_eq!(w.player(1).unwrap().inv.usable_slots(), 24);
+        send(&mut w, 1, C2S::SwapSlots { a: 40, b: 2 });
+        assert_eq!(w.player(1).unwrap().inv.get(2).unwrap().obj, bag);
     }
 
     #[test]
