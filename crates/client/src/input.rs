@@ -8,20 +8,13 @@ use ao_protocol::Tone;
 use ao_rules::Dir;
 use macroquad::prelude::*;
 
-const SPELL_KEYS: [KeyCode; 9] = [KeyCode::Key1, KeyCode::Key2, KeyCode::Key3, KeyCode::Key4, KeyCode::Key5, KeyCode::Key6, KeyCode::Key7, KeyCode::Key8, KeyCode::Key9];
-
 /// Returns the direction held this frame (for movement), if any.
 pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, ui: &Ui) -> Option<Dir> {
     if !ui.keyboard_captured {
         if is_key_pressed(KeyCode::F2) {
             renderer.pixel_perfect = !renderer.pixel_perfect;
         }
-        for (i, k) in SPELL_KEYS.iter().enumerate() {
-            if is_key_pressed(*k) && i < game.spells.len() {
-                game.selected = i;
-                game.casting = true;
-            }
-        }
+        // Keys 1-9 arm spells in the HUD (player-assigned, config/spellkeys.ini).
         if is_key_pressed(KeyCode::Escape) {
             game.casting = false;
         }
