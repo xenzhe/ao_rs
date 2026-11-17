@@ -94,7 +94,12 @@ pub struct Stats {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Screen {
+    /// Account login / new account (and the development login).
     Login,
+    /// Account logged in: choose, delete or create a character (P3, Sonnet 1).
+    Characters,
+    /// Character creation (P3, Sonnet 1).
+    Create,
     Game,
     Kicked(String),
 }

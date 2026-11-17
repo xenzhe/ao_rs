@@ -15,10 +15,18 @@ async fn main() {
         .init();
 
     let cfg_path = std::env::args().nth(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("config/server.toml"));
-    let config = match ServerConfig::load(&cfg_path) {
+    let mut config = match ServerConfig::load(&cfg_path) {
         Ok(c) => c,
         Err(e) => return error!("configuracion invalida: {e}"),
     };
+    // `AO_BIND=127.0.0.1:7701`: another address (several servers side by side, tests).
+    if let Ok(b) = std::env::var("AO_BIND") {
+        config.bind = b;
+    }
+    // `AO_DB=path`: another database file (":memory:" for a throwaway one).
+    if let Ok(d) = std::env::var("AO_DB") {
+        config.database = d;
+    }
     let data = match GameData::load(Path::new(&config.data_dir)) {
         Ok(d) => d,
         Err(e) => return error!("datos de juego invalidos: {e}"),

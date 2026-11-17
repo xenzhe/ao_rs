@@ -1,23 +1,19 @@
-//! In-game interface: console on top, chat/status bar at the bottom, character and spell
-//! panel on the right.
+//! In-game HUD: status bar at the bottom, character and spell panel on the right.
 use super::widgets::{bar, button, panel, text, GOLD_TEXT};
-use crate::game::{tone_color, Game};
+use super::Ui;
+use crate::assets::Assets;
+use crate::game::Game;
 use crate::render::layout::Layout;
 use macroquad::prelude::*;
 
-pub fn draw(game: &mut Game, lay: &Layout, hour: f32, pixel_perfect: bool) {
-    console(game, lay);
+/// HUD: side panel (character, bars, quick spells, minimap) and the bottom bar. OWNER:
+/// Sonnet 4 (docs/P3_CONTRATO.md).
+pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, hour: f32, pixel_perfect: bool) {
+    let _ = assets;
+    ui.capture_mouse_if_over(lay.panel);
+    ui.capture_mouse_if_over(lay.bottom);
     bottom_bar(game, lay, hour, pixel_perfect);
     side_panel(game, lay);
-}
-
-fn console(game: &Game, lay: &Layout) {
-    let (u, r) = (lay.u, lay.console);
-    panel(r, u);
-    let lines: Vec<_> = game.console.iter().rev().take(5).collect();
-    for (i, (t, c)) in lines.iter().rev().enumerate() {
-        text(t, r.x + 12.0 * u, r.y + 22.0 * u + i as f32 * 17.0 * u, 17.0 * u, tone_color(*c));
-    }
 }
 
 fn bottom_bar(game: &Game, lay: &Layout, hour: f32, pixel_perfect: bool) {

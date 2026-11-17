@@ -9,6 +9,7 @@
 //! - [`input`], [`assets`], [`config`]
 //! - [`devtools`]: env-driven automation for tests and screenshots
 mod assets;
+mod audio;
 mod config;
 mod devtools;
 mod game;
@@ -40,6 +41,7 @@ async fn main() {
     let mut dev = DevTools::from_env();
     let hour = std::env::var("AO_HOUR").ok().and_then(|h| h.parse().ok()).unwrap_or(12.0);
     let mut renderer = Renderer::new(cfg.video.pixel_perfect, hour);
+    let mut ui = ui::Ui::new(ui::theme::Theme::load(&assets.root));
     let mut game = Game::new(DevTools::default_name().unwrap_or_default(), cfg.server.clone(), assets.root.clone());
     if dev.auto_login {
         if game.name_input.is_empty() {
@@ -58,7 +60,18 @@ async fn main() {
         game.now = now;
         game::poll(&mut game, &mut assets, &mut renderer.fx);
         match &game.screen {
-            Screen::Login => ui::login::draw(&mut game, lay.u),
+            Screen::Login => {
+                ui.begin_frame(lay.u);
+                ui::login::draw(&mut ui, &mut game, &mut assets);
+            }
+            Screen::Characters => {
+                ui.begin_frame(lay.u);
+                ui::account::characters(&mut ui, &mut game, &mut assets);
+            }
+            Screen::Create => {
+                ui.begin_frame(lay.u);
+                ui::account::create(&mut ui, &mut game, &mut assets);
+            }
             Screen::Kicked(reason) => {
                 ui::hud::kicked(&reason.clone(), lay.u);
                 if dev.shot.is_some() {
@@ -67,15 +80,16 @@ async fn main() {
             }
             Screen::Game => {
                 game.check_integrity();
-                input::update(&mut game, &mut renderer, &lay, now);
-                dev.update(&mut game, &mut renderer, now);
                 game.update(dt);
                 renderer.fx.update(dt);
                 if game.map.is_some() {
                     renderer.draw_world(&game, &mut assets, &lay, t_ms, dt);
                 }
+                // UI on top of the world, then the world input with what the UI left.
                 let hour = renderer.hour();
-                ui::hud::draw(&mut game, &lay, hour, renderer.pixel_perfect);
+                ui::frame(&mut ui, &mut game, &mut assets, &lay, hour, renderer.pixel_perfect);
+                input::update(&mut game, &mut renderer, &lay, now, &ui);
+                dev.update(&mut game, &mut renderer, &mut ui, now);
                 if dev.maybe_capture(now) {
                     break;
                 }

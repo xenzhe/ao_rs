@@ -4,8 +4,11 @@
 //! - `AO_WALK=up|down|left|right`: keep walking in that direction
 //! - `AO_FXDEMO=1`: play the spell effects locally (never sent to the server) and capture
 //! - `AO_HOUR=h`: start at that hour of the day
+//! - `AO_OPEN=inventory,spells,...`: windows open from the start (names: lowercase
+//!   `WindowId` without spaces, e.g. `worldmap`), for screenshots of the UI
 use crate::game::{v, Game};
 use crate::render::Renderer;
+use crate::ui::{Ui, WindowId};
 use ao_rules::spells::SpellEffect;
 use ao_rules::Dir;
 use macroquad::prelude::*;
@@ -18,6 +21,7 @@ pub struct DevTools {
     fx_demo: bool,
     demo_step: u8,
     entered_at: Option<f64>,
+    opened: bool,
 }
 
 impl DevTools {
@@ -38,6 +42,7 @@ impl DevTools {
             fx_demo: var("AO_FXDEMO").is_some(),
             demo_step: 0,
             entered_at: None,
+            opened: false,
         }
     }
 
@@ -45,9 +50,21 @@ impl DevTools {
         std::env::var("AO_NAME").ok()
     }
 
-    /// Scripted actions for this frame (only when capturing).
-    pub fn update(&mut self, game: &mut Game, renderer: &mut Renderer, now: f64) {
-        if self.shot.is_none() || game.map.is_none() {
+    /// Scripted actions for this frame.
+    pub fn update(&mut self, game: &mut Game, renderer: &mut Renderer, ui: &mut Ui, now: f64) {
+        if game.map.is_none() {
+            return;
+        }
+        if !self.opened {
+            self.opened = true;
+            let wanted = std::env::var("AO_OPEN").unwrap_or_default().to_lowercase();
+            for w in WindowId::ALL {
+                if wanted.split(',').any(|n| n.trim() == format!("{w:?}").to_lowercase()) {
+                    ui.open(w);
+                }
+            }
+        }
+        if self.shot.is_none() {
             return;
         }
         let t = now - *self.entered_at.get_or_insert(now);

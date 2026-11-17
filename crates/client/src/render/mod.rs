@@ -5,9 +5,11 @@
 //! - [`world`]: map layers and characters
 //! - [`lighting`]: day/night and light map
 //! - [`fx`]: particles, projectiles, lightning, floating text
+pub mod characters;
 pub mod fx;
 pub mod layout;
 pub mod lighting;
+pub mod weather;
 pub mod world;
 
 use crate::assets::Assets;

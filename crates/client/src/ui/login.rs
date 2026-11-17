@@ -1,11 +1,16 @@
-//! Login screen.
+//! Login screen. OWNER: Sonnet 1 (docs/P3_CONTRATO.md): account login and new account;
+//! the development login (name only) stays available when the server allows it.
 use super::widgets::{button, panel, text, text_centered};
+use super::Ui;
+use crate::assets::Assets;
 use crate::game::{tone_color, Game};
 use ao_protocol::Tone;
 use ao_rules::valid_name;
 use macroquad::prelude::*;
 
-pub fn draw(game: &mut Game, u: f32) {
+pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets) {
+    let _ = assets;
+    let u = ui.u;
     let t = get_time() as f32;
     let (sw, sh) = (screen_width(), screen_height());
     clear_background(Color::new(0.04, 0.03, 0.02, 1.0));

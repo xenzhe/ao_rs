@@ -3,7 +3,7 @@
 //! fade when you walk behind them), and finally layer-5 roofs that fade while under them.
 use super::layout::TILE;
 use crate::assets::Assets;
-use crate::game::{v, Ent, Game};
+use crate::game::{Ent, Game};
 use ao_formats::csm::{is_roof_trigger, tile};
 use ao_rules::{VIEW_TILES_H, VIEW_TILES_W};
 use macroquad::prelude::*;
@@ -67,7 +67,7 @@ pub fn draw_world(game: &Game, assets: &mut Assets, fades: &mut WorldFades, orig
         if let Some(row) = by_row.get_mut(&y) {
             row.sort_by_key(|e| e.x);
             for e in row.iter() {
-                draw_character(assets, e, origin);
+                super::characters::draw_character(assets, e, origin, t_ms);
             }
         }
         for x in bx0..=bx1 {
@@ -109,22 +109,6 @@ pub fn draw_world(game: &Game, assets: &mut Assets, fades: &mut WorldFades, orig
                 alpha = *a;
             }
             assets.draw(g, px(x), py(y), true, t_ms, Color::new(1.0, 1.0, 1.0, alpha));
-        }
-    }
-}
-
-/// Body + head at the character's tile, as the official composed character.
-pub fn draw_character(assets: &mut Assets, e: &Ent, origin: Vec2) {
-    let tl = v(e.tile_tl()) - origin;
-    let heading = e.dir.heading();
-    let Some(body) = assets.db.bodies.get(&e.body).cloned() else { return };
-    draw_ellipse(tl.x + 16.0, tl.y + 29.0, 11.0, 4.0, 0.0, Color::new(0.0, 0.0, 0.0, 0.3));
-    let anim_t = if e.moving() { e.walk_ms } else { 0.0 };
-    let b = tl + vec2(body.body_offset.0, body.body_offset.1);
-    assets.draw(body.walk[heading], b.x, b.y, true, anim_t, WHITE);
-    if let Some(head) = assets.db.heads.get(&e.head).map(|h| h[heading]) {
-        if head > 0 {
-            assets.draw(head, b.x + body.head_offset.0, b.y + body.head_offset.1 - 1.0, true, 0.0, WHITE);
         }
     }
 }
