@@ -85,6 +85,26 @@ fn invite_accept_leave_and_kick() {
     assert_eq!(ana.game.local.social.party.leader, aid);
     assert!(says(&beto, "¡Has sido añadido al grupo!"));
 
+    // Party members cannot hurt each other (PuedeAtacar). The first two bots spawn next
+    // to each other; Beto steps into Ana's row or column if diagonal.
+    let (pa, pb) = (ana.pos(), beto.pos());
+    assert_eq!(tile_distance(pa, pb), 1, "spawned next to each other");
+    if pa.0 != pb.0 && pa.1 != pb.1 {
+        assert!(beto.walk(Dir::towards(pa.0 - pb.0, 0)));
+        s.advance(ao_rules::WALK_MS);
+        beto.sync();
+        ana.sync();
+    }
+    let (pa, pb) = (ana.pos(), beto.pos());
+    ana.send(&C2S::Turn { dir: Dir::towards(pb.0 - pa.0, pb.1 - pa.1) });
+    let hp = beto.hp();
+    let seq = ana.game.next_seq();
+    ana.send(&C2S::Melee { seq });
+    s.advance(ATTACK_INTERVAL_MS);
+    sync_all(&s, &mut [&mut ana, &mut beto]);
+    assert!(says(&ana, "No podés atacar a un miembro de tu grupo."));
+    assert_eq!(beto.hp(), hp);
+
     let mut caro = open(&s, "Caro");
     let cid = caro.id();
     join(&s, &mut ana, &mut caro);
@@ -199,17 +219,6 @@ fn cheats_and_limits() {
     sync_all(&s, &mut [&mut ana, &mut caro]);
     assert!(says(&ana, "ya se encuentra en un grupo"));
     assert!(caro.game.local.social.party.invitation.is_none());
-    // Party members cannot hurt each other (PuedeAtacar).
-    let me = caro.pos();
-    let other = dani.pos();
-    if tile_distance(me, other) == 1 {
-        caro.send(&C2S::Turn { dir: Dir::towards(other.0 - me.0, other.1 - me.1) });
-        let seq = caro.game.next_seq();
-        caro.send(&C2S::Melee { seq });
-        s.advance(ATTACK_INTERVAL_MS);
-        caro.sync();
-        assert!(says(&caro, "No podés atacar a un miembro de tu grupo."));
-    }
 
     // Different factions cannot party: Eva turns criminal (HandleLeaveFaction).
     let mut eva = open(&s, "Eva");

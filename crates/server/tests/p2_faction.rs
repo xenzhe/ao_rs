@@ -17,6 +17,8 @@ use server::world::faction::FactionRecord;
 const FIELD: (u16, i32, i32) = (2, 50, 50);
 const WARRIOR: u8 = 3;
 const PASS: &str = "secreta1";
+/// obj.dat 4340, the army's rank 1 reward (recompensas_faccion.dat `Recompensa23=1-4340`).
+const UNIFORM: u16 = 4340;
 
 /// A fresh database file for one test.
 fn db_file(tag: &str) -> String {
@@ -191,6 +193,39 @@ fn a_citizen_killing_a_citizen_turns_criminal() {
     assert_eq!(saved(&db, "Asesino").status, rules::CRIMINAL, "saved on logout");
 }
 
+/// An official arena: a tile with trigger 6 (`TRIGGER_FIGHT_ZONE`) whose 8 neighbours are
+/// arena tiles too and free to stand on, so both fighters spawn inside.
+fn arena() -> (u16, i32, i32) {
+    let root = recursos_dir();
+    for number in 1..=400u16 {
+        let Ok(map) = AoMap::load(&root, number) else { continue };
+        for y in 3..=98 {
+            for x in 3..=98 {
+                let ok = (-1..=1).all(|dy| (-1..=1).all(|dx| map.trigger(x + dx, y + dy) == ao_rules::combat::TRIGGER_FIGHT_ZONE && ao_rules::walk::standable(&map, x + dx, y + dy) && map.npcs.iter().all(|n| (n.x, n.y) != (x + dx, y + dy))));
+                if ok {
+                    return (number, x, y);
+                }
+            }
+        }
+    }
+    panic!("no official arena found");
+}
+
+#[test]
+fn nothing_counts_in_an_arena() {
+    let at = arena();
+    let db = db_file("arena");
+    let s = server(at, 3, &db, false);
+    let mut a = armed(play(create(&s, "Gladiador"), "Gladiador"));
+    let mut v = strip(play(create(&s, "Rival"), "Rival"));
+    adjacent(&mut a, &mut v);
+    assert!(fight(&s, &mut a, &mut v, 300), "the rival died");
+    s.settle();
+    a.sync();
+    assert_eq!(a.game.local.social.faction.status, rules::CITIZEN, "PeleaSegura: no criminal in an arena");
+    assert!(!says(&a, "Ahora sos un criminal."));
+}
+
 #[test]
 fn the_seguro_and_the_royal_army_refuse_attacks_on_citizens() {
     let db = db_file("seguro");
@@ -296,6 +331,9 @@ fn enlisting_at_the_royal_recruiter() {
     assert!(npc_said(&a, "Bienvenido al Ejercito Imperial"));
     let f = saved(&db, "Soldado");
     assert_eq!((f.status, f.royal_rank, f.royal_rewarded, f.enlistments, f.entry_level), (rules::ROYAL, 1, 1, 1, 25));
+    // DarRecompensas: rank 1 of the army is obj 4340 "Uniforme Imperial (1ª Jerarquía)"
+    // (Real=1, forbidden only for pirate, thief and worker).
+    a.wait_until("uniforme", |b| b.game.local.inventory.iter().flatten().any(|i| i.obj == UNIFORM));
 
     // Talking again asks for the next rank (1500 points).
     a.send(&C2S::Interact { tx: npc.0, ty: npc.1 });
@@ -313,6 +351,7 @@ fn enlisting_at_the_royal_recruiter() {
     a.send(&C2S::Faction(FactionC2S::Leave { npc: Some(nid) }));
     a.wait_until("expulsado", |b| b.game.local.social.faction.status == rules::CITIZEN);
     assert!(says(&a, "Has sido expulsado del Ejército Real."));
+    a.wait_until("sin uniforme", |b| b.game.local.inventory.iter().flatten().all(|i| i.obj != UNIFORM));
     let objs = ao_formats::dat::obj::load(&recursos_dir()).unwrap().data;
     assert!(a.game.local.inventory.iter().flatten().all(|i| objs.get(i.obj as u32).is_none_or(|o| o.royal != 1)), "faction items are taken away");
 

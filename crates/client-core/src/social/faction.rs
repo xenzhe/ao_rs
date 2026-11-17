@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct FactionState {
-    /// Own status (`e_Facciones`); 1 = citizen until the server says otherwise.
+    /// Own status (`e_Facciones`); meaningful once `known` (the server sends it on entering).
     pub status: u8,
     pub rank: u8,
     pub title: String,

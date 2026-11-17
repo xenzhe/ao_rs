@@ -337,3 +337,57 @@ enum Removal {
     Left,
     Kicked,
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::db::{CharacterRecord, CharacterState};
+    use crate::world::party::Party;
+    use crate::world::{Session, World};
+    use crate::Settings;
+
+    fn join(w: &mut World, id: u32, map: u16, at: (i32, i32)) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        std::mem::forget(rx);
+        w.sessions.insert(id, Session::new(tx, "127.0.0.1:1".parse().unwrap()));
+        let rec = CharacterRecord { id: 0, account_id: 0, name: format!("P{id}"), race: 1, class: 3, gender: 1, body: 1, head: 1, level: 1, exp: 0, hp: 15, max_hp: 15, mana: 0, max_mana: 0, map, x: at.0, y: at.1 };
+        assert!(w.spawn_player(id, &rec, &CharacterState::default(), None));
+        let p = w.player_mut(id);
+        (p.map, p.x, p.y) = (map, at.0, at.1);
+    }
+
+    fn got(w: &World, id: u32) -> bool {
+        let p = w.player(id).unwrap();
+        p.exp > 0 || p.level > 1
+    }
+
+    /// `CalcularDarExpGrupal` with a member far away, a dead one and one on another map.
+    #[test]
+    fn share_skips_far_dead_and_other_map_members() {
+        let mut w = World::new(Settings::defaults());
+        assert!(w.ensure_map(1) && w.ensure_map(2));
+        join(&mut w, 1, 2, (50, 50));
+        join(&mut w, 2, 2, (52, 50));
+        join(&mut w, 3, 2, (50, 52));
+        join(&mut w, 4, 2, (80, 80));
+        join(&mut w, 5, 1, (50, 50));
+        let p = w.player_mut(3);
+        p.hp = 0;
+        p.combat.dead = true;
+        let pid = 7;
+        w.parties.by_id.insert(pid, Party { leader: 1, members: vec![1, 2, 3, 4, 5] });
+        for id in 1..=5 {
+            w.player_mut(id).party.id = Some(pid);
+        }
+        w.share_exp(1, 40, 2);
+        assert!(got(&w, 1) && got(&w, 2), "near and alive");
+        assert!(!got(&w, 3) && !got(&w, 4) && !got(&w, 5), "dead, far, other map");
+        assert_eq!(w.player(2).unwrap().exp, w.player(1).unwrap().exp, "same share");
+        let alone = w.player(1).unwrap().exp;
+
+        // The leader on another map takes a share that is lost: 40 / 3 each instead of 20.
+        w.parties.by_id.get_mut(&pid).unwrap().leader = 5;
+        w.share_exp(1, 40, 2);
+        assert!(!got(&w, 5));
+        assert_eq!(w.player(1).unwrap().exp - alone, 13);
+    }
+}

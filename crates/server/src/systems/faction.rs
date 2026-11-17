@@ -78,7 +78,8 @@ impl World {
     /// HOOK (combat): `killer` killed the player `victim` (criminal status, faction
     /// kills...). Called after the death is processed.
     pub(crate) fn faction_on_player_killed(&mut self, killer: u32, victim: u32) {
-        if killer == victim || self.player(killer).is_none() || self.player(victim).is_none() {
+        // ContarMuerte / UsuarioAtacadoPorUsuario: nothing counts in an arena (PeleaSegura).
+        if killer == victim || self.player(killer).is_none() || self.player(victim).is_none() || self.faction_safe_fight(killer, victim) {
             return;
         }
         // The hit that killed is an attack: UsuarioAtacadoPorUsuario first.
@@ -128,7 +129,7 @@ impl World {
         };
         match self.db.load_faction(char_id) {
             Ok(rec) => self.player_mut(id).faction.rec = rec,
-            Err(e) => eprintln!("faccion de {char_id}: {e:?}"),
+            Err(e) => tracing::warn!(char_id, ?e, "no se pudo cargar la faccion"),
         }
         self.faction_after_enter(id);
     }
@@ -149,6 +150,9 @@ impl World {
     /// member turns criminal. NOT CONNECTED yet: combat/magic should call it on every hit
     /// against a player; today it runs on the killing blow (`faction_on_player_killed`).
     pub(crate) fn faction_on_player_attacked(&mut self, attacker: u32, victim: u32) {
+        if self.faction_safe_fight(attacker, victim) {
+            return;
+        }
         if rules::attack_turns_criminal(self.faction_status(attacker), self.faction_status(victim)) {
             self.faction_turn_criminal(attacker);
         }
@@ -175,7 +179,8 @@ impl World {
     /// `VolverCriminal`.
     pub(crate) fn faction_turn_criminal(&mut self, id: u32) {
         let status = self.faction_status(id);
-        if rules::is_chaos(status) || rules::is_criminal(status) {
+        // `MapData(...).trigger = 6`: never in an arena.
+        if rules::is_chaos(status) || rules::is_criminal(status) || self.faction_in_arena(id) {
             return;
         }
         let f = &mut self.player_mut(id).faction.rec;
@@ -194,6 +199,16 @@ impl World {
 
     // ------------------------------------------------------------ internals
 
+    /// Standing on an arena tile (`e_Trigger6` / trigger 6, `TRIGGER_FIGHT_ZONE`).
+    fn faction_in_arena(&self, id: u32) -> bool {
+        self.player(id).is_some_and(|p| self.maps.get(&p.map).is_some_and(|m| m.map.trigger(p.x, p.y) == ao_rules::combat::TRIGGER_FIGHT_ZONE))
+    }
+
+    /// `PeleaSegura`: both fighters in an arena.
+    fn faction_safe_fight(&self, a: u32, v: u32) -> bool {
+        self.faction_in_arena(a) && self.faction_in_arena(v)
+    }
+
     fn faction_fighter(&self, id: u32) -> Option<Fighter> {
         let p = self.player(id)?;
         Some(Fighter { status: p.faction.rec.status, safe: p.faction.safe, legion_safe: p.faction.legion_safe, party: p.party.id.unwrap_or(0) })
@@ -204,7 +219,6 @@ impl World {
         let (safe, legion_safe, map) = (p.faction.safe, p.faction.legion_safe, p.map);
         self.send(id, &S2C::Faction(FactionS2C::Safe { on: safe }));
         self.send(id, &S2C::Faction(FactionS2C::LegionSafe { on: legion_safe }));
-        self.faction_send_state(id);
         // Everyone's faction status on the map, both ways (RefreshCharStatus).
         let others: Vec<(u32, u8)> = self.sessions.iter().filter_map(|(k, s)| s.player.as_ref().filter(|o| o.map == map && *k != id).map(|o| (*k, o.faction.rec.status))).collect();
         for (other, status) in others {
@@ -236,7 +250,7 @@ impl World {
         let Some(p) = self.player(id) else { return };
         let Some(char_id) = p.char_id else { return };
         if let Err(e) = self.db.save_faction(char_id, &p.faction.rec) {
-            eprintln!("guardar faccion de {char_id}: {e:?}");
+            tracing::warn!(char_id, ?e, "no se pudo guardar la faccion");
         }
     }
 
