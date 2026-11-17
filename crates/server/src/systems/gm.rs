@@ -335,7 +335,8 @@ impl World {
         Some(t)
     }
 
-    fn name_of(&self, id: u32) -> String {
+    /// Name of an online player ("" if none). Shared helper (GM, events).
+    pub(crate) fn name_of(&self, id: u32) -> String {
         self.player(id).map(|p| p.name.clone()).unwrap_or_default()
     }
 

@@ -216,10 +216,6 @@ impl World {
         self.player_ids().into_iter().find(|id| self.player(*id).is_some_and(|p| p.name.eq_ignore_ascii_case(name)))
     }
 
-    fn name_of(&self, id: u32) -> String {
-        self.player(id).map(|p| p.name.clone()).unwrap_or_default()
-    }
-
     fn announce(&self, text: impl Into<String>) {
         self.broadcast_all(&S2C::Console { text: text.into(), color: Tone::Info }, None);
     }
@@ -239,9 +235,9 @@ impl World {
 
     /// Who may run GM-only events. GM roles belong to the GM system (Opus C), which is not
     /// merged: development servers allow anyone; the integrator swaps this for its role check.
+    /// Tournaments are organised by GMs (SemiDios and up, like the VB `/TORNEO` commands).
     fn event_is_staff(&self, id: u32) -> bool {
-        let _ = id;
-        self.cfg.dev_login
+        self.gm_rank(id) >= ao_protocol::p4::gm::GmRank::SemiDios
     }
 
     fn red_potions(&self, id: u32) -> u32 {

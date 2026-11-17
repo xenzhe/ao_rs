@@ -135,7 +135,7 @@ impl World {
 
     pub(crate) fn on_say(&mut self, id: u32, text: String) {
         let Some(clean) = sanitize_chat(&text, MAX_CHAT) else { return };
-        if clean.starts_with('/') && (self.gm_command(id, &clean) || self.dev_command(id, &clean)) {
+        if clean.starts_with('/') && (self.gm_command(id, &clean) || self.event_command(id, &clean) || self.dev_command(id, &clean)) {
             return;
         }
         if self.gm_is_silenced(id) {

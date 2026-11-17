@@ -440,6 +440,8 @@ fn an_account_character_leaving_a_duel_is_saved_home_and_alive() {
 
 #[test]
 fn tournament_sign_up_and_start() {
+    // Tournaments are opened by GMs (SemiDios+): the organiser is seeded as one (dev login).
+    std::env::set_var("AO_GM_SEED", "Organizador:semidios");
     let s = TestServer::start();
     let mut gm = s.bot("Organizador");
     let mut a = s.bot("Luchador");
