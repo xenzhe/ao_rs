@@ -132,8 +132,6 @@ pub fn map_title(info: &WorldInfo, number: u16, own_name: Option<&str>) -> Strin
 // Small drawing helpers (also used by the owner's windows)
 // ---------------------------------------------------------------------------------------
 
-pub const MANA_BLUE: Color = Color::new(0.14, 0.34, 0.88, 1.0);
-pub const HP_RED: Color = Color::new(0.76, 0.12, 0.10, 1.0);
 pub const EXP_GOLD: Color = Color::new(0.78, 0.62, 0.16, 1.0);
 const STA_GREEN: Color = Color::new(0.36, 0.66, 0.24, 1.0);
 
@@ -148,20 +146,6 @@ pub fn thousands(n: u32) -> String {
         out.push(c);
     }
     out
-}
-
-/// A meter with the label inside: left text and right value, `h` tall.
-pub fn meter(r: Rect, v: f32, max: f32, c: Color, left: &str, right: &str, u: f32) {
-    draw_rectangle(r.x, r.y, r.w, r.h, Color::new(0.0, 0.0, 0.0, 0.72));
-    let f = if max > 0.0 { (v / max).clamp(0.0, 1.0) } else { 0.0 };
-    draw_rectangle(r.x, r.y, r.w * f, r.h, c);
-    draw_rectangle(r.x, r.y, r.w * f, r.h * 0.38, Color::new(1.0, 1.0, 1.0, 0.16));
-    draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, GOLD);
-    let size = (r.h * 0.78).min(17.0 * u);
-    let base = r.y + r.h / 2.0 + size * 0.32;
-    text(left, r.x + 6.0 * u, base, size, TEXT);
-    let d = measure(right, size);
-    text(right, r.right() - d.width - 6.0 * u, base, size, WHITE);
 }
 
 /// Width of `s` in the title font (the body-font `measure` is narrower).
