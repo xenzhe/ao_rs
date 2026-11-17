@@ -197,6 +197,11 @@ impl World {
         if self.sessions.values().filter_map(|s| s.player.as_ref()).any(|p| p.name.eq_ignore_ascii_case(&record.name)) {
             return self.reply(id, false, "Ese personaje ya esta conectado.");
         }
+        // Banned character / IP, or the server shutting down: never enters the world.
+        let ip = self.sessions.get(&id).map(|s| s.addr.ip());
+        if let Some(why) = self.gm_login_refusal(&record.name, ip) {
+            return self.reply(id, false, &why);
+        }
         let char_id = record.id;
         let state = match self.db.load_state(char_id) {
             Ok(s) => s,

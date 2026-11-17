@@ -292,6 +292,13 @@ pub async fn run_until(listener: TcpListener, settings: Settings, stop: impl Fut
                 world.tick(now);
                 ops.on_tick(t.elapsed());
                 ops.housekeeping(&world);
+                // `/APAGAR` (GM) finished its countdown: same orderly shutdown as a signal.
+                if world.gms.shut_down {
+                    accept.abort();
+                    ops.shutdown(&world);
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    break;
+                }
             }
             _ = usr1.recv() => {
                 ops.report_now(&world);

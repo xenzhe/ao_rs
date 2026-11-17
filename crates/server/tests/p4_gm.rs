@@ -225,13 +225,18 @@ fn banned_characters_accounts_and_addresses_cannot_enter() {
     cmd(&s, &mut semi, "/ban Malo@uso de cheats");
     malo.wait_until("baneado", |b| b.kicked().is_some_and(|r| r.contains("baneado")));
 
-    // The account still logs in, but the character is refused on entering.
+    // The account still logs in, but the character is refused before entering the world:
+    // nobody sees it connect.
     let mut again = s.connect();
     assert!(again.account_login("cuentamala", "secreta1"));
     again.send(&C2S::PlayCharacter { name: "Malo".into() });
-    again.game.screen = Screen::Game;
-    s.advance(100); // the refusal is applied on the next tick
-    again.wait_until("rechazado", |b| b.kicked().is_some_and(|r| r.contains("uso de cheats")));
+    again.wait_until("rechazado", |b| b.log().iter().any(|m| matches!(m, S2C::AccountResult { ok: false, message } if message.contains("uso de cheats"))));
+    s.advance(100);
+    again.sync();
+    assert!(again.game.me().is_none(), "never enters the world");
+    assert!(!dios.console().any(|l| l.contains("Malo se conecto")), "nobody sees it connect");
+    drop(again);
+    s.settle();
 
     // The whole account (offline): the login itself is refused.
     cmd(&s, &mut dios, "/bancuenta Malo@reincidente");
@@ -257,7 +262,8 @@ fn banned_characters_accounts_and_addresses_cannot_enter() {
     s.advance(100); // the refusal is applied on the next tick
     nuevo.wait_until("ip rechazada", |b| b.kicked().is_some_and(|r| r.contains("multicuenta")));
     nuevo.wait_until("cerrado", |b| b.closed());
-    dios.wait_until("Nuevo fuera", |b| said(b, "Nuevo se desconecto."));
+    dios.sync();
+    assert!(!said(&dios, "Nuevo se conecto."), "refused before entering: nobody sees it");
     cmd(&s, &mut dios, "/unbanip 127.0.0.1");
     let nuevo = s.bot("Nuevo");
     assert!(nuevo.kicked().is_none());

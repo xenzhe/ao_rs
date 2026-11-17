@@ -88,16 +88,17 @@ impl World {
             return self.kick(id, "entrada sin cuenta deshabilitada");
         }
         let refuse = if version != PROTOCOL_VERSION {
-            Some("Version del cliente desactualizada.")
+            Some("Version del cliente desactualizada.".to_string())
         } else if !valid_name(&name) {
-            Some("Nombre invalido (3-16 letras o numeros).")
+            Some("Nombre invalido (3-16 letras o numeros).".to_string())
         } else if self.sessions.values().filter_map(|s| s.player.as_ref()).any(|p| p.name.eq_ignore_ascii_case(&name)) {
-            Some("Ese personaje ya esta conectado.")
+            Some("Ese personaje ya esta conectado.".to_string())
         } else {
-            None
+            let ip = self.sessions.get(&id).map(|s| s.addr.ip());
+            self.gm_login_refusal(&name, ip)
         };
         if let Some(reason) = refuse {
-            self.send(id, &S2C::Kicked { reason: reason.into() });
+            self.send(id, &S2C::Kicked { reason });
             self.close(id);
             self.sessions.remove(&id);
             return;

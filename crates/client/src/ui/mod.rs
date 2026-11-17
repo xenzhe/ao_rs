@@ -39,6 +39,10 @@ use crate::render::layout::Layout;
 /// back to front, and the drag icon on top.
 pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, hour: f32, pixel_perfect: bool) {
     ui.begin_frame(lay.u);
+    // The GM panel (F10) exists only for GMs (the server tells each player its own rank).
+    if ui.is_open(WindowId::Gm) && !game.local.p4.gm.is_gm() {
+        ui.close(WindowId::Gm);
+    }
     auto_windows(ui, game);
     hud::draw(ui, game, assets, lay, hour, pixel_perfect);
     console::draw(ui, game, lay);

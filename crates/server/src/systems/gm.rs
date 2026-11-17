@@ -50,7 +50,7 @@
 //! without rank gets no answer at all: the line goes on as any other `/` line (as if the
 //! commands did not exist). A GM without enough rank gets the VB "Comando deshabilitado
 //! para tu cargo".
-use crate::clock::{Clock, GameTime};
+use crate::clock::GameTime;
 use crate::security::sanitize_chat;
 use crate::world::entities::Npc;
 use crate::world::gm::{Shutdown, FREEDOM, JAIL, MAX_JAIL_MINUTES, MAX_SILENCE_MINUTES, PANEL_LOG_ROWS, SEED_ENV};
@@ -453,12 +453,9 @@ impl World {
             for pid in self.player_ids() {
                 self.kick(pid, "El servidor se ha apagado. Vuelve más tarde.");
             }
-            // Everyone was saved by the kicks (synchronous SQLite). With the real clock the
-            // process ends here; under a virtual clock (tests) it only refuses logins.
-            if matches!(self.clock, Clock::Real(_)) {
-                info!("apagado completo: saliendo del proceso");
-                std::process::exit(0);
-            }
+            // Everyone was saved by the kicks (synchronous SQLite). The operation loop
+            // (`ops::run`) sees `shut_down`, takes the final backup and ends the process;
+            // under a virtual clock (tests) it only refuses logins.
             return;
         }
         if now >= s.next_notice {
