@@ -255,12 +255,10 @@ mod tests {
     use crate::clock::GameTime;
     use crate::db::{CharacterState, NewCharacter};
     use crate::world::bank::MAX_STACK;
-    use crate::world::entities::Npc;
     use crate::world::Session;
     use crate::Settings;
     use ao_formats::dat::npcs::NpcType;
     use ao_protocol::{FrameReader, MAX_SERVER_FRAME};
-    use ao_rules::Dir;
     use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 
     const BANKER_ID: u32 = 200_000;
@@ -296,9 +294,10 @@ mod tests {
     }
 
     fn place_banker(w: &mut World, at: (i32, i32)) {
-        // The NPC system will create real NPCs; until then a stand-in on the banker's tile.
-        let npc = Npc { def: 0, name: "Banquero".into(), body: 0, head: 0, x: at.0, y: at.1, dir: Dir::Down, hp: 1, max_hp: 1, home: at, next_move: GameTime::ZERO, next_attack: GameTime::ZERO, dead_until: None };
-        w.maps.get_mut(&1).unwrap().npcs.insert(BANKER_ID, npc);
+        let m = &w.maps[&1].map;
+        let def = m.npcs.iter().find(|n| (n.x, n.y) == at).map(|n| n.npc).expect("banker on that tile");
+        let npc = w.make_npc(def, at.0, at.1).expect("banker in npcs.dat");
+        w.maps.get_mut(&1).unwrap().add_npc(BANKER_ID, npc);
     }
 
     fn join(w: &mut World, id: u32, name: &str, at: (i32, i32), state: &CharacterState, char_id: Option<i64>) -> UnboundedReceiver<Vec<u8>> {

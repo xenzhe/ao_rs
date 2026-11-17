@@ -46,11 +46,13 @@ pub struct Settings {
     pub clock: Clock,
     /// Test instrumentation; `None` in production.
     pub probe: Option<Arc<Probe>>,
+    /// Create the official NPCs of each map. Off only in tests that need empty maps.
+    pub npcs: bool,
 }
 
 impl Settings {
     pub fn new(config: ServerConfig, data: GameData, recursos: PathBuf) -> Settings {
-        Settings { config, data, recursos, start: None, seed: DEFAULT_SEED, clock: Clock::real(), probe: None }
+        Settings { config, data, recursos, start: None, seed: DEFAULT_SEED, clock: Clock::real(), probe: None, npcs: true }
     }
 
     /// Repository defaults: used by tests and when no config file exists.

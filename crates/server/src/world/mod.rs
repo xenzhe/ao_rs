@@ -78,11 +78,13 @@ pub struct World {
     pub probe: Option<Arc<Probe>>,
     /// Connection addresses (only kept when probing), alive until `Disconnected`.
     addrs: HashMap<ConnId, SocketAddr>,
+    /// `Settings::npcs`.
+    pub map_npcs: bool,
 }
 
 impl World {
     pub fn new(settings: Settings) -> World {
-        let Settings { config, data, recursos, start, seed, clock, probe } = settings;
+        let Settings { config, data, recursos, start, seed, clock, probe, npcs } = settings;
         let b = &data.balance;
         let start = start.unwrap_or((b.start_map, b.start_x, b.start_y));
         let db = Db::open(&config.database).unwrap_or_else(|e| panic!("no se pudo abrir la base de datos '{}': {e:?}", config.database));
@@ -103,6 +105,7 @@ impl World {
             next_regen: GameTime(REGEN_MS),
             probe,
             addrs: HashMap::new(),
+            map_npcs: npcs,
         }
     }
 

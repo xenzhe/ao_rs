@@ -205,6 +205,7 @@ impl World {
     pub(crate) fn user_die(&mut self, id: u32) {
         // UserDie order: drop/unequip first (armor off = naked body), so the look kept for
         // the resurrection is the naked one, then the ghost.
+        self.close_bank(id);
         self.drop_inventory_on_death(id);
         let p = self.player_mut(id);
         p.hp = 0;
@@ -243,47 +244,38 @@ impl World {
 
     // ------------------------------------------------------------ creatures
 
-    /// Combat values of a creature. Its official definition is the npcs.dat entry with the
-    /// same name (creatures.toml has no npcs.dat id yet); without one, creatures.toml
-    /// damage and experience with no defense, attack power or evasion.
+    /// Combat values of a live NPC from its npcs.dat entry (`Npc.def`). `attackable` is the
+    /// live flag, which the NPC system owns.
     pub(crate) fn npc_combat(&self, map: u16, nid: u32) -> Option<NpcCombat> {
         let n = self.maps.get(&map)?.npcs.get(&nid)?;
         if !n.alive() {
             return None;
         }
-        if let Some((_, d)) = self.ao.npcs.iter().find(|(_, d)| d.name.eq_ignore_ascii_case(&n.name)) {
-            return Some(NpcCombat {
-                name: n.name.clone(),
-                attack_power: d.attack_power as i64,
-                evasion_power: d.evasion_power as i64,
-                defense: d.defense,
-                min_hit: d.min_hit,
-                max_hit: d.max_hit,
-                exp: d.exp.max(0) as u32,
-                attackable: d.attackable != 0,
-            });
-        }
-        let def = self.data.creature(n.def);
+        let d = self.ao.npcs.get(n.def as u32)?;
         Some(NpcCombat {
             name: n.name.clone(),
-            attack_power: 0,
-            evasion_power: 0,
-            defense: 0,
-            min_hit: def.map_or(1, |d| d.damage[0]),
-            max_hit: def.map_or(1, |d| d.damage[1]),
-            exp: def.map_or(0, |d| d.exp),
-            attackable: true,
+            attack_power: d.attack_power as i64,
+            evasion_power: d.evasion_power as i64,
+            defense: d.defense,
+            min_hit: d.min_hit,
+            max_hit: d.max_hit,
+            exp: d.exp.max(0) as u32,
+            attackable: n.attackable,
         })
     }
 
     /// Damage to a creature from a player (melee, arrows, spells). Gives experience for
     /// the share of life taken (GetExpForUser) and kills it at 0. Returns true if killed.
     pub(crate) fn damage_npc(&mut self, map: u16, nid: u32, amount: i32, attacker: u32) -> bool {
-        let exp_total = self.npc_combat(map, nid).map_or(0, |c| c.exp);
-        let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&nid)) else { return false };
-        if !n.alive() {
+        let Some(c) = self.npc_combat(map, nid) else { return false };
+        if !c.attackable {
             return false;
         }
+        let exp_total = c.exp;
+        if self.player(attacker).is_some() {
+            self.npc_attacked_by(map, nid, attacker);
+        }
+        let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&nid)) else { return false };
         let before = n.hp;
         n.hp = (n.hp - amount.max(0)).max(0);
         let (name, hp, max_hp) = (n.name.clone(), n.hp, n.max_hp);
@@ -303,9 +295,9 @@ impl World {
 
     fn kill_npc(&mut self, map: u16, nid: u32, killer: u32) {
         let now = self.now();
+        // The NPC system takes it off its tile and schedules the respawn (tick_respawns).
         let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
-        let respawn = self.data.creature(n.def).map_or(8, |d| d.respawn_secs);
-        n.dead_until = Some(now.after_secs(respawn));
+        n.dead_until = Some(now);
         let name = n.name.clone();
         self.broadcast(map, &S2C::Despawn { id: nid }, None);
         self.console(killer, format!("Has matado a {name}!"), Tone::Good);
@@ -365,7 +357,6 @@ impl World {
 mod tests {
     use crate::clock::{Clock, GameTime, VirtualClock};
     use crate::db::{CharacterRecord, CharacterState};
-    use crate::world::entities::Npc;
     use crate::world::inventory::InvItem;
     use crate::world::{Session, World};
     use crate::Settings;
@@ -416,9 +407,13 @@ mod tests {
     }
 
     fn wolf(w: &mut World, nid: u32, x: i32, y: i32, hp: i32) {
-        let now = w.now();
-        let npc = Npc { def: 1, name: "Lobo".into(), body: 1, head: 0, x, y, dir: Dir::Down, hp, max_hp: hp, home: (x, y), next_move: now, next_attack: now, dead_until: None };
-        w.maps.get_mut(&MAP).unwrap().npcs.insert(nid, npc);
+        // Lobo (npcs.dat 500), static and harmless so only the test's actions matter.
+        let mut npc = w.make_npc(500, x, y).expect("Lobo in npcs.dat");
+        npc.hp = hp;
+        npc.max_hp = hp;
+        npc.hostile = false;
+        npc.movement = ao_formats::dat::npcs::Movement::Static;
+        w.maps.get_mut(&MAP).unwrap().add_npc(nid, npc);
     }
 
     fn first_obj(w: &World, f: impl Fn(&ao_formats::dat::obj::ObjData) -> bool) -> u16 {

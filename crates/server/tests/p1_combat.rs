@@ -11,9 +11,10 @@ const FIELD: (u16, i32, i32) = (2, 50, 50);
 const CITY: (u16, i32, i32) = (1, 50, 50);
 const WARRIOR: u8 = 3;
 
-/// Characters appear at `at`, start with `hp`, nobody regenerates and no creatures.
+/// Characters appear at `at`, start with `hp`, nobody regenerates and no NPCs.
 fn server(at: (u16, i32, i32), hp: i32) -> TestServer {
     TestServer::with(|st| {
+        st.npcs = false;
         st.start = Some(at);
         let b = &mut st.data.balance;
         (b.start_map, b.start_x, b.start_y) = at;
@@ -198,42 +199,56 @@ fn stamina_runs_out() {
 
 #[test]
 fn warrior_kills_a_creature_and_gets_its_official_experience() {
+    // An official Gallina (npcs.dat 501: hostile, 10 HP, GiveEXP=5) of map 12; the warrior
+    // appears on a free tile next to it and the hen comes for him.
+    let map = ao_formats::AoMap::load(&recursos_dir(), 12).expect("map 12");
+    // A lone hen: no other NPC of the map within 12 tiles to join the fight.
+    let hen = map
+        .npcs
+        .iter()
+        .filter(|n| n.npc == 501)
+        .find(|h| map.npcs.iter().all(|o| (o.x, o.y) == (h.x, h.y) || tile_distance((o.x, o.y), (h.x, h.y)) > 12))
+        .expect("a lone Gallina on map 12");
+    let spot = Dir::ALL
+        .iter()
+        .map(|d| (hen.x + d.delta().0, hen.y + d.delta().1))
+        .find(|&(x, y)| ao_rules::walk::standable(&map, x, y))
+        .expect("free tile next to the hen");
+    let at = (12, spot.0, spot.1);
     let s = TestServer::with(|st| {
-        st.start = Some(FIELD);
+        st.start = Some(at);
         let b = &mut st.data.balance;
-        (b.start_map, b.start_x, b.start_y) = FIELD;
-        b.creatures_per_map = 900;
-        st.data.creatures.retain(|c| c.name == "Lobo");
-        for c in &mut st.data.creatures {
-            c.hp = 1;
-            c.damage = [0, 0];
-            c.aggro_range = 0;
-            c.wander_range = 0;
-            c.respawn_secs = 600;
-        }
+        (b.start_map, b.start_x, b.start_y) = at;
     });
-    let mut bot = warrior(&s, "Cazador");
-    let me = bot.pos();
-    let (nid, x, y) = bot
-        .creatures()
-        .filter(|(_, e)| (e.x - me.0).abs() + (e.y - me.1).abs() == 1)
-        .map(|(id, e)| (id, e.x, e.y))
-        .min()
-        .expect("a wolf next to the spawn");
-    face(&mut bot, (x, y));
-    for _ in 0..10 {
-        if bot.ent(nid).is_none() {
+    let mut bot = equipped_warrior(&s, "Cazador");
+    let exp0 = bot.game.stats.exp;
+    let mut killed = false;
+    for _ in 0..400 {
+        if bot.console().any(|t| t.contains("Has matado a Gallina")) {
+            killed = true;
             break;
         }
-        melee(&mut bot);
+        let me = bot.pos();
+        let next = bot.creatures().find(|(_, e)| e.name == "Gallina" && (e.x - me.0).abs() + (e.y - me.1).abs() == 1).map(|(_, e)| (e.x, e.y));
+        if let Some(t) = next {
+            face(&mut bot, t);
+            melee(&mut bot);
+        }
         s.advance(ATTACK_INTERVAL_MS);
         bot.sync();
+        if bot.hp() <= 0 {
+            let me = bot.id();
+            let hits: Vec<String> = bot.log().iter().filter_map(|m| match m {
+                S2C::Attack { attacker, target, hit: true, damage, .. } if *target == me => Some(format!("{}:{damage}", bot.ent(*attacker).map_or("?".into(), |e| e.name.clone()))),
+                _ => None,
+            }).collect();
+            panic!("the warrior died; mine {:?}; theirs {hits:?}", attacks_by(&bot, me));
+        }
     }
-    assert!(bot.ent(nid).is_none(), "the wolf died: {:?}", attacks_by(&bot, bot.id()));
-    assert!(bot.console().any(|t| t.contains("Has matado a Lobo")));
-    // npcs.dat Lobo: GiveEXP=30, all of it for taking its whole life.
+    assert!(killed, "the hen died: {:?}", attacks_by(&bot, bot.id()));
+    // GiveEXP=5, all of it for taking its whole life.
     let b = ao_formats::dat::balance::load(&recursos_dir()).unwrap().data;
-    let want = rules::add_exp(&b, 1, 0, 30);
+    let want = rules::add_exp(&b, 1, exp0, 5);
     assert_eq!((bot.level(), bot.game.stats.exp), (want.level, want.exp));
 }
 
