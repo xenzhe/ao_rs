@@ -1604,8 +1604,13 @@ fn draw_figure(game: &Game, assets: &mut Assets, area: Rect, u: f32) {
 
     let Some(me) = game.me() else { return };
     let mut e = me.clone();
-    // South, West, North, East: a slow turn, holding each side 2 s.
-    e.dir = [ao_rules::Dir::Down, ao_rules::Dir::Left, ao_rules::Dir::Up, ao_rules::Dir::Right][((t / 2.0) as usize) % 4];
+    // Facing you; while the mouse is over it, it turns (south, west, north, east) so the
+    // equipment can be seen from every side.
+    e.dir = if area.contains(mouse()) {
+        [ao_rules::Dir::Down, ao_rules::Dir::Left, ao_rules::Dir::Up, ao_rules::Dir::Right][((t / 0.9) as usize) % 4]
+    } else {
+        ao_rules::Dir::Down
+    };
     // The character is drawn at 1:1 into a small off-screen target (the same technique as
     // the world renderer), then that texture is scaled up with whole pixels onto the stand.
     // Room for a character with a tall helmet and a wide weapon, little else.
