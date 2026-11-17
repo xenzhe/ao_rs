@@ -1,0 +1,23 @@
+# systemd: copiar a /etc/systemd/system/ao-server.service, ajustar rutas y usuario.
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ao-server
+#   journalctl -u ao-server -f
+[Unit]
+Description=Argentum Online server (Rust)
+After=network.target
+
+[Service]
+Type=simple
+User=ao
+WorkingDirectory=/opt/ao
+ExecStart=/opt/ao/server
+Environment=RUST_LOG=info
+Environment=AO_RECURSOS=/opt/ao/Recursos
+Restart=on-failure
+RestartSec=5
+# SIGTERM = parada ordenada: guarda a los jugadores, copia la base y sale.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+# Estadisticas al log sin parar: systemctl kill -s USR1 ao-server
+
+[Install]
+WantedBy=multi-user.target

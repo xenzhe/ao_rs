@@ -35,3 +35,16 @@ exp_mult = 1
 # Multiplicador del oro que sueltan (OroMult) y de la probabilidad de botin (DropMult).
 gold_mult = 1
 drop_mult = 1
+
+[ops]
+# Informe de estadisticas en el log cada N minutos (0 = nunca).
+stats_interval_min = 5
+# JSON que una web puede leer ("" = no escribirlo) y cada cuantos segundos se refresca.
+stats_file = "data/stats.json"
+stats_file_secs = 10
+# Copias de seguridad de la base: carpeta, cada cuantas horas (0 = ninguna periodica),
+# dias que se conservan (la mas reciente de cada dia; todas las de hoy) y copia al apagar.
+backup_dir = "data/backups"
+backup_interval_hours = 6
+backup_keep_days = 7
+backup_on_shutdown = true

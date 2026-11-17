@@ -15,6 +15,7 @@ pub mod config;
 pub mod data;
 pub mod db;
 pub mod net;
+pub mod ops;
 pub mod probe;
 pub mod rng;
 pub mod security;

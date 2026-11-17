@@ -15,6 +15,41 @@ pub struct ServerConfig {
     pub dev_login: bool,
     pub security: SecurityConfig,
     pub world: WorldConfig,
+    pub ops: OpsConfig,
+}
+
+/// Operation: statistics, backups, graceful shutdown (`crate::ops`, docs/OPERACION.md).
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct OpsConfig {
+    /// Minutes between statistics lines in the log (0 = never).
+    pub stats_interval_min: u64,
+    /// JSON file refreshed for a web page to read ("" = do not write it).
+    pub stats_file: String,
+    /// Seconds between refreshes of the JSON file (and of the rate measurements).
+    pub stats_file_secs: u64,
+    /// Folder for database backups.
+    pub backup_dir: String,
+    /// Hours between automatic backups (0 = no periodic backups).
+    pub backup_interval_hours: u64,
+    /// Days kept: the newest backup of each of the last N days (all of today's are kept).
+    pub backup_keep_days: usize,
+    /// Take a backup when the server shuts down.
+    pub backup_on_shutdown: bool,
+}
+
+impl Default for OpsConfig {
+    fn default() -> Self {
+        OpsConfig {
+            stats_interval_min: 5,
+            stats_file: "data/stats.json".into(),
+            stats_file_secs: 10,
+            backup_dir: "data/backups".into(),
+            backup_interval_hours: 6,
+            backup_keep_days: 7,
+            backup_on_shutdown: true,
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -50,6 +85,7 @@ impl Default for ServerConfig {
             dev_login: true,
             security: SecurityConfig::default(),
             world: WorldConfig::default(),
+            ops: OpsConfig::default(),
         }
     }
 }
