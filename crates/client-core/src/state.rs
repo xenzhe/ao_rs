@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 pub const TILE: f32 = 32.0;
 
+#[derive(Clone, Debug)]
 pub struct Ent {
     pub name: String,
     pub kind: EntityKind,

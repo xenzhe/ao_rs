@@ -14,7 +14,6 @@ use crate::ui::{Ui, WindowId};
 use client_core::p3::items::usable_slots;
 use macroquad::prelude::*;
 
-pub(crate) use super::inventory::item_name;
 
 /// One gold figure: coin, big number, caption.
 fn gold_block(x: f32, y: f32, amount: u32, caption: &str, right: bool, u: f32) -> f32 {

@@ -426,7 +426,8 @@ pub(crate) fn draw_cell(assets: &mut Assets, r: Rect, it: Option<ItemSlot>, o: &
         let pad = r.w * 0.10;
         let lift = h * 1.5 * u - if o.hover && lmb_down() { 2.0 * u } else { 0.0 };
         let ir = Rect::new(r.x + pad - lift, r.y + pad - lift, r.w - 2.0 * pad + 2.0 * lift, r.h - 2.0 * pad + 2.0 * lift);
-        draw_circle(r.x + r.w / 2.0, r.bottom() - r.h * 0.16, r.w * 0.30, Color::new(0.0, 0.0, 0.0, 0.28));
+        // Contact shadow: a thin flattened ellipse under the icon, not a disc.
+        draw_ellipse(r.x + r.w / 2.0, r.bottom() - r.h * 0.13, r.w * 0.26, r.h * 0.05, 0.0, Color::new(0.0, 0.0, 0.0, 0.35));
         assets.draw_obj(i.obj, ir);
     }
     // Border: the kind's colour (or gold when selected / hovered / receiving a drop).
@@ -1581,33 +1582,61 @@ const DOLL: [(EquipSlot, usize, usize); 8] = [
 ];
 
 /// The silhouette of a character behind the doll slots: a rune circle, a body in the dark.
-fn draw_figure(c: Vec2, h: f32, u: f32) {
+/// The player's own character (real body, head and worn equipment, the same composition as
+/// in the world) standing on a lit pedestal in `area`, turning slowly through its four
+/// headings. Drawn through a camera so the 32 px sprites scale up crisply.
+fn draw_figure(game: &Game, assets: &mut Assets, area: Rect, u: f32) {
     let t = get_time() as f32;
-    for i in 0..5 {
-        draw_circle(c.x, c.y, h * 0.5 - i as f32 * 5.0 * u, Color::new(0.45, 0.30, 0.12, 0.035));
+    let foot = vec2(area.x + area.w / 2.0, area.bottom() - 18.0 * u);
+    // Pedestal: warm light from above and a soft pool on the floor.
+    for i in 0..6 {
+        let k = i as f32 / 6.0;
+        draw_ellipse(foot.x, foot.y, area.w * (0.46 - k * 0.3), 16.0 * u * (1.0 - k * 0.5), 0.0, Color::new(0.95, 0.70, 0.35, 0.035));
     }
-    draw_circle_lines(c.x, c.y, h * 0.42, 1.0, alpha(GOLD, 0.22));
-    draw_circle_lines(c.x, c.y, h * 0.36, 1.0, alpha(GOLD, 0.12));
-    for k in 0..12 {
-        let a = k as f32 * std::f32::consts::TAU / 12.0 + t * 0.04;
-        let p = c + vec2(a.cos(), a.sin()) * h * 0.42;
-        draw_circle(p.x, p.y, 1.4 * u, alpha(GOLD, 0.35));
+    let beam_top = area.y + 8.0 * u;
+    for i in 0..10 {
+        let k = i as f32 / 10.0;
+        let w = area.w * (0.18 + 0.32 * k);
+        draw_rectangle(foot.x - w / 2.0, beam_top + (foot.y - beam_top) * k, w, (foot.y - beam_top) / 10.0, Color::new(1.0, 0.82, 0.5, 0.012 + 0.012 * k));
     }
-    let body = Color::new(0.21, 0.15, 0.095, 0.96);
-    let edge = alpha(GOLD, 0.42);
-    let head = vec2(c.x, c.y - h * 0.30);
-    draw_circle(head.x, head.y, h * 0.075, body);
-    draw_circle_lines(head.x, head.y, h * 0.075, 1.0, edge);
-    draw_rectangle(c.x - h * 0.03, head.y + h * 0.06, h * 0.06, h * 0.05, body);
-    // Shoulders, torso, arms, legs.
-    draw_triangle(vec2(c.x - h * 0.17, c.y - h * 0.18), vec2(c.x + h * 0.17, c.y - h * 0.18), vec2(c.x - h * 0.10, c.y + h * 0.10), body);
-    draw_triangle(vec2(c.x + h * 0.17, c.y - h * 0.18), vec2(c.x + h * 0.10, c.y + h * 0.10), vec2(c.x - h * 0.10, c.y + h * 0.10), body);
-    draw_line(c.x - h * 0.17, c.y - h * 0.16, c.x - h * 0.22, c.y + h * 0.08, h * 0.055, body);
-    draw_line(c.x + h * 0.17, c.y - h * 0.16, c.x + h * 0.22, c.y + h * 0.08, h * 0.055, body);
-    draw_line(c.x - h * 0.045, c.y + h * 0.10, c.x - h * 0.06, c.y + h * 0.40, h * 0.075, body);
-    draw_line(c.x + h * 0.045, c.y + h * 0.10, c.x + h * 0.06, c.y + h * 0.40, h * 0.075, body);
-    draw_line(c.x - h * 0.17, c.y - h * 0.18, c.x - h * 0.10, c.y + h * 0.10, 1.0, edge);
-    draw_line(c.x + h * 0.17, c.y - h * 0.18, c.x + h * 0.10, c.y + h * 0.10, 1.0, edge);
+    draw_ellipse(foot.x, foot.y, area.w * 0.30, 9.0 * u, 0.0, Color::new(0.0, 0.0, 0.0, 0.45));
+    draw_ellipse_lines(foot.x, foot.y, area.w * 0.36, 11.0 * u, 0.0, 1.2 * u, alpha(GOLD, 0.35));
+
+    let Some(me) = game.me() else { return };
+    let mut e = me.clone();
+    // South, West, North, East: a slow turn, holding each side 2 s.
+    e.dir = [ao_rules::Dir::Down, ao_rules::Dir::Left, ao_rules::Dir::Up, ao_rules::Dir::Right][((t / 2.0) as usize) % 4];
+    // The character is drawn at 1:1 into a small off-screen target (the same technique as
+    // the world renderer), then that texture is scaled up with whole pixels onto the stand.
+    // Room for a character with a tall helmet and a wide weapon, little else.
+    const RT_W: f32 = 72.0;
+    const RT_H: f32 = 66.0;
+    thread_local! {
+        static RT: std::cell::RefCell<Option<RenderTarget>> = const { std::cell::RefCell::new(None) };
+    }
+    let rt = RT.with(|c| {
+        c.borrow_mut()
+            .get_or_insert_with(|| {
+                let rt = render_target(RT_W as u32, RT_H as u32);
+                rt.texture.set_filter(FilterMode::Nearest);
+                rt
+            })
+            .clone()
+    });
+    // In the target, the character's tile sits so its feet land at (RT_W/2, RT_H - 8).
+    let tl = e.tile_tl();
+    let tile_at = vec2(RT_W / 2.0 - 16.0, RT_H - 8.0 - 30.0);
+    let origin = vec2(tl.x, tl.y) - tile_at;
+    set_camera(&Camera2D { zoom: vec2(2.0 / RT_W, 2.0 / RT_H), target: vec2(RT_W / 2.0, RT_H / 2.0), render_target: Some(rt.clone()), ..Default::default() });
+    clear_background(Color::new(0.0, 0.0, 0.0, 0.0));
+    crate::render::characters::draw_character(assets, &e, origin, t * 1000.0);
+    set_default_camera();
+    // Whole-pixel scale that fits the area; feet on the stand, a slow breath.
+    let scale = ((area.h - 24.0 * u) / RT_H).floor().max(1.0);
+    let (w, h) = (RT_W * scale, RT_H * scale);
+    let breath = ((t * 1.6).sin() * 0.5 + 0.5) * scale * 0.5;
+    let dest = vec2((foot.x - w / 2.0).round(), (foot.y + 8.0 * scale - h - breath).round());
+    draw_texture_ex(&rt.texture, dest.x, dest.y, WHITE, DrawTextureParams { dest_size: Some(vec2(w, h)), ..Default::default() });
 }
 
 /// Draws the content of the window inside `r` (the frame is already drawn).
@@ -1623,7 +1652,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let bp = has_backpack(game, assets);
     let usable = usable_slots(bp);
     let inv = game.local.inventory.clone();
-    let left_w = 186.0 * u;
+    let left_w = 236.0 * u;
     let rx = r.x + left_w + 18.0 * u;
     let rw = r.right() - rx;
 
@@ -1632,7 +1661,9 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let rowh = 56.0 * u;
     let doll = Rect::new(r.x, r.y, left_w, 4.0 * rowh + cell + 4.0 * u);
     zones.push((Zone::Doll, doll));
-    draw_figure(vec2(r.x + left_w / 2.0, r.y + 2.0 * rowh), 4.0 * rowh, u);
+    // Your character, between the two columns of equipment slots.
+    let fig = Rect::new(r.x + cell + 8.0 * u, r.y, left_w - 2.0 * cell - 16.0 * u, 4.0 * rowh);
+    draw_figure(game, assets, fig, u);
     let mut worn: HashMap<EquipSlot, (u8, ItemSlot)> = HashMap::new();
     for (i, it) in inv.iter().enumerate() {
         let Some(it) = it.filter(|i| i.equipped) else { continue };
@@ -1810,13 +1841,22 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     }
     // The grid.
     let gtop = ry + rowh2 + 14.0 * u;
-    let avail_h = r.bottom() - 34.0 * u - gtop - 12.0 * u;
-    let grid = Grid::fit(7, 6, rw - 12.0 * u, avail_h, 4.0 * u, 56.0 * u);
+    let avail_h = r.bottom() - 34.0 * u - gtop - 12.0 * u - if bp { 0.0 } else { 22.0 * u };
+    // Only the usable slots: 6 per row (24 = 4 rows with the small bag, 42 = 7 with a
+    // backpack). The locked ones are a single hint line, not a wall of padlocks.
+    let grid = Grid::fit(6, usable.div_ceil(6), rw - 12.0 * u, avail_h, 5.0 * u, 60.0 * u);
     let go = vec2(rx + 6.0 * u + (rw - 12.0 * u - grid.size().x) / 2.0, gtop + 6.0 * u);
     let query = q.to_lowercase();
     let view = GridView { slots: &inv, from: WindowId::Inventory, selected: selected_inv(), locked_from: usable, filter, query: &query, sale_badges: false };
     let (hit, z) = draw_grid(ui, assets, &grid, go, &view, act);
     zones.extend(z);
+    if !bp {
+        let hint = "Equipa una mochila para llevar 18 objetos más";
+        let y = go.y + grid.size().y + 22.0 * u;
+        let hw = widgets::measure_with(FontKind::NarrativeItalic, hint, 15.0 * u).width;
+        glyph(Glyph::Pack, vec2(rx + (rw - hw) / 2.0 - 12.0 * u, y - 5.0 * u), 8.0 * u, alpha(GOLD, 0.55));
+        widgets::text_with(FontKind::NarrativeItalic, hint, rx + (rw - hw) / 2.0, y, 15.0 * u, TEXT_FAINT);
+    }
     if let (Some(h), None) = (hit, &ui.drag) {
         let eq = game.local.slot(h.slot).is_some_and(|i| i.equipped);
         let mut hints = Vec::new();

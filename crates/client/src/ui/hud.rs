@@ -1002,19 +1002,32 @@ fn portrait_sprite(assets: &mut Assets, game: &Game, c: Vec2, r: f32, u: f32) {
     let Some(me) = game.me() else { return };
     let Some(body) = assets.db.bodies.get(&me.body).cloned() else { return };
     let heading = 3; // south
-    let scale = 1.9 * u;
-    // Clip to the inscribed square (crop the source), feet slightly below the centre.
-    let clip = Rect::new(c.x - r * 0.72, c.y - r * 0.8, r * 1.44, r * 1.5);
-    let origin = vec2(c.x - 16.0 * scale, c.y + r * 0.95 - 33.0 * scale);
+    let scale = 2.1 * u;
+    // A bust: the head centred a little above the middle, shoulders below, cropped to the
+    // square inscribed in the medallion.
+    let clip = Rect::new(c.x - r * 0.72, c.y - r * 0.72, r * 1.44, r * 1.44);
     let mut parts: Vec<(u32, f32, f32)> = vec![(body.walk[heading], body.body_offset.0, body.body_offset.1)];
-    if let Some(h) = assets.db.heads.get(&me.head).map(|h| h[heading]).filter(|h| *h > 0) {
+    let head = assets.db.heads.get(&me.head).map(|h| h[heading]).filter(|h| *h > 0);
+    if let Some(h) = head {
         parts.push((h, body.body_offset.0 + body.head_offset.0, body.body_offset.1 + body.head_offset.1 - 1.0));
     }
-    for (idx, ox, oy) in parts {
-        let Some(g) = assets.db.frame(idx, 0.0).cloned() else { continue };
-        let (px, py) = anchor(&g, ox, oy, true);
+    // Where each part lands relative to a zero origin, to centre on the head.
+    let rel: Vec<Option<(Rect, ao_formats::graphics::Grh)>> = parts
+        .iter()
+        .map(|&(idx, ox, oy)| {
+            let g = assets.db.frame(idx, 0.0).cloned()?;
+            let (px, py) = anchor(&g, ox, oy, true);
+            Some((Rect::new(px * scale, py * scale, g.w * scale, g.h * scale), g))
+        })
+        .collect();
+    let focus = match (head, rel.last().cloned().flatten()) {
+        (Some(_), Some((hr, _))) => vec2(hr.x + hr.w / 2.0, hr.y + hr.h * 0.55),
+        _ => rel.first().cloned().flatten().map_or(Vec2::ZERO, |(br, _)| vec2(br.x + br.w / 2.0, br.y + br.h * 0.3)),
+    };
+    let origin = vec2(c.x, c.y - r * 0.12) - focus;
+    for (dest0, g) in rel.into_iter().flatten() {
         let Some(tex) = assets.texture(g.file) else { continue };
-        let dest = Rect::new(origin.x + px * scale, origin.y + py * scale, g.w * scale, g.h * scale);
+        let dest = Rect::new(origin.x + dest0.x, origin.y + dest0.y, dest0.w, dest0.h);
         let (cx0, cy0, cx1, cy1) = (dest.x.max(clip.x), dest.y.max(clip.y), dest.right().min(clip.right()), dest.bottom().min(clip.bottom()));
         if cx1 <= cx0 || cy1 <= cy0 {
             continue;
