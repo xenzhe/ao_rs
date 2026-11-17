@@ -7,6 +7,7 @@
 //! - [`progression`]: experience and levels
 pub mod balance;
 pub mod character;
+pub mod combat;
 pub mod creatures;
 pub mod progression;
 pub mod spells;

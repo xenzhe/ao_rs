@@ -4,8 +4,13 @@ use crate::clock::GameTime;
 
 #[derive(Clone, Debug, Default)]
 pub struct CombatState {
-    /// Ghost until resurrected.
+    /// Ghost until resurrected (`flags.Muerto`).
     pub dead: bool,
-    /// Attack interval (melee/ranged), like IntervaloUserPuedeAtacar.
-    pub next_attack: GameTime,
+    /// Last melee attack (`Counters.TimerPuedeAtacar`, also `TimerGolpeMagia` and
+    /// `TimerGolpeUsar`): magic checks `IntervaloGolpeMagia` against it.
+    pub last_attack: Option<GameTime>,
+    /// Last bow/throwable shot (`Counters.TimerPuedeUsarArco`).
+    pub last_shot: Option<GameTime>,
+    /// Body and head before dying, restored by `resurrect` (`OrigChar`).
+    pub alive_look: Option<(u16, u16)>,
 }
