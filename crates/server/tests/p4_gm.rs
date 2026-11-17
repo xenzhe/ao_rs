@@ -11,7 +11,7 @@ const JAIL_MAP: u16 = 66;
 
 /// Every test of this binary seeds the same GMs (env var read when each world starts).
 fn server() -> TestServer {
-    std::env::set_var("AO_GM_SEED", "Admin:admin,Dios:dios,Semi:semidios,Conse:consejero");
+    std::env::set_var("AO_GM_SEED", "Admin:admin,Dios:dios,Semi:semidios,Conse:consejero,Jefe:admin");
     TestServer::with(|st| {
         st.npcs = false;
         st.start = Some(CITY);
@@ -74,6 +74,43 @@ fn ranks_come_from_the_database_and_only_gms_hear_about_them() {
     leave(pepe, &mut admin);
     let pepe = s.bot("Pepe");
     assert_eq!(rank_of(&pepe), Some(GmRank::Consejero), "rank persists");
+}
+
+#[test]
+fn a_rank_belongs_to_one_character_not_to_its_name() {
+    let s = server();
+    let mut admin = s.bot("Admin");
+    // "Jefe" is in the seed but had no character: whoever registers it gets nothing.
+    let mut jefe = s.connect();
+    assert!(jefe.create_account("ladron", "secreta1"));
+    assert!(jefe.create_character("Jefe", 1, 3, 1, 1));
+    jefe.play("Jefe");
+    jefe.sync();
+    assert_eq!(gm_msgs(&jefe), 0, "a seeded name taken later by an account is no GM");
+    jefe.say("/rmsg soy admin");
+    s.settle();
+    admin.sync();
+    assert!(!said(&admin, "Servidor » soy admin"), "said aloud like any line, never announced");
+
+    // A promoted account character, deleted and created again by its owner: no rank.
+    let mut viejo = s.connect();
+    assert!(viejo.create_account("cuentavieja", "secreta1"));
+    assert!(viejo.create_character("Viejo", 1, 3, 1, 1));
+    viejo.play("Viejo");
+    cmd(&s, &mut admin, "/rol Viejo@dios");
+    viejo.wait_until("ascendido", |b| rank_of(b) == Some(GmRank::Dios));
+    leave(viejo, &mut admin);
+    let mut again = s.connect();
+    assert!(again.account_login("cuentavieja", "secreta1"));
+    assert!(again.account_request(&C2S::DeleteCharacter { name: "Viejo".into() }).0);
+    assert!(again.create_character("Viejo", 1, 3, 1, 1));
+    again.play("Viejo");
+    again.sync();
+    assert_eq!(gm_msgs(&again), 0, "the new Viejo does not inherit the rank");
+
+    // An admin cannot demote another admin, nor change his own rank.
+    cmd(&s, &mut admin, "/rol Admin@usuario");
+    assert!(said(&admin, "No puedes cambiar tu propio rango"));
 }
 
 #[test]

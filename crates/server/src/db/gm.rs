@@ -15,20 +15,32 @@ pub struct PenaltyRow {
 }
 
 impl Db {
-    pub fn gm_rank(&self, name: &str) -> DbResult<GmRank> {
-        let v: Option<i64> = self.conn.query_row("SELECT rank FROM gm_role WHERE name = ?1", params![name], |r| r.get(0)).optional()?;
-        Ok(v.map(GmRank::from_level).unwrap_or_default())
+    /// Rank of the character `name` whose database id is `char_id` (None = development
+    /// login). A row bound to another id (the name was freed and taken again) gives
+    /// nothing; an unbound row only counts for development logins when `allow_unbound`.
+    pub fn gm_rank(&self, name: &str, char_id: Option<i64>, allow_unbound: bool) -> DbResult<GmRank> {
+        let v: Option<(i64, Option<i64>)> = self.conn.query_row("SELECT rank, char_id FROM gm_role WHERE name = ?1", params![name], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+        Ok(match v {
+            Some((rank, Some(bound))) if Some(bound) == char_id => GmRank::from_level(rank),
+            Some((rank, None)) if char_id.is_none() && allow_unbound => GmRank::from_level(rank),
+            _ => GmRank::User,
+        })
     }
 
-    /// Sets (or with `User`, removes) a character's rank.
-    pub fn gm_set_rank(&self, name: &str, rank: GmRank, by: &str) -> DbResult<()> {
+    /// Id of the live (not deleted) character with that name.
+    pub fn gm_char_id(&self, name: &str) -> DbResult<Option<i64>> {
+        Ok(self.conn.query_row("SELECT id FROM character WHERE name = ?1 AND deleted = 0", params![name], |r| r.get(0)).optional()?)
+    }
+
+    /// Sets (or with `User`, removes) a character's rank, bound to `char_id`.
+    pub fn gm_set_rank(&self, name: &str, char_id: Option<i64>, rank: GmRank, by: &str) -> DbResult<()> {
         if rank == GmRank::User {
             self.conn.execute("DELETE FROM gm_role WHERE name = ?1", params![name])?;
         } else {
             self.conn.execute(
-                "INSERT INTO gm_role (name, rank, granted_by, granted_at) VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(name) DO UPDATE SET rank = excluded.rank, granted_by = excluded.granted_by, granted_at = excluded.granted_at",
-                params![name, rank.level(), by, now_unix()],
+                "INSERT INTO gm_role (name, char_id, rank, granted_by, granted_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(name) DO UPDATE SET char_id = excluded.char_id, rank = excluded.rank, granted_by = excluded.granted_by, granted_at = excluded.granted_at",
+                params![name, char_id, rank.level(), by, now_unix()],
             )?;
         }
         Ok(())
@@ -159,10 +171,19 @@ mod tests {
     #[test]
     fn roles_sentences_bans_and_logs_round_trip() {
         let db = Db::open(":memory:").unwrap();
-        assert_eq!(db.gm_rank("ana").unwrap(), GmRank::User);
-        db.gm_set_rank("Ana", GmRank::Dios, "consola").unwrap();
-        assert_eq!(db.gm_rank("ANA").unwrap(), GmRank::Dios, "names ignore case");
-        db.gm_set_rank("ana", GmRank::User, "x").unwrap();
+        assert_eq!(db.gm_rank("ana", Some(7), true).unwrap(), GmRank::User);
+        db.gm_set_rank("Ana", Some(7), GmRank::Dios, "consola").unwrap();
+        assert_eq!(db.gm_rank("ANA", Some(7), false).unwrap(), GmRank::Dios, "names ignore case");
+        // Same name, another character (deleted and created again): nothing.
+        assert_eq!(db.gm_rank("Ana", Some(8), true).unwrap(), GmRank::User);
+        assert_eq!(db.gm_rank("Ana", None, true).unwrap(), GmRank::User);
+        // Unbound rows: development logins only, and only when allowed.
+        db.gm_set_rank("Dev", None, GmRank::Admin, "x").unwrap();
+        assert_eq!(db.gm_rank("Dev", None, true).unwrap(), GmRank::Admin);
+        assert_eq!(db.gm_rank("Dev", None, false).unwrap(), GmRank::User);
+        assert_eq!(db.gm_rank("Dev", Some(3), true).unwrap(), GmRank::User);
+        db.gm_set_rank("ana", None, GmRank::User, "x").unwrap();
+        db.gm_set_rank("dev", None, GmRank::User, "x").unwrap();
         assert!(db.gm_roles().unwrap().is_empty());
 
         db.gm_save_sentence("Beto", 60_000, 5_000).unwrap();

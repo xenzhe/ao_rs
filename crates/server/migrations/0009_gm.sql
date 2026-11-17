@@ -2,8 +2,11 @@
 -- (Server.ini [Admines]/[Dioses]/[SemiDioses]/[Consejeros] list character names).
 
 -- e_PlayerType as a level: 0 user, 1 consejero, 2 semidios, 3 dios, 4 admin.
+-- `char_id` binds the rank to that exact character: a deleted character frees its name,
+-- and whoever creates it again must not inherit the rank. NULL = development login only.
 CREATE TABLE gm_role (
     name        TEXT PRIMARY KEY COLLATE NOCASE,
+    char_id     INTEGER,
     rank        INTEGER NOT NULL,
     granted_by  TEXT NOT NULL,
     granted_at  INTEGER NOT NULL

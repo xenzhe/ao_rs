@@ -50,7 +50,8 @@
 //! without rank gets no answer at all: the line goes on as any other `/` line (as if the
 //! commands did not exist). A GM without enough rank gets the VB "Comando deshabilitado
 //! para tu cargo".
-use crate::clock::GameTime;
+use crate::clock::{Clock, GameTime};
+use crate::security::sanitize_chat;
 use crate::world::entities::Npc;
 use crate::world::gm::{Shutdown, FREEDOM, JAIL, MAX_JAIL_MINUTES, MAX_SILENCE_MINUTES, PANEL_LOG_ROWS, SEED_ENV};
 use crate::world::inventory::InvItem;
@@ -59,7 +60,7 @@ use ao_formats::dat::obj::ObjType;
 use ao_protocol::p4::gm::{GmPlayerRow, GmRank};
 use ao_protocol::{GmC2S, GmS2C, Tone, S2C};
 use ao_rules::items::MAX_STACK;
-use ao_rules::Dir;
+use ao_rules::{Dir, MAX_CHAT};
 use std::net::IpAddr;
 use tracing::{info, warn};
 
@@ -108,10 +109,8 @@ impl World {
         match msg {
             GmC2S::Refresh => self.gm_send_panel(id),
             GmC2S::Command { line } => {
-                let line = line.trim().to_string();
-                if line.len() > 300 {
-                    return;
-                }
+                // Same cleaning as the chat (control characters, length).
+                let Some(line) = sanitize_chat(&line, MAX_CHAT) else { return };
                 if !line.starts_with('/') || !self.gm_command(id, &line) {
                     self.console(id, "Comando de GM desconocido.", Tone::Warn);
                 }
@@ -202,7 +201,7 @@ impl World {
         if let Ok(Some(reason)) = self.db.gm_ban_reason(character) {
             return Some(format!("Este personaje está baneado: {reason}"));
         }
-        let gm = self.db.gm_rank(character).unwrap_or_default().is_gm();
+        let gm = self.offline_rank(character).is_gm();
         if let (false, Some(ip)) = (gm, ip) {
             if let Ok(Some(reason)) = self.db.gm_ip_ban_reason(&ip.to_string()) {
                 return Some(format!("Tu dirección está baneada: {reason}"));
@@ -233,7 +232,7 @@ impl World {
         let Some(p) = self.player(id) else { return };
         let name = p.name.clone();
         let ip = self.sessions.get(&id).map(|s| s.addr.ip());
-        let rank = self.db.gm_rank(&name).unwrap_or_default();
+        let rank = self.db.gm_rank(&name, p.char_id, self.cfg.dev_login).unwrap_or_default();
         if let Some(reason) = self.gm_login_refusal(&name, ip) {
             warn!(id, %name, %reason, "entrada rechazada por GM");
             self.player_mut(id).gm.refused = true;
@@ -278,7 +277,9 @@ impl World {
         self.player(id).map(|p| p.gm.rank).unwrap_or_default()
     }
 
-    /// Applies `AO_GM_SEED` once.
+    /// Applies `AO_GM_SEED` once. Each name is bound to the character that has it NOW: a
+    /// name with no character is skipped (whoever registered it later would be admin),
+    /// except with `dev_login`, where it is an unbound row for development logins.
     fn gm_seed(&mut self) {
         if self.gms.seeded {
             return;
@@ -286,9 +287,14 @@ impl World {
         self.gms.seeded = true;
         let Ok(seed) = std::env::var(SEED_ENV) else { return };
         for (name, rank) in parse_seed(&seed) {
-            if self.db.gm_rank(&name).ok() != Some(rank) {
+            let char_id = self.db.gm_char_id(&name).ok().flatten();
+            if char_id.is_none() && !self.cfg.dev_login {
+                warn!(%name, "{SEED_ENV}: ese personaje no existe todavía; créalo y reinicia");
+                continue;
+            }
+            if self.db.gm_rank(&name, char_id, true).ok() != Some(rank) {
                 info!(%name, rank = rank.label(), "rango de GM desde {SEED_ENV}");
-                let _ = self.db.gm_set_rank(&name, rank, SEED_ENV);
+                let _ = self.db.gm_set_rank(&name, char_id, rank, SEED_ENV);
                 let _ = self.db.gm_log(SEED_ENV, "rol", &name, rank.label());
             }
         }
@@ -298,11 +304,17 @@ impl World {
         self.player_ids().into_iter().find(|i| self.player(*i).is_some_and(|p| p.name.eq_ignore_ascii_case(name)))
     }
 
+    /// Stored rank of a character that is not online (its live character id, if any).
+    fn offline_rank(&self, name: &str) -> GmRank {
+        let char_id = self.db.gm_char_id(name).ok().flatten();
+        self.db.gm_rank(name, char_id, self.cfg.dev_login).unwrap_or_default()
+    }
+
     /// Rank of a character, online or not.
     fn rank_of(&self, name: &str) -> GmRank {
         match self.online(name) {
             Some(t) => self.gm_rank(t),
-            None => self.db.gm_rank(name).unwrap_or_default(),
+            None => self.offline_rank(name),
         }
     }
 
@@ -440,6 +452,12 @@ impl World {
             warn!(%by, "servidor apagado por GM");
             for pid in self.player_ids() {
                 self.kick(pid, "El servidor se ha apagado. Vuelve más tarde.");
+            }
+            // Everyone was saved by the kicks (synchronous SQLite). With the real clock the
+            // process ends here; under a virtual clock (tests) it only refuses logins.
+            if matches!(self.clock, Clock::Real(_)) {
+                info!("apagado completo: saliendo del proceso");
+                std::process::exit(0);
             }
             return;
         }
@@ -941,7 +959,9 @@ impl World {
             next_path_at: GameTime::ZERO,
             next_spell: now,
             walk_step: 0,
-            respawn_secs,
+            // `/ACC`: a respawn so far away that the NPC system never brings it back before
+            // `tick_no_respawn` removes it (a 0 s respawn would revive it in the same tick).
+            respawn_secs: if respawn { respawn_secs } else { u32::MAX / 4 },
             respawn_at: None,
         };
         let nid = self.next_npc;
@@ -984,12 +1004,20 @@ impl World {
         if name.eq_ignore_ascii_case(me) {
             return self.console(id, "No puedes cambiar tu propio rango.", Tone::Warn);
         }
-        let online = self.online(&name);
-        if online.is_none() && !self.db.gm_character_exists(&name).unwrap_or(false) && self.db.gm_rank(&name).unwrap_or_default() == GmRank::User {
-            return self.console(id, "El personaje no existe.", Tone::Warn);
+        if self.rank_of(&name) >= self.gm_rank(id) {
+            return self.console(id, HIGHER, Tone::Warn);
         }
+        let online = self.online(&name);
+        // Bound to that exact character (online: its id; dev logins have none).
+        let char_id = match online {
+            Some(t) => self.player(t).and_then(|p| p.char_id),
+            None => match self.db.gm_char_id(&name).ok().flatten() {
+                Some(c) => Some(c),
+                None => return self.console(id, "El personaje no existe.", Tone::Warn),
+            },
+        };
         let name = online.map(|t| self.name_of(t)).unwrap_or(name);
-        let _ = self.db.gm_set_rank(&name, rank, me);
+        let _ = self.db.gm_set_rank(&name, char_id, rank, me);
         if let Some(t) = online {
             self.player_mut(t).gm.rank = rank;
             self.send(t, &S2C::Gm(GmS2C::Rank { rank }));
@@ -1026,6 +1054,32 @@ mod tests {
         assert_eq!(args("  Pepe  5 "), ["Pepe", "5"]);
         assert_eq!(args("Juan+Perez@x"), ["Juan Perez", "x"]);
         assert!(args("   ").is_empty());
+    }
+
+    /// `/ACC` NPC killed by combat (not `/MATA`): the NPC system's respawn must not bring it
+    /// back, even across a long time.
+    #[test]
+    fn acc_npc_killed_in_combat_never_respawns() {
+        use crate::net::Event;
+        use crate::Settings;
+        use ao_protocol::PROTOCOL_VERSION;
+        let mut w = World::new(Settings::defaults());
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        w.on_event(Event::Connected { id: 1, addr: "127.0.0.1:9".parse().unwrap(), tx });
+        w.on_event(Event::Frame { id: 1, msg: ao_protocol::C2S::Login { name: "Gema".into(), version: PROTOCOL_VERSION } });
+        w.player_mut(1).gm.rank = GmRank::Admin;
+        let map = w.player(1).unwrap().map;
+        let before: Vec<u32> = w.instance(map).npc_ids().to_vec();
+        assert!(w.gm_command(1, "/acc 500"));
+        let nid = *w.instance(map).npc_ids().iter().find(|n| !before.contains(n)).expect("npc created");
+        // What combat's kill_npc does.
+        let now = GameTime(1000);
+        w.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap().dead_until = Some(now);
+        for t in 1..=200u64 {
+            w.tick(GameTime(1000 + t * 10_000));
+        }
+        assert!(!w.instance(map).npcs.contains_key(&nid), "the /ACC NPC is gone for good");
+        assert!(w.gms.no_respawn.is_empty());
     }
 
     #[test]
