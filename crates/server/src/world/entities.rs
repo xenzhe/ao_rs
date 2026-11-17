@@ -44,6 +44,12 @@ pub struct Player {
     pub spells: Spellbook,
     pub status: StatusEffects,
     pub combat: CombatState,
+    /// P2 pieces (docs/P2_CONTRATO.md); each system loads/saves its own in `*_on_enter/leave`.
+    pub trade: super::trade::TradePiece,
+    pub guild: super::guild::GuildPiece,
+    pub party: super::party::PartyPiece,
+    pub faction: super::faction::FactionPiece,
+    pub quest: super::quest::QuestPiece,
 }
 
 impl Player {

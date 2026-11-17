@@ -290,6 +290,10 @@ impl World {
             self.console(a, "No podes pelear aqui.", Tone::Warn);
             return false;
         }
+        if let Some(why) = self.faction_attack_refusal(a, v) {
+            self.console(a, why, Tone::Warn);
+            return false;
+        }
         true
     }
 

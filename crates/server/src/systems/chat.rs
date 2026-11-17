@@ -5,6 +5,12 @@ use ao_protocol::{Tone, S2C};
 use ao_rules::MAX_CHAT;
 
 impl World {
+    /// P2 chat channels (whisper, party, guild, global...). OWNER: Sonnet 2.
+    pub(crate) fn on_channel(&mut self, id: u32, msg: ao_protocol::ChannelC2S) {
+        let _ = id;
+        match msg {}
+    }
+
     pub(crate) fn on_say(&mut self, id: u32, text: String) {
         let Some(clean) = sanitize_chat(&text, MAX_CHAT) else { return };
         if clean.starts_with('/') && self.dev_command(id, &clean) {

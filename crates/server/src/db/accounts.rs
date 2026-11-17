@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn accounts_and_passwords() {
         let db = Db::open(":memory:").unwrap();
-        assert_eq!(db.schema_version(), 2);
+        assert_eq!(db.schema_version(), crate::db::MIGRATIONS.len());
         let a = db.create_account("Xenzhe", "secreta1").unwrap();
         assert_eq!(db.create_account("xenzhe", "otra1234").unwrap_err(), DbError::Taken, "names ignore case");
         assert_eq!(db.verify_account("XENZHE", "secreta1").unwrap().id, a.id);
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn full_state_roundtrip() {
         let db = Db::open(":memory:").unwrap();
-        assert_eq!(db.schema_version(), 2);
+        assert_eq!(db.schema_version(), crate::db::MIGRATIONS.len());
         let a = db.create_account("estado", "secreta1").unwrap();
         let c = db.create_character(a.id, &new_char("Lleno")).unwrap();
         assert_eq!(db.load_state(c.id).unwrap(), CharacterState::default(), "new characters start with defaults");
@@ -336,7 +336,7 @@ mod tests {
             db.create_account("persiste", "secreta1").unwrap();
         }
         let db = Db::open(path.to_str().unwrap()).unwrap();
-        assert_eq!(db.schema_version(), 2);
+        assert_eq!(db.schema_version(), crate::db::MIGRATIONS.len());
         assert!(db.verify_account("persiste", "secreta1").is_ok());
         drop(db);
         let _ = std::fs::remove_dir_all(dir);

@@ -11,6 +11,12 @@ pub mod instance;
 pub mod inventory;
 pub mod spellbook;
 pub mod stats;
+// P2 (docs/P2_CONTRATO.md)
+pub mod faction;
+pub mod guild;
+pub mod party;
+pub mod quest;
+pub mod trade;
 
 use crate::clock::{Clock, GameTime, VirtualClock};
 use crate::config::ServerConfig;
@@ -80,6 +86,10 @@ pub struct World {
     addrs: HashMap<ConnId, SocketAddr>,
     /// `Settings::npcs`.
     pub map_npcs: bool,
+    /// P2 world-wide state, each owned by its system (docs/P2_CONTRATO.md).
+    pub guilds: guild::Guilds,
+    pub parties: party::Parties,
+    pub trades: trade::Trades,
 }
 
 impl World {
@@ -106,6 +116,9 @@ impl World {
             probe,
             addrs: HashMap::new(),
             map_npcs: npcs,
+            guilds: Default::default(),
+            parties: Default::default(),
+            trades: Default::default(),
         }
     }
 

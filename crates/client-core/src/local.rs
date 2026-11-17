@@ -35,6 +35,8 @@ pub struct Local {
     pub bank: Option<Bank>,
     /// Items lying on the current map.
     pub ground: HashMap<(i32, i32), (u16, u32)>,
+    /// P2: trade, guild, party, faction, quests, chat channels.
+    pub social: crate::social::Social,
 }
 
 #[derive(Debug, Default)]
@@ -99,7 +101,7 @@ impl Local {
                 }
             }
             S2C::BankClosed => self.bank = None,
-            _ => return false,
+            _ => return self.social.apply(msg),
         }
         true
     }

@@ -196,6 +196,9 @@ impl World {
             _ => self.console(id, format!("{name} te ha matado!"), Tone::Warn),
         }
         self.user_die(id);
+        if let Source::Player(a) = source {
+            self.faction_on_player_killed(a, id);
+        }
         true
     }
 
@@ -283,7 +286,7 @@ impl World {
         // CalcularDarExp: share of life taken, then `ExpMult`.
         let exp = rules::exp_for_damage(exp_total, max_hp, before, hp) * self.cfg.world.exp_mult.max(1);
         if exp > 0 && self.player(attacker).is_some() {
-            self.give_exp(attacker, exp);
+            self.share_exp(attacker, exp, map);
         }
         if hp <= 0 {
             self.kill_npc(map, nid, attacker);
@@ -299,10 +302,14 @@ impl World {
         // The NPC system takes it off its tile and schedules the respawn (tick_respawns).
         let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
         n.dead_until = Some(now);
-        let name = n.name.clone();
+        let (name, number) = (n.name.clone(), n.def);
         self.broadcast(map, &S2C::Despawn { id: nid }, None);
         self.console(killer, format!("Has matado a {name}!"), Tone::Good);
         self.drop_npc_loot(map, nid, killer);
+        if self.player(killer).is_some() {
+            self.quest_on_npc_killed(killer, number, map);
+            self.faction_on_npc_killed(killer, number);
+        }
     }
 
     // ------------------------------------------------------------ experience

@@ -13,6 +13,13 @@ mod movement;
 mod npc_ai;
 mod regen;
 mod session;
+// P2 (docs/P2_CONTRATO.md)
+mod faction;
+mod guild;
+mod party;
+mod quest;
+mod social;
+mod trade;
 
 use crate::world::World;
 use ao_protocol::C2S;
@@ -47,6 +54,12 @@ impl World {
             C2S::BankClose => self.on_bank_close(id),
             C2S::AssignSkill { skill, points } => self.on_assign_skill(id, skill, points),
             C2S::Say { text } => self.on_say(id, text),
+            C2S::Trade(m) => self.on_trade(id, m),
+            C2S::Guild(m) => self.on_guild(id, m),
+            C2S::Party(m) => self.on_party(id, m),
+            C2S::Faction(m) => self.on_faction(id, m),
+            C2S::Quest(m) => self.on_quest(id, m),
+            C2S::Channel(m) => self.on_channel(id, m),
         }
     }
 }

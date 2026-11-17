@@ -58,8 +58,7 @@ impl World {
         // HandleNpcInteractionByType (merchants are checked before the type).
         if d.trades == 1 {
             if self.npc_alive_and_near(id, dead, dist, 4) {
-                // IniciarComercioNPC: trading with NPCs is P2.
-                self.console(id, "El comercio con NPCs llega en P2.", Tone::Info);
+                self.open_npc_trade(id, nid);
             }
         } else if kind == NpcType::Banker {
             if self.npc_alive_and_near(id, dead, dist, 4) {
@@ -67,6 +66,14 @@ impl World {
             }
         } else if matches!(kind, NpcType::Reviver | NpcType::NewbieReviver) {
             self.priest(id, kind, dist, dead, level);
+        } else if kind == NpcType::Quest {
+            if self.npc_alive_and_near(id, dead, dist, 4) {
+                self.quest_npc(id, nid);
+            }
+        } else if matches!(kind, NpcType::Recruiter | NpcType::Governor) {
+            if self.npc_alive_and_near(id, dead, dist, 4) {
+                self.faction_npc(id, nid, kind);
+            }
         } else if !dead
             && (d.crafts > 0
                 || matches!(

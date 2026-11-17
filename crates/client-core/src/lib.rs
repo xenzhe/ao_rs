@@ -13,6 +13,7 @@ pub mod events;
 pub mod guard;
 pub mod local;
 pub mod net;
+pub mod social;
 pub mod state;
 
 pub use events::{ClientEvent, Pt};

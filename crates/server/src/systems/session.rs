@@ -171,6 +171,11 @@ impl World {
             spells: spellbook_from(state),
             status: StatusEffects::default(),
             combat: CombatState { dead: c.hp <= 0, ..CombatState::default() },
+            trade: Default::default(),
+            guild: Default::default(),
+            party: Default::default(),
+            faction: Default::default(),
+            quest: Default::default(),
         };
         let name = c.name.clone();
         info!(id, %name, map = c.map, x, y, "entra");
@@ -182,12 +187,16 @@ impl World {
         self.send_look(id);
         self.send_stats(id);
         self.magic_on_enter(id);
+        self.social_on_enter(id);
         self.console(id, "Bienvenido a Argentum (prototipo en Rust, mapas de AO20).", Tone::Good);
         self.broadcast_all(&S2C::Console { text: format!("{name} se conecto."), color: Tone::Info }, Some(id));
         true
     }
 
     pub(crate) fn logout(&mut self, id: u32) {
+        if self.player(id).is_some() {
+            self.social_on_leave(id);
+        }
         let Some(session) = self.sessions.remove(&id) else { return };
         if let Some(p) = session.player {
             info!(id, name = %p.name, "sale");

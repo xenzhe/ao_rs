@@ -5,6 +5,11 @@
 //! - WAL journal for safe concurrent readers and crash safety.
 //! - `":memory:"` opens a private in-memory database (tests).
 mod accounts;
+// P2 repositories (`impl Db` blocks), one per owner (docs/P2_CONTRATO.md).
+mod factions;
+mod guilds;
+mod quests;
+mod trade;
 
 pub use accounts::{Account, CharacterRecord, CharacterState, NewCharacter};
 
@@ -12,9 +17,13 @@ use rusqlite::Connection;
 use std::path::Path;
 
 /// Migrations in order. Never edit an applied one: add a new file.
-const MIGRATIONS: &[&str] = &[
+pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0001_accounts.sql"),
     include_str!("../../migrations/0002_character_state.sql"),
+    include_str!("../../migrations/0003_guilds.sql"),
+    include_str!("../../migrations/0004_factions.sql"),
+    include_str!("../../migrations/0005_quests.sql"),
+    include_str!("../../migrations/0006_trade.sql"),
 ];
 
 #[derive(Debug, PartialEq)]

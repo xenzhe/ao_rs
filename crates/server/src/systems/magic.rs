@@ -546,7 +546,10 @@ impl World {
         if self.is_safe_for_fight(caster, target) {
             return Err("Esta es una zona segura, aquí no podés atacar otros usuarios.");
         }
-        Ok(())
+        match self.faction_attack_refusal(caster, target) {
+            Some(why) => Err(why),
+            None => Ok(()),
+        }
     }
 
     /// `PuedeLanzar` (the parts that exist in P1).

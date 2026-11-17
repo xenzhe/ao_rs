@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 pub mod balance;
 pub mod npcs;
 pub mod obj;
+pub mod quests;
 pub mod spells;
 
 /// A file could not be read at all (missing, no permission). Bad *contents* are never an

@@ -82,6 +82,14 @@ pub enum C2S {
 
     // Chat
     Say { text: String },
+
+    // P2 (docs/P2_CONTRATO.md): each system owns its enum in `social.rs`.
+    Trade(crate::social::TradeC2S),
+    Guild(crate::social::GuildC2S),
+    Party(crate::social::PartyC2S),
+    Faction(crate::social::FactionC2S),
+    Quest(crate::social::QuestC2S),
+    Channel(crate::social::ChannelC2S),
 }
 
 /// Server -> client.
@@ -149,6 +157,14 @@ pub enum S2C {
 
     // Chat / console
     Console { text: String, color: Tone },
+
+    // P2 (docs/P2_CONTRATO.md)
+    Trade(crate::social::TradeS2C),
+    Guild(crate::social::GuildS2C),
+    Party(crate::social::PartyS2C),
+    Faction(crate::social::FactionS2C),
+    Quest(crate::social::QuestS2C),
+    Channel(crate::social::ChannelS2C),
 }
 
 /// Bits of `S2C::Status::flags`.
