@@ -1,10 +1,113 @@
 //! Clicking on the world: talking to NPCs (banker, priest, merchant...). OWNER: NPC system
-//! (P1, Opus D). Opens the bank through `open_bank` (bank system).
+//! (P1, Opus D). Ported from `GameLogic.LookatTile` (the NPC description) and
+//! `WorldActions.HandleWorldAction` / `HandleNpcInteractionByType` (the action), which the
+//! AO20 client sends on click and double click; here one `Interact` does both.
+use crate::systems::npc_ai::{VISION_X, VISION_Y};
 use crate::world::World;
-use ao_protocol::Tone;
+use ao_formats::csm::MAP_SIZE;
+use ao_formats::dat::npcs::NpcType;
+use ao_protocol::{Tone, S2C};
+
+/// `LimiteNewbie` (Declares.bas).
+const NEWBIE_LEVEL: u32 = 12;
+const TOO_FAR: &str = "Estas demasiado lejos.";
+const DEAD: &str = "Estas muerto!!";
+
+fn distancia(a: (i32, i32), b: (i32, i32)) -> i32 {
+    (a.0 - b.0).abs() + (a.1 - b.1).abs()
+}
 
 impl World {
-    pub(crate) fn on_interact(&mut self, id: u32, _tx: i32, _ty: i32) {
-        self.console(id, "No hay nada con que interactuar ahi.", Tone::Info);
+    pub(crate) fn on_interact(&mut self, id: u32, tx: i32, ty: i32) {
+        let Some(p) = self.player(id) else { return };
+        let (map, px, py, dead, level) = (p.map, p.x, p.y, p.hp <= 0, p.level);
+        // IsWorldActionRequestValid: inside the map and the visible area (clients cannot
+        // click elsewhere, so this is silently ignored).
+        if !(1..=MAP_SIZE).contains(&tx) || !(1..=MAP_SIZE).contains(&ty) || (px - tx).abs() > VISION_X || (py - ty).abs() > VISION_Y {
+            return;
+        }
+        if !self.instance(map).populated {
+            self.populate_map(map);
+        }
+        let Some(nid) = self.instance(map).npc_at(tx, ty) else {
+            self.console(id, "No hay nada con que interactuar ahi.", Tone::Info);
+            return;
+        };
+        let ao = self.ao.clone();
+        let n = &self.instance(map).npcs[&nid];
+        let (npos, kind) = ((n.x, n.y), n.kind);
+        let Some(d) = ao.npcs.get(n.def as u32) else { return };
+        let dist = distancia((px, py), npos);
+
+        // LookatTile: the description over its head.
+        if d.description.chars().count() > 1 {
+            if !dead || kind == NpcType::Reviver {
+                let near_only = matches!(kind, NpcType::Quest | NpcType::Banker | NpcType::Reviver | NpcType::Common | NpcType::Trainer | NpcType::Governor);
+                let euclid = (((px - npos.0).pow(2) + (py - npos.1).pow(2)) as f64).sqrt();
+                if !near_only || euclid < 3.0 {
+                    self.send(id, &S2C::NpcSay { id: nid, text: d.description.clone() });
+                }
+            }
+        } else if !dead {
+            self.console(id, d.name.clone(), Tone::Info);
+        }
+
+        // HandleNpcInteractionByType (merchants are checked before the type).
+        if d.trades == 1 {
+            if self.npc_alive_and_near(id, dead, dist, 4) {
+                // IniciarComercioNPC: trading with NPCs is P2.
+                self.console(id, "El comercio con NPCs llega en P2.", Tone::Info);
+            }
+        } else if kind == NpcType::Banker {
+            if self.npc_alive_and_near(id, dead, dist, 4) {
+                self.open_bank(id, nid);
+            }
+        } else if matches!(kind, NpcType::Reviver | NpcType::NewbieReviver) {
+            self.priest(id, kind, dist, dead, level);
+        } else if !dead
+            && (d.crafts > 0
+                || matches!(
+                    kind,
+                    NpcType::Pirate | NpcType::Auctioneer | NpcType::Quest | NpcType::Recruiter | NpcType::Governor | NpcType::FishDelivery | NpcType::Ao20Shop | NpcType::Ao20ShopPjs | NpcType::EventMaster | NpcType::Transporter
+                ))
+        {
+            // Travel, auctions, quests, factions, governors, crafting...: P2.
+            self.console(id, "Esa interaccion llega en P2.", Tone::Info);
+        }
+    }
+
+    /// `EnsureUserAliveForNpcInteraction` + `EnsureNpcWithinDistance`.
+    fn npc_alive_and_near(&self, id: u32, dead: bool, dist: i32, max: i32) -> bool {
+        if dead {
+            self.console(id, DEAD, Tone::Warn);
+            false
+        } else if dist > max {
+            self.console(id, TOO_FAR, Tone::Info);
+            false
+        } else {
+            true
+        }
+    }
+
+    /// `HandleReviverNpcInteraction`: within 5 tiles, resurrects the dead (any player at a
+    /// priest, newbies at a newbie priest) or heals the living to full.
+    fn priest(&mut self, id: u32, kind: NpcType, dist: i32, dead: bool, level: u32) {
+        if dist > 5 {
+            self.console(id, TOO_FAR, Tone::Info);
+            return;
+        }
+        // Flags.Envenenado / Incinerado are cleared here in AO20: status effects belong to
+        // the magic system (P1 B), not wired yet. MAP_HOME_IN_JAIL is P2.
+        if dead && (kind == NpcType::Reviver || level <= NEWBIE_LEVEL) {
+            self.console(id, "Has sido resucitado!", Tone::Good);
+            self.resurrect(id);
+        } else if !dead {
+            let Some(p) = self.player(id) else { return };
+            if p.hp != p.max_hp {
+                let max = p.max_hp;
+                self.heal_player(id, max);
+                self.console(id, "El sacerdote lanza unas palabras al aire. Comienzas a sentir como tu cuerpo vuelve a estar sano.", Tone::Good);
+            }
+        }
     }
 }

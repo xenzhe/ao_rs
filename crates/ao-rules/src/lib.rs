@@ -8,6 +8,7 @@
 pub mod balance;
 pub mod character;
 pub mod creatures;
+pub mod pathfinding;
 pub mod progression;
 pub mod spells;
 pub mod walk;
