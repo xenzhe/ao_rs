@@ -217,6 +217,8 @@ impl World {
             Event::Connected { id, addr, tx } => {
                 if self.probe.is_some() {
                     self.addrs.insert(id, addr);
+                    // Known from now on, even before it sends anything.
+                    self.probe_conn(id, |_| {});
                 }
                 self.sessions.insert(id, Session { tx, addr, player: None });
             }

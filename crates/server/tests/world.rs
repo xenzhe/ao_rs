@@ -1,9 +1,10 @@
 //! World scenarios on the real AO20 maps, driven by bots and a virtual clock: map exits,
 //! creature population, regeneration, creature death and respawn, seeing others move.
 use ao_formats::{recursos_dir, AoMap};
-use ao_rules::{tile_distance, walk, Dir, WALK_MS};
-use ao_testkit::TestServer;
 use ao_protocol::S2C;
+use ao_rules::spells::SpellEffect;
+use ao_rules::{tile_distance, walk, Dir, WALK_MS};
+use ao_testkit::{ClientEvent, TestServer};
 
 const FIREBALL: u16 = 1;
 const HEAL: u16 = 3;
@@ -96,7 +97,12 @@ fn killed_creature_respawns_after_its_time() {
 
     assert!(bot.cast(FIREBALL, tx, ty));
     bot.wait_until("la criatura muere", |b| b.ent(nid).is_none());
+    bot.sync();
     assert!(bot.game.stats.exp > exp0, "killing gives experience");
+    let ev = bot.events();
+    assert!(ev.iter().any(|e| matches!(e, ClientEvent::Effect { effect: SpellEffect::Fireball, .. })), "the client shows the fireball");
+    assert!(ev.iter().any(|e| matches!(e, ClientEvent::DeathBurst { .. })), "and the creature's death");
+    bot.clear_log();
 
     s.advance(1500);
     bot.sync();
@@ -106,6 +112,7 @@ fn killed_creature_respawns_after_its_time() {
     let e = bot.ent(nid).unwrap();
     assert_eq!(e.hp, e.max_hp, "respawns with full health");
     assert!(bot.log().iter().any(|m| matches!(m, S2C::Spawn { id, .. } if *id == nid)));
+    assert!(bot.events().iter().any(|e| matches!(e, ClientEvent::Puff { .. })), "the respawn shows a puff");
 }
 
 #[test]

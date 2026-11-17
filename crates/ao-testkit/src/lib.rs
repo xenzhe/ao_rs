@@ -24,6 +24,7 @@
 mod bot;
 
 pub use bot::Bot;
+pub use client_core::ClientEvent;
 pub use server::clock::GameTime;
 
 use server::clock::{Clock, VirtualClock};

@@ -32,21 +32,42 @@ fn speedhack_is_rejected_and_kicked() {
     bot.wait_until("conexion cerrada", |b| b.closed());
 }
 
-#[test]
-fn legit_walk_is_accepted() {
+/// Walks `steps` tiles, advancing game time between steps in uneven slices.
+fn legit_walk(steps: i32, slices: &[u64]) {
     let s = TestServer::start();
     let mut bot = s.bot("Walker");
-    let dir = bot.free_dir(3).expect("free direction");
+    let dir = bot.free_dir(steps).expect("free direction");
     let (x, y) = bot.pos();
-    for _ in 0..3 {
-        assert!(bot.walk(dir), "the client must allow a step at legit pace");
-        s.advance(WALK_MS);
+    for i in 0..steps {
+        assert!(bot.walk(dir), "the client must allow step {i} at legit pace");
+        for ms in slices {
+            s.advance(*ms);
+        }
     }
     bot.sync();
     assert!(!bot.closed());
     assert_eq!(bot.count(corrections), 0, "legit pace must never be corrected: {:?}", bot.log());
     let (dx, dy) = dir.delta();
-    assert_eq!(bot.pos(), (x + 3 * dx, y + 3 * dy));
+    assert_eq!(bot.pos(), (x + steps * dx, y + steps * dy));
+}
+
+#[test]
+fn legit_walk_is_accepted() {
+    legit_walk(10, &[WALK_MS]);
+}
+
+#[test]
+fn legit_walk_with_uneven_time_slices() {
+    legit_walk(10, &[70, WALK_MS - 70]);
+}
+
+#[test]
+fn connected_bot_without_login_does_not_block_time() {
+    let s = TestServer::start();
+    let mut idle = s.connect();
+    s.advance(100);
+    idle.sync();
+    assert!(!idle.closed());
 }
 
 #[test]

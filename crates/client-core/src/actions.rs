@@ -10,7 +10,8 @@ impl Game {
     pub fn try_step(&mut self, dir: Dir, now: f64) -> bool {
         let Some(map) = &self.map else { return false };
         let Some(me) = self.ents.get(&self.my_id) else { return false };
-        if me.moving() || (now - self.last_step) * 1000.0 < WALK_MS as f64 {
+        // Whole milliseconds: 0.6 - 0.4 is 0.19999.. in f64 and must count as 200 ms.
+        if me.moving() || ((now - self.last_step) * 1000.0).round() < WALK_MS as f64 {
             return false;
         }
         let (dx, dy) = dir.delta();

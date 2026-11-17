@@ -325,7 +325,11 @@ impl Game {
     pub fn update(&mut self, dt: f32) {
         for e in self.ents.values_mut() {
             if e.t < 1.0 {
-                e.t = (e.t + dt * 1000.0 / ao_rules::WALK_MS as f32).min(1.0);
+                e.t += dt * 1000.0 / ao_rules::WALK_MS as f32;
+                // f32 sums like 0.35 + 0.65 can land just under 1: that step is done.
+                if e.t > 0.9999 {
+                    e.t = 1.0;
+                }
                 e.walk_ms += dt * 1000.0;
             } else {
                 e.walk_ms = 0.0;
