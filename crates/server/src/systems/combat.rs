@@ -203,6 +203,9 @@ impl World {
     /// original does with the inventory (TirarTodosLosItems, Desequipar) belongs to the
     /// inventory system.
     pub(crate) fn user_die(&mut self, id: u32) {
+        // UserDie order: drop/unequip first (armor off = naked body), so the look kept for
+        // the resurrection is the naked one, then the ghost.
+        self.drop_inventory_on_death(id);
         let p = self.player_mut(id);
         p.hp = 0;
         p.stats.sta = 0;
@@ -512,10 +515,12 @@ mod tests {
 
         w.resurrect(1);
         let p = w.player(1).unwrap();
-        assert_eq!((p.hp, p.body, p.head, p.combat.dead), (p.max_hp, 1, 7, false));
+        // UserDie unequipped the armor before the ghost: back to life naked (official).
+        let naked = ao_rules::character::naked_body(p.race, p.gender);
+        assert_eq!((p.hp, p.body, p.head, p.combat.dead), (p.max_hp, naked, 7, false));
         assert!(!w.is_dead(1));
         w.resurrect(1);
-        assert_eq!(w.player(1).unwrap().body, 1, "resurrecting the living does nothing");
+        assert_eq!(w.player(1).unwrap().body, naked, "resurrecting the living does nothing");
     }
 
     #[test]

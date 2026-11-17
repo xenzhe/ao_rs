@@ -23,12 +23,27 @@ fn server(at: (u16, i32, i32), hp: i32) -> TestServer {
     })
 }
 
-/// A level 1 human warrior (bare hands: 1..2 damage, see ao_rules::combat tests).
+/// A level 1 human warrior, stripped of its official starting equipment so the fight is
+/// bare-handed (1..2 damage, see ao_rules::combat tests) and naked (no stamina regen, no
+/// armor absorbing hits). In AO, equipping an equipped item takes it off.
 fn warrior(s: &TestServer, name: &str) -> Bot {
+    let mut c = equipped_warrior(s, name);
+    let equipped: Vec<u8> = c.game.local.inventory.iter().enumerate().filter(|(_, s)| s.is_some_and(|i| i.equipped)).map(|(i, _)| (i + 1) as u8).collect();
+    for slot in equipped {
+        c.send(&C2S::EquipItem { slot });
+    }
+    c.wait_until("desnudo", |b| b.game.local.inventory.iter().flatten().all(|i| !i.equipped));
+    c
+}
+
+/// A level 1 human warrior with its official starting equipment (EquipamientoInicial.dat):
+/// wearing armor, so its stamina regenerates between swings.
+fn equipped_warrior(s: &TestServer, name: &str) -> Bot {
     let mut c = s.connect();
     assert!(c.create_account(&name.to_lowercase(), "secreta1"));
     assert!(c.create_character(name, 1, WARRIOR, 1, 1));
     c.play(name);
+    c.wait_until("equipo inicial recibido", |b| b.game.local.inventory.iter().flatten().any(|i| i.equipped));
     c
 }
 
@@ -47,9 +62,15 @@ fn melee(bot: &mut Bot) {
     bot.send(&C2S::Melee { seq });
 }
 
-/// Two warriors orthogonally adjacent, `a` facing `b`.
+/// Two warriors orthogonally adjacent, `a` facing `b`; both naked (bare hands, no stamina
+/// regeneration).
 fn duel(s: &TestServer) -> (Bot, Bot) {
-    let mut a = warrior(s, "Atacante");
+    let a = warrior(s, "Atacante");
+    duel_with(s, a)
+}
+
+/// Same, with the attacker given by the caller.
+fn duel_with(s: &TestServer, mut a: Bot) -> (Bot, Bot) {
     let mut b = warrior(s, "Victima");
     let (pa, pb) = (a.pos(), b.pos());
     assert_eq!(tile_distance(pa, pb), 1, "spawned next to each other");
@@ -72,7 +93,10 @@ fn attacks_by(bot: &Bot, attacker: u32) -> Vec<(bool, i32)> {
 #[test]
 fn players_fight_until_one_is_a_ghost() {
     let s = server(FIELD, 3);
-    let (mut a, mut b) = duel(&s);
+    // The attacker keeps its starting equipment (stamina regenerates with armor on); the
+    // victim is naked so nothing absorbs the hits.
+    let attacker = equipped_warrior(&s, "Atacante");
+    let (mut a, mut b) = duel_with(&s, attacker);
     let bid = b.id();
     // Official creation gives Constitution (~20) hit points; bare hands hit 0..2.
     for _ in 0..300 {
@@ -87,7 +111,7 @@ fn players_fight_until_one_is_a_ghost() {
     assert_eq!(b.hp(), 0, "the victim died: {:?}", attacks_by(&a, a.id()));
     let swings = attacks_by(&a, a.id());
     assert!(swings.iter().any(|(hit, _)| *hit), "some swing hit");
-    assert!(swings.iter().all(|(_, d)| (0..=2).contains(d)), "bare-handed warrior hits 0..2: {swings:?}");
+    assert!(swings.iter().all(|(_, d)| (0..=40).contains(d)), "a level 1 warrior's hits stay small: {swings:?}");
     let ghost = a.ent(bid).expect("still visible");
     assert_eq!((ghost.body, ghost.head), (DEAD_BODY, 0), "official ghost body iCuerpoMuerto");
     assert_eq!(b.me().body, DEAD_BODY);

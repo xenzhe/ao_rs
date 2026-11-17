@@ -248,6 +248,7 @@ impl World {
         }
         let me = self.player(id).unwrap().spawn_msg(id);
         self.broadcast(map, &me, Some(id));
+        self.send_ground_items(id);
         let m = &self.instance(map).map;
         self.console(id, format!("Entras a {}{}.", m.name, if m.safe { " (zona segura)" } else { "" }), Tone::Info);
     }
