@@ -18,6 +18,18 @@ fn account_with_two_characters_persists() {
     let orc = c.characters().iter().find(|x| x.name == "Aragorn").unwrap();
     assert_eq!(orc.body, 582, "official starting body for a male orc (DarCuerpo)");
 
+    // Official creation: a human mage starts with Constitution as hit points, Intelligence x
+    // ManaInicial as mana, its EquipamientoInicial items and spells.
+    c.play("Gandalf");
+    c.wait_until("atributos iniciales", |b| b.game.local.attributes != [0; 5]);
+    let attrs = c.game.local.attributes;
+    assert_eq!(c.game.stats.max_hp.get(), attrs[3] as i32, "MaxHp = Constitucion");
+    assert!(c.game.stats.max_mana.get() > 100, "mage mana from intelligence");
+    drop(c);
+    s.settle();
+    let mut c = s.connect();
+    assert!(c.account_login("xenzhe", "secreta1"));
+
     c.play("Gandalf");
     let dir = c.free_dir(2).expect("room to walk");
     for _ in 0..2 {

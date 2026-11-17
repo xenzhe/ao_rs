@@ -129,6 +129,16 @@ impl World {
             // The client only offers valid options: anything else is a forged packet.
             return self.kick(id, "datos de creacion de personaje invalidos");
         }
+        // Official creation (ConnectNewUser): attributes by race, stamina dice roll, start
+        // equipment and spells; hit points and mana from constitution/intelligence.
+        let Some(race_enum) = ao_formats::dat::balance::Race::from_id(race as i32) else {
+            return self.kick(id, "raza invalida");
+        };
+        let attrs = ao_rules::character::initial_attributes(&self.ao.balance, race_enum);
+        let roll = self.rng.range(1, ao_rules::character::stamina_dice(&attrs).max(1));
+        let (Some(state), Some(vitals)) = (self.init_new_character_with_roll(race, class, gender, roll), self.new_character_vitals(race, class)) else {
+            return self.kick(id, "datos de creacion de personaje invalidos");
+        };
         let b = &self.data.balance;
         let new = NewCharacter {
             name,
@@ -137,13 +147,13 @@ impl World {
             gender,
             body: starting_body(race, gender),
             head,
-            hp: b.start_hp,
-            mana: b.start_mana,
+            hp: vitals.hp,
+            mana: vitals.mana,
             map: b.start_map,
             x: b.start_x,
             y: b.start_y,
         };
-        match self.db.create_character(acc.id, &new) {
+        match self.db.create_character(acc.id, &new).and_then(|c| self.db.save_full(&c, &state).map(|_| c)) {
             Ok(c) => {
                 info!(id, account = %acc.user, name = %c.name, race, class, "personaje creado");
                 self.reply(id, true, format!("{} ha nacido.", c.name));

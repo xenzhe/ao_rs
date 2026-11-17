@@ -15,13 +15,15 @@ fn bank_traffic(m: &S2C) -> bool {
 fn vault_packets_with_the_vault_closed_do_nothing() {
     let s = TestServer::start();
     let mut bot = s.bot("Curioso");
+    // Entering the world already sends vitals/inventory: count only what comes after.
+    let before = bot.count(bank_traffic);
     bot.send(&C2S::BankDeposit { slot: 1, amount: 1 });
     bot.send(&C2S::BankWithdraw { slot: 1, amount: 1 });
     bot.send(&C2S::BankDepositGold { amount: 10 });
     bot.send(&C2S::BankWithdrawGold { amount: 10 });
     bot.send(&C2S::BankClose);
     bot.sync();
-    assert_eq!(bot.count(bank_traffic), 0, "nothing is moved or announced: {:?}", bot.log());
+    assert_eq!(bot.count(bank_traffic), before, "nothing is moved or announced: {:?}", bot.log());
     assert!(bot.game.local.bank.is_none());
     assert!(bot.kicked().is_none() && !bot.closed(), "a closed-vault packet is refused, not punished");
 }
