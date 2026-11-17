@@ -1,0 +1,7 @@
+[package]
+name = "ao-formats"
+version = "0.1.0"
+edition = "2021"
+description = "Readers for Argentum Online 2.0 resource files (.csm maps, graficos.ini, bodies, heads). No networking, no rendering."
+
+[dependencies]

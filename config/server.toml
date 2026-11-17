@@ -1,0 +1,24 @@
+# Configuracion tecnica del servidor. Los valores de juego van en data/*.toml.
+
+# Direccion de escucha.
+bind = "127.0.0.1:7666"
+
+# Carpeta Recursos de AO20 (vacio = buscarla junto al proyecto, o $AO_RECURSOS).
+recursos = ""
+
+# Carpeta con spells.toml, creatures.toml y balance.toml.
+data_dir = "data"
+
+[security]
+# Paquetes por segundo antes de expulsar por flood.
+max_msgs_per_sec = 40
+# Intentos de trampa (con decaimiento) antes de expulsar.
+kick_strikes = 8
+# Segundos para que se olvide un intento.
+strike_decay_secs = 10
+# Tolerancia del ritmo de paso para el jitter de red (0.08 = 8%).
+walk_tolerance = 0.08
+
+[world]
+# Frecuencia de la simulacion (IA, regeneracion), en milisegundos.
+tick_ms = 50

@@ -1,0 +1,13 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+description = "Game client: AO20 maps and graphics at modern resolutions."
+
+[dependencies]
+ao-formats.workspace = true
+ao-rules.workspace = true
+ao-protocol.workspace = true
+macroquad.workspace = true
+serde.workspace = true
+toml.workspace = true

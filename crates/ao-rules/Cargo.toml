@@ -1,0 +1,9 @@
+[package]
+name = "ao-rules"
+version = "0.1.0"
+edition = "2021"
+description = "Pure game rules shared by client and server: walking, line of sight, spells, creatures, progression. No I/O."
+
+[dependencies]
+ao-formats.workspace = true
+serde.workspace = true

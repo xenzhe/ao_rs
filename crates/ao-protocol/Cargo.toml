@@ -1,0 +1,10 @@
+[package]
+name = "ao-protocol"
+version = "0.1.0"
+edition = "2021"
+description = "Client/server messages and their wire framing."
+
+[dependencies]
+ao-rules.workspace = true
+serde.workspace = true
+bincode.workspace = true

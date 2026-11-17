@@ -1,0 +1,38 @@
+# Criaturas que el servidor reparte por los mapas que no son zona segura.
+#
+# body/head     cuerpo y cabeza oficiales de AO (Recursos/init/cuerpos.dat, cabezas.ini;
+#               en Recursos/Dat/npcs.dat se ve cual usa cada NPC original)
+# damage        dano cuerpo a cuerpo [minimo, maximo]
+# attack_ms     tiempo entre golpes
+# step_ms       tiempo entre pasos al perseguir
+# aggro_range   casillas a las que ve a un jugador (con linea de vision)
+# wander_range  cuanto se aleja de su punto de aparicion cuando pasea
+# exp           experiencia que da al morir
+# respawn_secs  segundos hasta reaparecer
+# spawn_weight  probabilidad relativa de aparecer
+
+[[creature]]
+id = 1
+name = "Lobo"
+body = 4372
+hp = 55
+damage = [5, 9]
+attack_ms = 1200
+step_ms = 330
+aggro_range = 7
+exp = 30
+respawn_secs = 8
+spawn_weight = 1
+
+[[creature]]
+id = 2
+name = "Goblin"
+body = 4899
+hp = 80
+damage = [6, 10]
+attack_ms = 1300
+step_ms = 450
+aggro_range = 7
+exp = 45
+respawn_secs = 8
+spawn_weight = 2

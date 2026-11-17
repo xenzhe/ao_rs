@@ -1,0 +1,26 @@
+# Valores generales de equilibrio del juego.
+
+# Donde aparecen los personajes nuevos (mapa 1 = Ullathorpe).
+start_map = 1
+start_x = 50
+start_y = 50
+
+start_hp = 100
+start_mana = 120
+
+# Regeneracion por segundo.
+hp_regen = 1
+mana_regen = 4
+
+# Experiencia para pasar del nivel L: exp_factor * L * L
+exp_factor = 40
+# Lo que se gana al subir de nivel.
+level_hp = 12
+level_mana = 10
+
+# Criaturas por mapa (solo mapas que no son zona segura).
+creatures_per_map = 14
+
+# Cuerpos y cabezas humanos para personajes nuevos (se elige segun el nombre).
+player_bodies = [1, 2, 3, 4]
+player_heads = [1, 2, 3, 4, 5, 6, 7, 8]

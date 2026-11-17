@@ -1,0 +1,8 @@
+/target
+*.png
+# AO20 resources are never committed (CC BY-NC-ND, and huge): they are read from ../ao20/Recursos.
+/assets/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

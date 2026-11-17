@@ -1,0 +1,12 @@
+# Configuracion del cliente.
+
+server = "127.0.0.1:7666"
+
+# Carpeta Recursos de AO20 (vacio = buscarla junto al proyecto, o $AO_RECURSOS).
+recursos = ""
+
+[video]
+width = 1280
+height = 800
+# Escalado entero del mundo (nitido pero puede dejar bordes). Se cambia con F2.
+pixel_perfect = false
