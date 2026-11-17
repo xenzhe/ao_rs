@@ -1,9 +1,26 @@
 //! Particles, projectiles, lightning, floating combat text and light emitters.
 //! Additive particles + a separate light map is the classic DX8/DX9 look of AO engines.
+//!
+//! P3 (Opus D): the official engine too. Map particles of the .csm and weather streams
+//! run the particles.ind simulation of `Graficos_Particulas.bas` (logic in
+//! `client_core::p3::fx`), drawn as 4-colour quads (`rgb_list` corners) with additive
+//! blending when the stream says so; FXs.ini animations play on characters
+//! ([`super::characters`]); sounds go to [`crate::audio`].
+use super::characters::CharFx;
+use super::weather::WeatherFx;
+use crate::assets::Assets;
+use crate::audio::Audio;
+use ao_formats::graphics::anchor;
+use ao_formats::AoMap;
+use ao_rules::spells::SpellEffect;
+use client_core::p3::fx::{EquipDb, FxCues, FxDef, ParticleGroup, StreamDef};
 use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation, PipelineParams};
+use macroquad::models::Vertex;
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
-use ao_rules::spells::SpellEffect;
+use std::collections::HashMap;
+use std::path::Path;
+use std::rc::Rc;
 
 const VS: &str = r#"#version 100
 attribute vec3 position;
@@ -80,7 +97,36 @@ struct FText {
     life: f32,
 }
 
+/// Frames of a GRH resolved to textures, for particles drawn without `Assets`.
+pub struct GrhTex {
+    pub frames: Vec<(Texture2D, Rect)>,
+    /// Total animation time in ms (0 = static).
+    pub speed: f32,
+}
+
+/// The official tables, loaded once on the first frame (they need `Recursos`).
+pub struct Official {
+    pub streams: Vec<StreamDef>,
+    pub fxs: HashMap<u16, FxDef>,
+    pub equip: Rc<EquipDb>,
+    pub cues: FxCues,
+}
+
+/// A particles.ind stream placed in the world (map particles) or on screen (weather).
+pub struct PlacedGroup {
+    pub group: ParticleGroup,
+    /// Anchor in world pixels (`ScreenX * 32 + 15` of the official map loop).
+    pub at: Vec2,
+}
+
 pub struct Fx {
+    pub official: Option<Official>,
+    pub map_groups: Vec<PlacedGroup>,
+    pub grh_tex: HashMap<u32, GrhTex>,
+    pub weather: WeatherFx,
+    pub audio: Option<Audio>,
+    pub char_fx: HashMap<u32, Vec<CharFx>>,
+    pub clock_ms: f32,
     parts: Vec<Part>,
     projs: Vec<Proj>,
     bolts: Vec<Bolt>,
@@ -113,6 +159,13 @@ impl Fx {
         let soft = Texture2D::from_image(&img);
         soft.set_filter(FilterMode::Linear);
         Fx {
+            official: None,
+            map_groups: Vec::new(),
+            grh_tex: HashMap::new(),
+            weather: WeatherFx::default(),
+            audio: None,
+            char_fx: HashMap::new(),
+            clock_ms: 0.0,
             parts: Vec::new(),
             projs: Vec::new(),
             bolts: Vec::new(),
@@ -202,6 +255,16 @@ impl Fx {
     }
 
     pub fn update(&mut self, dt: f32) {
+        self.clock_ms += dt * 1000.0;
+        if let Some(o) = &self.official {
+            let now = self.clock_ms;
+            for g in &mut self.map_groups {
+                if let Some(def) = o.streams.get(g.group.stream - 1) {
+                    g.group.update(def, dt * 1000.0, now);
+                }
+            }
+            self.weather.update(&o.streams, dt * 1000.0, now);
+        }
         // Projectiles leave a fire trail and explode on arrival.
         let mut arrived = Vec::new();
         let mut trail = Vec::new();
@@ -258,6 +321,8 @@ impl Fx {
 
     /// Particles in the world layer (`off` converts world pixels to screen).
     pub fn draw(&self, off: Vec2) {
+        // Alpha-blended map streams (leaves, smoke) are lit by the light map like the world.
+        self.draw_map_groups(off, false);
         for p in self.parts.iter().filter(|p| !p.add) {
             self.draw_part(p, off);
         }
@@ -281,6 +346,11 @@ impl Fx {
 
     /// Effects drawn after the light map so they stay bright at night.
     pub fn draw_overlay(&self, off: Vec2, view: Vec4) {
+        // Additive streams (fire, sparks, magic) glow over the light map, as in DX9 AO.
+        self.draw_map_groups(off, true);
+        if let Some(o) = &self.official {
+            self.weather.draw(self, &o.streams, off, view);
+        }
         gl_use_material(&self.additive);
         for b in &self.bolts {
             let a = (b.life / 0.35).min(1.0) * if (b.life * 60.0) as i32 % 3 == 0 { 0.5 } else { 1.0 };
@@ -325,6 +395,202 @@ impl Fx {
         for p in self.parts.iter().filter(|p| p.light > 0.0).step_by(4) {
             out.push((p.pos, 40.0, Color::new(1.0, 0.55, 0.2, (p.life / p.max) * 0.6)));
         }
+        // Additive map streams light their surroundings with their own colour.
+        if let Some(o) = &self.official {
+            for g in &self.map_groups {
+                let Some(def) = o.streams.get(g.group.stream - 1).filter(|d| d.additive) else { continue };
+                let c = stream_color(def);
+                out.push((g.at, 80.0, Color::new(c.r, c.g, c.b, 0.55)));
+            }
+        }
         out
+    }
+}
+
+/// Average corner colour of a stream (for its light).
+pub fn stream_color(def: &StreamDef) -> Color {
+    let mut s = [0.0f32; 3];
+    for c in &def.colors {
+        for i in 0..3 {
+            s[i] += c[i] as f32 / 255.0 / 4.0;
+        }
+    }
+    Color::new(s[0], s[1], s[2], 1.0)
+}
+
+/// Draws a GRH frame as a quad with one colour per corner (`rgb_list` order of the
+/// official `Grh_Render`: 0 bottom-left, 1 top-left, 2 bottom-right, 3 top-right),
+/// rotated `angle` degrees around its centre and optionally resized.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_quad(tex: &Texture2D, src: Rect, x: f32, y: f32, size: Vec2, angle: f32, colors: [Color; 4]) {
+    let (tw, th) = (tex.width(), tex.height());
+    let (u0, v0, u1, v1) = (src.x / tw, src.y / th, (src.x + src.w) / tw, (src.y + src.h) / th);
+    let c = vec2(x + size.x / 2.0, y + size.y / 2.0);
+    let (s, co) = angle.to_radians().sin_cos();
+    let rot = |p: Vec2| {
+        let d = p - c;
+        c + vec2(d.x * co - d.y * s, d.x * s + d.y * co)
+    };
+    let corners = [(vec2(x, y + size.y), u0, v1, colors[0]), (vec2(x, y), u0, v0, colors[1]), (vec2(x + size.x, y + size.y), u1, v1, colors[2]), (vec2(x + size.x, y), u1, v0, colors[3])];
+    let verts: Vec<Vertex> = corners
+        .iter()
+        .map(|(p, u, v, col)| {
+            let p = if angle != 0.0 { rot(*p) } else { *p };
+            Vertex::new(p.x, p.y, 0.0, *u, *v, *col)
+        })
+        .collect();
+    let gl = unsafe { get_internal_gl() }.quad_gl;
+    gl.texture(Some(tex));
+    gl.draw_mode(DrawMode::Triangles);
+    gl.geometry(&verts, &[0, 1, 3, 0, 3, 2]);
+    gl.texture(None);
+}
+
+impl Fx {
+    /// Loads the official tables the first time (FXs.ini, particles.ind, equipment,
+    /// spell sounds) and opens the audio device.
+    pub fn ensure_official(&mut self, root: &Path) {
+        if self.official.is_some() {
+            return;
+        }
+        self.official = Some(Official {
+            streams: client_core::p3::fx::load_particles(root),
+            fxs: client_core::p3::fx::load_fxs(root),
+            equip: Rc::new(EquipDb::load(root)),
+            cues: FxCues::with_spells(root),
+        });
+        self.audio = Some(Audio::new(root.to_path_buf()));
+    }
+
+    /// Places the map's own particle streams (`.csm` particles) and drops the old ones.
+    pub fn load_map(&mut self, map: &AoMap) {
+        self.map_groups.clear();
+        self.char_fx.clear();
+        let Some(o) = &self.official else { return };
+        for (i, (x, y, s)) in map.particles.iter().enumerate() {
+            let s = *s as usize;
+            let Some(def) = (s >= 1).then(|| o.streams.get(s - 1)).flatten() else { continue };
+            let at = vec2((x - 1) as f32 * 32.0 + 15.0, (y - 1) as f32 * 32.0 + 15.0);
+            self.map_groups.push(PlacedGroup { group: ParticleGroup::new(s, def, -1, 0x9E37_79B9 ^ (i as u32 * 7919 + 1)), at });
+        }
+    }
+
+    /// Makes sure every GRH a stream can emit has its textures resolved.
+    pub fn resolve_stream(&mut self, assets: &mut Assets, stream: usize) {
+        let Some(grhs) = self.official.as_ref().and_then(|o| o.streams.get(stream.wrapping_sub(1))).map(|d| d.grhs.clone()) else { return };
+        self.resolve_grhs(assets, &grhs);
+    }
+
+    pub fn resolve_grhs(&mut self, assets: &mut Assets, grhs: &[u32]) {
+        for &g in grhs {
+            if self.grh_tex.contains_key(&g) {
+                continue;
+            }
+            let Some(info) = assets.db.grh(g).cloned() else {
+                self.grh_tex.insert(g, GrhTex { frames: vec![], speed: 0.0 });
+                continue;
+            };
+            let mut frames = Vec::new();
+            for f in &info.frames {
+                if let Some(fg) = assets.db.grh(*f).cloned() {
+                    if let Some(t) = assets.texture(fg.file) {
+                        frames.push((t, Rect::new(fg.sx, fg.sy, fg.w, fg.h)));
+                    }
+                }
+            }
+            self.grh_tex.insert(g, GrhTex { frames, speed: if info.frames.len() > 1 { info.speed } else { 0.0 } });
+        }
+    }
+
+    /// Draws one stream group with its anchor at `at` (render-target pixels).
+    pub fn draw_group(&self, g: &ParticleGroup, def: &StreamDef, at: Vec2, alpha: f32, streak: bool) {
+        let mut cols = [WHITE; 4];
+        for (c, d) in cols.iter_mut().zip(def.colors.iter()) {
+            *c = Color::from_rgba(d[0], d[1], d[2], (255.0 * alpha) as u8);
+        }
+        for p in &g.parts {
+            if p.grh == 0 || p.alive <= 0 {
+                continue;
+            }
+            let Some(gt) = self.grh_tex.get(&p.grh) else { continue };
+            if gt.frames.is_empty() {
+                continue;
+            }
+            let fi = if gt.speed > 0.0 { (((self.clock_ms - p.born_ms).max(0.0) / (gt.speed / gt.frames.len() as f32)) as usize) % gt.frames.len() } else { 0 };
+            let (tex, src) = &gt.frames[fi];
+            let mut size = def.resize.map(|(w, h)| vec2(w as f32, h as f32)).unwrap_or(vec2(src.w, src.h));
+            let mut angle = p.angle;
+            if streak {
+                // Motion blur along this move's displacement (rain): same drop, longer.
+                let fric = def.friction.max(1) as f32;
+                let d = vec2(p.vx / fric, p.vy / fric);
+                size = vec2(size.x.min(2.5), d.length().max(size.y) * 1.6);
+                angle = -d.x.atan2(d.y).to_degrees();
+            }
+            let gi = ao_formats::graphics::Grh { frames: vec![], file: 0, sx: 0.0, sy: 0.0, w: size.x, h: size.y, speed: 0.0 };
+            let (x, y) = anchor(&gi, at.x + p.x, at.y + p.y, true);
+            draw_quad(tex, *src, x, y, size, angle, cols);
+        }
+    }
+
+    fn draw_map_groups(&self, off: Vec2, additive: bool) {
+        let Some(o) = &self.official else { return };
+        let mut on = false;
+        for g in &self.map_groups {
+            let Some(def) = o.streams.get(g.group.stream - 1) else { continue };
+            if def.additive != additive {
+                continue;
+            }
+            let at = g.at - off;
+            if at.x < -300.0 || at.y < -300.0 || at.x > super::layout::RT_W + 300.0 || at.y > super::layout::RT_H + 300.0 {
+                continue;
+            }
+            if additive && !on {
+                gl_use_material(&self.additive);
+                on = true;
+            }
+            self.draw_group(&g.group, def, at, 1.0, false);
+        }
+        if on {
+            gl_use_default_material();
+        }
+    }
+
+    /// Starts (`fx > 0`) or stops (`fx == 0`: the looping ones) an FX on an entity.
+    /// Meditations play an intro once and then their loop (official composed FX).
+    pub fn char_fx(&mut self, assets: &Assets, id: u32, fx: u16, loops: u8) {
+        use client_core::p3::fx::{meditation_clips, FX_FOREVER};
+        if fx == 0 {
+            if let Some(l) = self.char_fx.get_mut(&id) {
+                l.retain(|f| f.loops != FX_FOREVER);
+            }
+            return;
+        }
+        let Some(o) = self.official.as_ref() else { return };
+        // Same clock as `draw_character`'s `t_ms`.
+        let now = (get_time() * 1000.0) as f32;
+        let mut add = Vec::new();
+        match (loops == FX_FOREVER).then(|| meditation_clips(fx)).flatten() {
+            Some((intro, lp)) => {
+                let mut at = now;
+                if let Some(d) = o.fxs.get(&intro).copied() {
+                    add.push(CharFx { def: d, loops: 0, started_ms: now });
+                    at += assets.db.grh(d.grh).map(|g| g.speed).unwrap_or(0.0);
+                }
+                if let Some(d) = o.fxs.get(&lp).copied() {
+                    add.push(CharFx { def: d, loops: FX_FOREVER, started_ms: at });
+                }
+            }
+            None => {
+                if let Some(d) = o.fxs.get(&fx).copied() {
+                    add.push(CharFx { def: d, loops, started_ms: now });
+                }
+            }
+        }
+        let list = self.char_fx.entry(id).or_default();
+        if loops == FX_FOREVER {
+            list.retain(|f| f.loops != FX_FOREVER);
+        }
+        list.extend(add);
     }
 }
