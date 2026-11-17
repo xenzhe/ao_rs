@@ -100,20 +100,9 @@ fn obj_name(assets: &Assets, obj: u16) -> String {
     assets.objs.get(obj as u32).map(|o| o.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| format!("Objeto {obj}"))
 }
 
-/// Tooltip lines of an object: name, its text as flavour, then `extra`.
-fn obj_tip(assets: &Assets, obj: u16, extra: &[String]) -> Vec<String> {
-    let mut v = vec![obj_name(assets, obj)];
-    if let Some(o) = assets.objs.get(obj as u32) {
-        let t = if !o.text.trim().is_empty() { o.text.trim() } else { o.info.trim() };
-        if !t.is_empty() {
-            v.push(format!("~{t}"));
-        }
-        if o.value > 0 {
-            v.push(format!("Vale {} de oro", kit::thousands(o.value as u64)));
-        }
-    }
-    v.extend(extra.iter().cloned());
-    v
+/// Tooltip lines of an object (the inventory's: stats and requirements), then `extra`.
+fn obj_tip(game: &Game, assets: &Assets, obj: u16, amount: u32, extra: &[String]) -> Vec<String> {
+    super::inventory::item_tip(game, assets, obj, amount, false, extra)
 }
 
 pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
@@ -203,7 +192,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
             selected = Some(rc.obj);
         }
         if hov {
-            tip = obj_tip(assets, rc.obj, &[]);
+            tip = obj_tip(game, assets, rc.obj, 1, &[format!("Requiere {} {}", open.trade.name(), rc.skill)]);
         }
     }
     kit::scrollbar(list, recipes.len(), rows, scroll, u);
@@ -231,7 +220,7 @@ fn detail(ui: &mut Ui, game: &mut Game, assets: &mut Assets, trade: &Trade, per_
     draw_rectangle_lines(plinth.x, plinth.y, plinth.w, plinth.h, 1.0, kit::alpha(GOLD, 0.6));
     assets.draw_obj(rc.obj, Rect::new(plinth.x + 8.0 * u, plinth.y + 8.0 * u, plinth.w - 16.0 * u, plinth.h - 16.0 * u));
     if kit::hover(plinth) {
-        *tip = obj_tip(assets, rc.obj, &[]);
+        *tip = obj_tip(game, assets, rc.obj, 1, &[]);
     }
     let name = obj_name(assets, rc.obj);
     let tx = plinth.right() + 16.0 * u;
@@ -271,7 +260,7 @@ fn detail(ui: &mut Ui, game: &mut Game, assets: &mut Assets, trade: &Trade, per_
         let bar = Rect::new(ic.right() + 10.0 * u, mr.y + 24.0 * u, mr.w - ic.w - cw - 34.0 * u, 4.0 * u);
         kit::thin_bar(bar, have as f32, need.max(1) as f32, c);
         if hov {
-            *tip = obj_tip(assets, *obj, &[format!("Por unidad: {per}"), if enough { format!("Tienes {have}: te sobra.") } else { format!("!Tienes {have}, necesitas {need}.") }]);
+            *tip = obj_tip(game, assets, *obj, have, &[format!("Por unidad: {per}"), if enough { format!("Tienes {have}: te sobra.") } else { format!("!Tienes {have}, necesitas {need}.") }]);
         }
         y += 38.0 * u;
     }

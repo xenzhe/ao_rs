@@ -24,7 +24,7 @@ struct Form {
 }
 
 thread_local! {
-    static FORM: RefCell<Form> = RefCell::new(Form { bet: "10000".into(), ..Default::default() });
+    static FORM: RefCell<Form> = RefCell::new(Form { bet: "10000".into(), two_vs_two: std::env::var("AO_EVENTDEMO").is_ok_and(|v| v == "3"), ..Default::default() });
     /// Last frame the window was drawn and when the shown `State` arrived.
     static LAST_DRAW: Cell<f64> = const { Cell::new(-10.0) };
     static VIEW_AT: Cell<f64> = const { Cell::new(0.0) };
@@ -57,7 +57,15 @@ fn demo_view(game: &Game) -> EventView {
     let fighting = std::env::var("AO_EVENTDEMO").is_ok_and(|v| v == "2");
     let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     EventView {
-        invites: if fighting { vec![] } else { vec![DuelInvite { offerer: "Morgana".into(), team_a: s(&["Morgana"]), team_b: vec![me.clone()], bet: 25_000, max_potions: 30, missing: vec![me.clone()], queued: false }] },
+        invites: if fighting {
+            vec![]
+        } else {
+            let mut v = vec![DuelInvite { offerer: "Morgana".into(), team_a: s(&["Morgana"]), team_b: vec![me.clone()], bet: 25_000, max_potions: 30, missing: vec![me.clone()], queued: false }];
+            if std::env::var("AO_EVENTDEMO").is_ok_and(|v| v == "3") {
+                v.push(DuelInvite { offerer: "Kira".into(), team_a: s(&["Kira", "Brom"]), team_b: vec![me.clone(), "Aldric".into()], bet: 50_000, max_potions: -1, missing: vec![me.clone()], queued: false });
+            }
+            v
+        },
         pending: if fighting { None } else { Some(DuelInvite { offerer: me.clone(), team_a: vec![me.clone(), "Aldric".into()], team_b: s(&["Valen", "Tordek"]), bet: 10_000, max_potions: -1, missing: s(&["Tordek"]), queued: false }) },
         duel: fighting.then(|| DuelView { team_a: vec![me.clone()], team_b: s(&["Morgana"]), round: 2, wins_a: 1, wins_b: 0, mine_a: true, bet: 25_000, countdown: 7, time_left: 512 }),
         tournament: Some(TournamentView {
@@ -188,6 +196,11 @@ fn duel_poster(game: &mut Game, d: &DuelView, r: Rect, u: f32) {
 fn propose_block(ui: &mut Ui, game: &mut Game, v: &EventView, r: Rect, y: f32) {
     let u = ui.u;
     let hy = kit::section("Lanzar un reto", r.x, y, r.w, u);
+    // Your gold, on the heading line.
+    let gold = gold_str(game.local.gold);
+    let gw = crate::ui::widgets::measure_with(FontKind::Title, &gold, 16.0 * u).width;
+    kit::icon(Icon::Coin, r.right() - gw - 16.0 * u, y + 11.0 * u, 16.0 * u, Color::new(0.95, 0.76, 0.26, 1.0));
+    kit::text_right(FontKind::Title, &gold, r.right(), y + 17.0 * u, 16.0 * u, GOLD_TEXT);
     let rules = format!("Apuesta mínima {} · el reino se queda el {} % · al mejor de 3", gold_str(v.min_bet.max(1)), v.tax_percent);
     text_with(FontKind::NarrativeItalic, &rules, r.x, hy + 12.0 * u, 14.0 * u, TEXT_DIM);
     let mut send = None;
@@ -213,11 +226,13 @@ fn propose_block(ui: &mut Ui, game: &mut Game, v: &EventView, r: Rect, y: f32) {
             text_field(ui, "ev_mate", &mut f.mate, Rect::new(r.x, y + 4.0 * u, r.w, 26.0 * u), 16, false, name_ok);
         }
         y += 46.0 * u;
+        let w1 = (r.w - 20.0 * u) * 0.36;
+        let w2 = (r.w - 20.0 * u) * 0.26;
         label("Apuesta (oro)", r.x, y);
-        text_field(ui, "ev_bet", &mut f.bet, Rect::new(r.x, y + 4.0 * u, half, 26.0 * u), 9, false, digits);
-        label("Pociones rojas máx.", r.x + half + 10.0 * u, y);
-        text_field(ui, "ev_pots", &mut f.potions, Rect::new(r.x + half + 10.0 * u, y + 4.0 * u, half, 26.0 * u), 4, false, digits);
-        let go = Rect::new(r.right() - 150.0 * u, r.bottom() - 40.0 * u, 150.0 * u, 36.0 * u);
+        text_field(ui, "ev_bet", &mut f.bet, Rect::new(r.x, y + 4.0 * u, w1, 28.0 * u), 9, false, digits);
+        label("Pociones máx.", r.x + w1 + 10.0 * u, y);
+        text_field(ui, "ev_pots", &mut f.potions, Rect::new(r.x + w1 + 10.0 * u, y + 4.0 * u, w2, 28.0 * u), 4, false, digits);
+        let go = Rect::new(r.x + w1 + w2 + 20.0 * u, y + 2.0 * u, r.right() - (r.x + w1 + w2 + 20.0 * u), 32.0 * u);
         if button_kind(go, "Desafiar", Kind::Primary, true, u) {
             let rivals = if f.two_vs_two { vec![f.rival1.clone(), f.rival2.clone()] } else { vec![f.rival1.clone()] };
             let mates = if f.two_vs_two { vec![f.mate.clone()] } else { vec![] };
@@ -227,8 +242,6 @@ fn propose_block(ui: &mut Ui, game: &mut Game, v: &EventView, r: Rect, y: f32) {
         if kit::hover(go) {
             tooltip(&["Enviar el desafío".into(), "~El oro se descuenta solo cuando empieza el reto.".into(), "Pociones vacío: sin límite.".into()], u);
         }
-        kit::icon(Icon::Coin, r.x + 10.0 * u, r.bottom() - 20.0 * u, 18.0 * u, Color::new(0.95, 0.76, 0.26, 1.0));
-        text_with(FontKind::Title, &gold_str(game.local.gold), r.x + 26.0 * u, r.bottom() - 14.0 * u, 17.0 * u, GOLD_TEXT);
     });
     if let Some((rivals, mates, bet, pots)) = send {
         game.duel_propose(&rivals, &mates, bet, pots);

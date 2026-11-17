@@ -24,9 +24,11 @@ thread_local! {
 /// Colour, symbol, school name and flavour text of a spell.
 fn lore(s: &SpellDef) -> (Color, Icon, &'static str, &'static str) {
     match s.effect {
-        SpellEffect::Heal => (Color::new(0.30, 0.68, 0.42, 1.0), Icon::Leaf, "Magia de curación", "Una luz cálida cierra las heridas y devuelve el aliento al cuerpo cansado."),
-        SpellEffect::Fireball => (Color::new(0.92, 0.46, 0.12, 1.0), Icon::Flame, "Magia de fuego", "Una esfera de llamas brota de tu mano y estalla contra quien se cruce en su camino."),
-        SpellEffect::Lightning => (Color::new(0.45, 0.66, 1.0, 1.0), Icon::Bolt, "Magia de tormenta", "El cielo responde a tu llamada: un rayo seco y azul que busca a su presa."),
+        // The server only describes the three effects, so the prose is about the effect and
+        // not about a particular spell (it has to read right for every spell that shares it).
+        SpellEffect::Heal => (Color::new(0.30, 0.68, 0.42, 1.0), Icon::Leaf, "Magia de sanación", "Concentra tu maná y la energía fluye hacia el objetivo, restaurándolo."),
+        SpellEffect::Fireball => (Color::new(0.92, 0.46, 0.12, 1.0), Icon::Flame, "Magia ofensiva", "Concentra tu maná en un proyectil que brota de tu mano y hiere a quien alcance."),
+        SpellEffect::Lightning => (Color::new(0.45, 0.66, 1.0, 1.0), Icon::Bolt, "Magia de choque", "Concentra tu maná en un chasquido de energía que cae sobre el objetivo."),
     }
 }
 
@@ -116,7 +118,15 @@ pub fn draw(ui: &mut Ui, game: &mut Game, _assets: &mut Assets, r: Rect) {
     let rpad = 24.0 * u;
     let inner_w = right.w - 2.0 * rpad;
     match &sel_def {
-        None => kit::empty_ink(right, "Elige un hechizo de la izquierda.", "Aquí leerás cómo se lanza.", u),
+        None => {
+            kit::empty_ink(Rect::new(right.x, right.y, right.w, right.h - 70.0 * u), "Elige un hechizo de la izquierda.", "Aquí leerás cómo se lanza.", u);
+            // Meditating does not need a spell: it stays available with an empty book.
+            let meditating = game.me().is_some_and(|e| e.status & status::MEDITATING != 0);
+            let med = Rect::new(right.x + rpad, right.bottom() - 56.0 * u, inner_w, 38.0 * u);
+            if button_kind(med, if meditating { "Dejar de meditar" } else { "Meditar" }, Kind::Secondary, true, u) {
+                game.toggle_meditation();
+            }
+        }
         Some(s) => {
             let (col, sym, school, flavour) = lore(s);
             // Medallion with a glow that breathes slowly.

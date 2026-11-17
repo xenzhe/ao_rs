@@ -6,7 +6,7 @@ use crate::assets::Assets;
 use crate::game::Game;
 use crate::ui::character::kit::{self, Icon, INK_DIM, WAX};
 use crate::ui::theme::{FontKind, BAD, GOLD, GOLD_BRIGHT, GOLD_DIM, GOLD_TEXT, GOOD, INK, TEXT, TEXT_DIM, TEXT_FAINT};
-use crate::ui::widgets::{button_kind, measure_with, text_with, tooltip, wrap_lines, Kind};
+use crate::ui::widgets::{button_kind, measure_with, text_with, tooltip, Kind};
 use crate::ui::{Ui, WindowId};
 use ao_protocol::social::guild::{GuildInfo, GuildRelation};
 use ao_rules::guild::{self, Alignment};
@@ -114,7 +114,8 @@ fn ink_link(r: Rect, label: &str, u: f32) -> bool {
 
 /// A text field written on parchment: ruled lines, ink text, wraps over several rows.
 /// Enter returns true (single-line fields); Esc drops the focus.
-fn letter_field(ui: &mut Ui, id: &str, value: &mut String, r: Rect, max: usize, hint: &str, single: bool) -> bool {
+#[allow(clippy::too_many_arguments)]
+fn letter_field(ui: &mut Ui, id: &str, value: &mut String, r: Rect, max: usize, hint: &str, single: bool, accept: impl Fn(char) -> bool) -> bool {
     let u = ui.u;
     let focused = ui.focus.as_deref() == Some(id);
     if kit::hover(r) && is_mouse_button_pressed(MouseButton::Left) {
@@ -132,7 +133,7 @@ fn letter_field(ui: &mut Ui, id: &str, value: &mut String, r: Rect, max: usize, 
     if focused {
         ui.keyboard_captured = true;
         while let Some(ch) = get_char_pressed() {
-            if !ch.is_control() && value.chars().count() < max {
+            if !ch.is_control() && accept(ch) && value.chars().count() < max {
                 value.push(ch);
             }
         }
@@ -150,7 +151,7 @@ fn letter_field(ui: &mut Ui, id: &str, value: &mut String, r: Rect, max: usize, 
     }
     let cursor = focused && (get_time() * 2.0) as i32 % 2 == 0;
     let shown = if cursor { format!("{value}|") } else { value.clone() };
-    let rows: Vec<String> = if single { vec![shown] } else { wrap_lines(FontKind::Narrative, &shown, size, r.w - 8.0 * u) };
+    let rows: Vec<String> = if single { vec![shown] } else { kit::wrap(FontKind::Narrative, &shown, size, r.w - 8.0 * u) };
     let skip = rows.len().saturating_sub(rows_fit);
     for (i, row) in rows.iter().skip(skip).take(rows_fit).enumerate() {
         kit::ink_fit(FontKind::Narrative, row, r.x + 4.0 * u, r.y + (i as f32 + 1.0) * lh - 9.0 * u, size, r.w - 8.0 * u, INK);
@@ -245,6 +246,9 @@ fn no_guild(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
     if let Some(i) = kit::tabs(r.x + 8.0 * u, r.y, &labels, if st.creating { 1 } else { 0 }, u) {
         st.creating = i == 1;
     }
+    if !st.creating && button_kind(Rect::new(r.right() - 100.0 * u, r.y + 2.0 * u, 100.0 * u, 26.0 * u), "Actualizar", Kind::Ghost, true, u) {
+        game.guild_list();
+    }
     kit::rule(r.x, r.y + 30.0 * u, r.w, GOLD);
     let body = Rect::new(r.x, r.y + 40.0 * u, r.w, r.h - 40.0 * u);
     if st.creating {
@@ -296,7 +300,7 @@ fn guild_list(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
     kit::ink(FontKind::Title, "CARTA AL LÍDER", page.x + 22.0 * u, page.y + 32.0 * u, 16.0 * u, WAX);
     kit::rule(page.x + 20.0 * u, page.y + 42.0 * u, page.w - 40.0 * u, Color::new(0.35, 0.2, 0.08, 0.9));
     let field = Rect::new(page.x + 20.0 * u, page.y + 52.0 * u, page.w - 40.0 * u, 120.0 * u);
-    let enter = letter_field(ui, "guild.application", &mut st.application, field, guild::MAX_APPLICATION_LEN, "Cuéntales quién eres y qué sabes hacer...", false);
+    let enter = letter_field(ui, "guild.application", &mut st.application, field, guild::MAX_APPLICATION_LEN, "Cuéntales quién eres y qué sabes hacer...", false, |_| true);
     let send = Rect::new(right.x, page.bottom() + 14.0 * u, 200.0 * u, 36.0 * u);
     if (button_kind(send, "Solicitar ingreso", Kind::Primary, true, u) || enter) && game.guild_request_join(&sel, &st.application) {
         st.application.clear();
@@ -304,7 +308,7 @@ fn guild_list(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
     }
     let tip_y = send.bottom() + 12.0 * u;
     let t = "El líder recibirá tu carta y podrá aceptarla o rechazarla. Los personajes de nivel 12 o menos no pueden entrar en un clan.";
-    for (i, row) in wrap_lines(FontKind::NarrativeItalic, t, 15.0 * u, right.w).iter().enumerate() {
+    for (i, row) in kit::wrap(FontKind::NarrativeItalic, t, 15.0 * u, right.w).iter().enumerate() {
         text_with(FontKind::NarrativeItalic, row, right.x, tip_y + 14.0 * u + i as f32 * 20.0 * u, 15.0 * u, TEXT_DIM);
     }
 }
@@ -319,7 +323,7 @@ fn found_form(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
     kit::rule(px, deed.y + 46.0 * u, pw, Color::new(0.35, 0.2, 0.08, 0.9));
     kit::ink(FontKind::Body, "Nombre del clan", px, deed.y + 72.0 * u, 14.0 * u, INK_DIM);
     let name_r = Rect::new(px, deed.y + 76.0 * u, pw, 30.0 * u);
-    let _ = letter_field(ui, "guild.found_name", &mut st.found_name, name_r, guild::MAX_NAME_LEN, "El nombre que dará fama a tu estandarte", true);
+    let _ = letter_field(ui, "guild.found_name", &mut st.found_name, name_r, guild::MAX_NAME_LEN, "El nombre que dará fama a tu estandarte", true, |c| c.is_ascii_alphabetic() || c == ' ' || c == 'ÿ');
     kit::ink(FontKind::Body, "Alineación", px, deed.y + 134.0 * u, 14.0 * u, INK_DIM);
     let aligns = [0u8, 3, 4, 1, 2];
     let cw = pw / 5.0;
@@ -340,7 +344,7 @@ fn found_form(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
     }
     kit::ink(FontKind::Body, "Descripción", px, deed.y + 252.0 * u, 14.0 * u, INK_DIM);
     let desc_r = Rect::new(px, deed.y + 258.0 * u, pw, 104.0 * u);
-    letter_field(ui, "guild.found_desc", &mut st.found_desc, desc_r, guild::MAX_DESC_LEN, "Qué clase de clan es, qué buscáis...", false);
+    letter_field(ui, "guild.found_desc", &mut st.found_desc, desc_r, guild::MAX_DESC_LEN, "Qué clase de clan es, qué buscáis...", false, |_| true);
 
     // Requirements, ticked against the character.
     let rx = deed.right() + 26.0 * u;
@@ -351,7 +355,7 @@ fn found_form(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
         draw_circle(rx + 10.0 * u, y + 11.0 * u, 10.0 * u, kit::alpha(c, 0.18));
         draw_circle_lines(rx + 10.0 * u, y + 11.0 * u, 10.0 * u, 1.3, c);
         kit::icon(if ok { Icon::Check } else { Icon::Cross }, rx + 10.0 * u, y + 11.0 * u, 12.0 * u, c);
-        let rows = wrap_lines(FontKind::Body, &label, 15.0 * u, rw - 30.0 * u);
+        let rows = kit::wrap(FontKind::Body, &label, 15.0 * u, rw - 30.0 * u);
         for (i, row) in rows.iter().enumerate() {
             text_with(FontKind::Body, row, rx + 28.0 * u, y + 16.0 * u + i as f32 * 17.0 * u, 15.0 * u, if ok { TEXT } else { Color::new(1.0, 0.72, 0.66, 1.0) });
         }
@@ -360,7 +364,7 @@ fn found_form(ui: &mut Ui, game: &mut Game, st: &mut State, r: Rect) {
     let refusal = game.found_refusal(st.found_align);
     y += 8.0 * u;
     if let Some(why) = refusal {
-        for (i, row) in wrap_lines(FontKind::NarrativeItalic, why, 15.0 * u, rw).iter().enumerate().take(5) {
+        for (i, row) in kit::wrap(FontKind::NarrativeItalic, why, 15.0 * u, rw).iter().enumerate().take(5) {
             text_with(FontKind::NarrativeItalic, row, rx, y + 14.0 * u + i as f32 * 18.0 * u, 15.0 * u, BAD);
         }
     } else {
@@ -391,7 +395,7 @@ fn with_guild(ui: &mut Ui, game: &mut Game, st: &mut State, info: &GuildInfo, r:
     let bn = Rect::new(left.x, left.y, left.w, 296.0 * u);
     let cloth = banner(bn, col, u);
     kit::emblem(cloth.center().x, cloth.y + 58.0 * u, 70.0 * u, col, sym, u);
-    let nrows = wrap_lines(FontKind::Title, &info.name.to_uppercase(), 18.0 * u, cloth.w - 18.0 * u);
+    let nrows = kit::wrap(FontKind::Title, &info.name.to_uppercase(), 18.0 * u, cloth.w - 18.0 * u);
     for (i, row) in nrows.iter().take(2).enumerate() {
         kit::text_mid(FontKind::Title, row, cloth.center().x, cloth.y + 126.0 * u + i as f32 * 22.0 * u, 18.0 * u, GOLD_BRIGHT);
     }
@@ -505,7 +509,7 @@ fn edit_box(ui: &mut Ui, game: &mut Game, st: &mut State, which: Edit, field: Re
     let u = ui.u;
     let mut buf = st.edit.as_ref().map(|(_, b)| b.clone()).unwrap_or_default();
     let enter = false;
-    letter_field(ui, "guild.edit", &mut buf, field, max, "", false);
+    letter_field(ui, "guild.edit", &mut buf, field, max, "", false, |_| true);
     st.edit = Some((which, buf.clone()));
     let ok = Rect::new(field.right() - 200.0 * u, buttons_y - 4.0 * u, 96.0 * u, 26.0 * u);
     let cancel = Rect::new(ok.right() + 8.0 * u, ok.y, 96.0 * u, 26.0 * u);
@@ -573,7 +577,10 @@ fn applicants_tab(ui: &mut Ui, game: &mut Game, st: &mut State, info: &GuildInfo
         return;
     }
     let reject_h = if st.reject.is_some() { 128.0 * u } else { 0.0 };
-    let area = Rect::new(r.x, r.y, r.w, r.h - reject_h);
+    if st.reject.is_none() {
+        text_with(FontKind::NarrativeItalic, "Aceptar a un aspirante cuesta oro del líder.", r.x + 4.0 * u, r.bottom() - 4.0 * u, 14.0 * u, TEXT_FAINT);
+    }
+    let area = Rect::new(r.x, r.y, r.w, r.h - reject_h - if st.reject.is_none() { 22.0 * u } else { 0.0 });
     let row_h = 100.0 * u;
     let (off, vis) = scroll_rows(st, "applicants", area, info.applicants.len(), row_h, u);
     for (i, a) in info.applicants.iter().enumerate().skip(off).take(vis) {
@@ -583,8 +590,12 @@ fn applicants_tab(ui: &mut Ui, game: &mut Game, st: &mut State, info: &GuildInfo
         kit::ink(FontKind::Title, &a.name, letter.x + 18.0 * u, letter.y + 28.0 * u, 18.0 * u, WAX);
         kit::paragraph(FontKind::Narrative, &a.application, letter.x + 18.0 * u, letter.y + 34.0 * u, letter.w - 36.0 * u, 16.0 * u, INK, 3);
         let bx = card.right() - 118.0 * u;
-        if button_kind(Rect::new(bx, card.y + 6.0 * u, 118.0 * u, 32.0 * u), "Aceptar", Kind::Primary, true, u) {
+        let accept = Rect::new(bx, card.y + 6.0 * u, 118.0 * u, 32.0 * u);
+        if button_kind(accept, "Aceptar", Kind::Primary, true, u) {
             game.guild_accept(&a.name);
+        }
+        if kit::hover(accept) {
+            tooltip(&["Aceptar al aspirante".into(), "~Cuesta oro del líder.".into()], u);
         }
         let rejecting = st.reject.as_deref() == Some(&a.name);
         if button_kind(Rect::new(bx, card.y + 46.0 * u, 118.0 * u, 30.0 * u), "Rechazar", if rejecting { Kind::Danger } else { Kind::Secondary }, true, u) {
@@ -602,7 +613,7 @@ fn applicants_tab(ui: &mut Ui, game: &mut Game, st: &mut State, info: &GuildInfo
         kit::page(b, u);
         kit::ink(FontKind::Title, &format!("MOTIVO DEL RECHAZO A {}", name.to_uppercase()), b.x + 18.0 * u, b.y + 28.0 * u, 14.0 * u, WAX);
         let field = Rect::new(b.x + 18.0 * u, b.y + 38.0 * u, b.w - 190.0 * u, 52.0 * u);
-        let enter = letter_field(ui, "guild.reject", &mut st.reject_reason, field, guild::MAX_APPLICATION_LEN, "Por qué no entra...", false);
+        let enter = letter_field(ui, "guild.reject", &mut st.reject_reason, field, guild::MAX_APPLICATION_LEN, "Por qué no entra...", false, |_| true);
         if (button_kind(Rect::new(field.right() + 14.0 * u, b.y + 40.0 * u, 128.0 * u, 30.0 * u), "Rechazar", Kind::Danger, true, u) || enter) && game.guild_reject(&name, &st.reject_reason) {
             st.reject = None;
             st.reject_reason.clear();
@@ -687,7 +698,7 @@ fn relations_tab(ui: &mut Ui, game: &mut Game, st: &mut State, info: &GuildInfo,
     let page = Rect::new(fx, hy - 2.0 * u, fw, 62.0 * u);
     kit::page(page, u);
     let msg_field = Rect::new(page.x + 14.0 * u, page.y + 8.0 * u, page.w - 28.0 * u, 50.0 * u);
-    letter_field(ui, "guild.rel", &mut st.rel_text, msg_field, 200, "Mensaje (opcional)", false);
+    letter_field(ui, "guild.rel", &mut st.rel_text, msg_field, 200, "Mensaje (opcional)", false, |_| true);
     let target = st.rel_target.clone().filter(|t| others.contains(t));
     let by = page.bottom() + 12.0 * u;
     let bw = (fw - 16.0 * u) / 3.0;

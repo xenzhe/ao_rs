@@ -8,7 +8,34 @@
 #![allow(dead_code)] // toolkit: not every piece is used by every window
 use crate::ui::fx_ui::{ease, key_of};
 use crate::ui::theme::{self, FontKind, Surface, GOLD, GOLD_BRIGHT, GOLD_DIM, GOLD_TEXT, GOOD, TEXT_DIM, TEXT_FAINT};
-use crate::ui::widgets::{measure_with, text_with, wrap_lines};
+use crate::ui::widgets::{text_with, wrap_lines};
+
+/// Width of a measured string (all the kit needs of `TextDimensions`).
+pub struct Dims {
+    pub width: f32,
+}
+
+thread_local! {
+    static WIDTHS: std::cell::RefCell<std::collections::HashMap<(u8, String, i32), f32>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Cached `widgets::measure_with`: measuring is the slow part of laying text out and the
+/// same labels are measured every frame.
+pub fn measure_with(kind: FontKind, s: &str, size: f32) -> Dims {
+    let key = (kind as u8, s.to_string(), (size * 10.0) as i32);
+    if let Some(w) = WIDTHS.with(|c| c.borrow().get(&key).copied()) {
+        return Dims { width: w };
+    }
+    let w = crate::ui::widgets::measure_with(kind, s, size).width;
+    WIDTHS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 1500 {
+            c.clear();
+        }
+        c.insert(key, w);
+    });
+    Dims { width: w }
+}
 use crate::ui::{Ui, WindowId};
 use macroquad::prelude::*;
 use std::cell::Cell;
@@ -80,16 +107,60 @@ pub fn text_mid(kind: FontKind, s: &str, cx: f32, y: f32, size: f32, c: Color) {
     text_with(kind, s, cx - w / 2.0, y, size, c);
 }
 
+type WrapKey = (u8, String, i32, i32);
+
+thread_local! {
+    /// Wrapped paragraphs and ellipsised labels by (font, text, size, width): measuring text
+    /// is the costly part of drawing it, and the same strings repeat every frame.
+    static WRAPS: std::cell::RefCell<std::collections::HashMap<WrapKey, Vec<String>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    static FITS: std::cell::RefCell<std::collections::HashMap<WrapKey, String>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// `wrap_lines` with a cache.
+pub fn wrap(kind: FontKind, s: &str, size: f32, w: f32) -> Vec<String> {
+    let key = (kind as u8, s.to_string(), (size * 10.0) as i32, w as i32);
+    if let Some(v) = WRAPS.with(|c| c.borrow().get(&key).cloned()) {
+        return v;
+    }
+    let v = wrap_lines(kind, s, size, w);
+    WRAPS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 400 {
+            c.clear();
+        }
+        c.insert(key, v.clone());
+    });
+    v
+}
+
+/// `s` cut with an ellipsis to fit `max_w` (cached; the string itself when it already fits).
+fn fitted(kind: FontKind, s: &str, size: f32, max_w: f32) -> String {
+    let key = (kind as u8, s.to_string(), (size * 10.0) as i32, max_w as i32);
+    if let Some(v) = FITS.with(|c| c.borrow().get(&key).cloned()) {
+        return v;
+    }
+    let v = if measure_with(kind, s, size).width <= max_w {
+        s.to_string()
+    } else {
+        let mut t = s.to_string();
+        while !t.is_empty() && measure_with(kind, &format!("{t}…"), size).width > max_w {
+            t.pop();
+        }
+        format!("{t}…")
+    };
+    FITS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 600 {
+            c.clear();
+        }
+        c.insert(key, v.clone());
+    });
+    v
+}
+
 /// Text cut with an ellipsis to fit `max_w`, in any font.
 pub fn fit(kind: FontKind, s: &str, x: f32, y: f32, size: f32, max_w: f32, c: Color) {
-    if measure_with(kind, s, size).width <= max_w {
-        return text_with(kind, s, x, y, size, c);
-    }
-    let mut t = s.to_string();
-    while !t.is_empty() && measure_with(kind, &format!("{t}…"), size).width > max_w {
-        t.pop();
-    }
-    text_with(kind, &format!("{t}…"), x, y, size, c);
+    text_with(kind, &fitted(kind, s, size, max_w), x, y, size, c);
 }
 
 /// Text centred on `cx` that shrinks a little, then cuts, to fit `max_w`.
@@ -106,7 +177,7 @@ pub fn fit_centered(kind: FontKind, s: &str, cx: f32, y: f32, size: f32, max_w: 
 /// `shadow = false` is for text on parchment (the soft shadow would smear the ink).
 #[allow(clippy::too_many_arguments)]
 pub fn paragraph(kind: FontKind, s: &str, x: f32, top: f32, w: f32, size: f32, c: Color, max_rows: usize) -> f32 {
-    let rows = wrap_lines(kind, s, size, w);
+    let rows = wrap(kind, s, size, w);
     let cut = rows.len() > max_rows;
     let lh = size * 1.32;
     for (i, row) in rows.iter().take(max_rows).enumerate() {
@@ -144,14 +215,7 @@ pub fn ink_mid(kind: FontKind, s: &str, cx: f32, y: f32, size: f32, max_w: f32, 
 
 /// Ink text cut to fit.
 pub fn ink_fit(kind: FontKind, s: &str, x: f32, y: f32, size: f32, max_w: f32, c: Color) {
-    if measure_with(kind, s, size).width <= max_w {
-        return ink(kind, s, x, y, size, c);
-    }
-    let mut t = s.to_string();
-    while !t.is_empty() && measure_with(kind, &format!("{t}…"), size).width > max_w {
-        t.pop();
-    }
-    ink(kind, &format!("{t}…"), x, y, size, c);
+    ink(kind, &fitted(kind, s, size, max_w), x, y, size, c);
 }
 
 // ---------------------------------------------------------------- surfaces

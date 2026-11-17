@@ -145,7 +145,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
         Some(n) => {
             let own = (current == Some(n)).then(|| game.map.as_ref().map(|m| m.name.clone())).flatten();
             let title = map_title(&info, n, own.as_deref());
-            let rows = super::widgets::wrap_lines(FontKind::Title, &title, 26.0 * u, inner);
+            let rows = kit::wrap(FontKind::Title, &title, 26.0 * u, inner);
             for row in rows.iter().take(3) {
                 text_with(FontKind::Title, row, x, y + 24.0 * u, 26.0 * u, GOLD_BRIGHT);
                 y += 30.0 * u;
