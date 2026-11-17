@@ -76,4 +76,6 @@ pub struct StatusEffects {
     pub eots: Vec<ActiveEot>,
     /// Last flags broadcast with `S2C::Status` (to send only changes).
     pub sent_flags: u32,
+    /// Map those flags were sent to.
+    pub sent_map: u16,
 }

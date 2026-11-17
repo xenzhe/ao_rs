@@ -253,11 +253,15 @@ impl World {
     pub(crate) fn refresh_status(&mut self, id: u32) {
         let flags = self.status_flags(id);
         let Some(p) = self.player(id) else { return };
-        if p.status.sent_flags == flags {
+        // After a map change the new map must learn the flags too (if any are set).
+        let moved = p.status.sent_map != p.map && flags != 0;
+        if p.status.sent_flags == flags && !moved {
             return;
         }
         let map = p.map;
-        self.player_mut(id).status.sent_flags = flags;
+        let st = &mut self.player_mut(id).status;
+        st.sent_flags = flags;
+        st.sent_map = map;
         self.broadcast(map, &S2C::Status { id, flags }, None);
     }
 
@@ -275,6 +279,14 @@ impl World {
         for id in self.player_ids() {
             let Some(p) = self.player(id) else { continue };
             if p.combat.dead || p.hp <= 0 {
+                // UserDie clears states; the DEAD bit still reaches the map.
+                let st = &mut self.player_mut(id).status;
+                if st.poisoned || st.meditating || !st.eots.is_empty() || st.paralyzed_until.is_some() || st.immobilized_until.is_some() || st.invisible_until.is_some() {
+                    let sent = (st.sent_flags, st.sent_map);
+                    *st = Default::default();
+                    (st.sent_flags, st.sent_map) = sent;
+                }
+                self.refresh_status(id);
                 continue;
             }
             self.expire_status(id, now);
@@ -481,13 +493,7 @@ impl World {
         // HandleWorkLeftClick: meditation ends, then IntervaloPermiteLanzarSpell updates
         // the timer whether or not the spell is finally cast.
         self.stop_meditating(id);
-        {
-            let p = self.player_mut(id);
-            p.spells.next_cast = now.after_ms(rules::CAST_INTERVAL_MS);
-            if spell.cooldown <= 0 {
-                p.spells.cooldowns.insert(spell_id, now.after_ms(rules::CAST_INTERVAL_MS));
-            }
-        }
+        self.player_mut(id).spells.next_cast = now.after_ms(rules::CAST_INTERVAL_MS);
         let Some(target) = self.resolve_target(id, &spell, tx, ty) else { return };
         if !self.can_cast(id, spell_id, &spell, target) {
             return;
@@ -944,9 +950,10 @@ impl World {
             }
             let cost = rules::stamina_cost(s.stamina_required, s.stamina_percent_required, p.stats.max_sta);
             p.stats.sta = (p.stats.sta - cost).max(0);
-            if s.cooldown > 0 {
-                p.spells.cooldowns.insert(spell_id, now.after_secs(s.cooldown as u64));
-            }
+            // Spells without CoolDown: remember the interval per spell, the way the
+            // client mirrors it once it sees the Effect (repeating it early = cheat).
+            let until = if s.cooldown > 0 { now.after_secs(s.cooldown as u64) } else { now.after_ms(rules::CAST_INTERVAL_MS) };
+            p.spells.cooldowns.insert(spell_id, until);
             (p.map, p.x, p.y)
         };
         let (tid, tx, ty) = match target {
@@ -1100,14 +1107,16 @@ mod tests {
 
     #[test]
     fn dev_kit_spells_pass_puede_lanzar() {
-        let mut w = world((1, 50, 50));
+        let mut w = world((2, 50, 50));
         let mut c = login(&mut w, 1, "Probador");
+        let _other = login(&mut w, 2, "Blanco");
         let sent = c.drain();
         assert!(sent.iter().any(|m| matches!(m, S2C::SpellSlots { slots } if slots[..DEV_KIT.len()] == DEV_KIT)));
         assert!(sent.iter().any(|m| matches!(m, S2C::SpellBook { spells } if spells.len() == DEV_KIT.len())));
         for s in DEV_KIT {
             let spell = w.ao.spells.get(s as u32).unwrap().clone();
-            assert!(w.can_cast(1, s, &spell, Target::User(1)) || spell.target_effect == TargetEffect::Negative, "{}", spell.name);
+            let target = if spell.target_effect == TargetEffect::Negative { 2 } else { 1 };
+            assert!(w.can_cast(1, s, &spell, Target::User(target)), "{}", spell.name);
         }
     }
 

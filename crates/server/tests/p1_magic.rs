@@ -194,6 +194,22 @@ fn meditation_regenerates_mana_faster() {
 }
 
 #[test]
+fn legit_retries_of_refused_casts_are_never_punished() {
+    let s = TestServer::start();
+    let mut ana = s.bot("Ana");
+    ready(&mut ana);
+    let (x, y) = ana.pos();
+    // Full HP: every heal is refused ("no tiene heridas"); the client retries at its pace.
+    for _ in 0..20 {
+        ana.cast(HEAL, x, y);
+        s.advance(700);
+    }
+    ana.sync();
+    assert_eq!(ana.count(effects), 0);
+    assert!(ana.kicked().is_none());
+}
+
+#[test]
 fn illegal_casts_are_refused() {
     let s = field();
     let mut ana = s.bot("Ana");
