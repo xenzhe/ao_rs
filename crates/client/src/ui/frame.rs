@@ -102,10 +102,10 @@ impl WindowId {
             WindowId::Quests => vec2(780.0, 580.0),
             WindowId::WorldMap => vec2(800.0, 640.0),
             WindowId::Options => vec2(660.0, 540.0),
-            WindowId::Crafting => vec2(620.0, 480.0),
-            WindowId::Gm => vec2(620.0, 520.0),
-            WindowId::Events => vec2(560.0, 460.0),
-            WindowId::Auction => vec2(640.0, 480.0),
+            WindowId::Crafting => vec2(760.0, 560.0),
+            WindowId::Gm => vec2(720.0, 580.0),
+            WindowId::Events => vec2(780.0, 580.0),
+            WindowId::Auction => vec2(780.0, 560.0),
         }
     }
 }
