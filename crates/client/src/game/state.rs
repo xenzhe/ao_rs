@@ -4,7 +4,7 @@ use crate::guard::Guarded;
 use crate::net::Net;
 use crate::render::fx::Fx;
 use ao_formats::AoMap;
-use ao_protocol::{EntityKind, Tone, C2S, PROTOCOL_VERSION, S2C};
+use ao_protocol::{CharacterSummary, EntityKind, Tone, C2S, PROTOCOL_VERSION, S2C};
 use ao_rules::spells::SpellDef;
 use ao_rules::Dir;
 use macroquad::prelude::*;
@@ -111,6 +111,8 @@ pub struct Game {
     pub console: VecDeque<(String, Color)>,
     pub chat: Option<String>,
     pub tampered: bool,
+    /// Characters of the logged account (character selection screen).
+    pub characters: Vec<CharacterSummary>,
 }
 
 pub fn tone_color(t: Tone) -> Color {
@@ -144,6 +146,7 @@ impl Game {
             console: VecDeque::new(),
             chat: None,
             tampered: false,
+            characters: Vec::new(),
         }
     }
 
@@ -308,6 +311,8 @@ impl Game {
                     e.max_hp = max_hp;
                 }
             }
+            S2C::AccountResult { ok, message } => self.say(message, if ok { Tone::Good } else { Tone::Warn }),
+            S2C::CharacterList { characters } => self.characters = characters,
             S2C::Console { text, color } => self.say(text, color),
             S2C::Kicked { reason } => self.screen = Screen::Kicked(reason),
         }
