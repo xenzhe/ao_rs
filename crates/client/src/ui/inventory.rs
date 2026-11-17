@@ -458,6 +458,28 @@ pub(crate) enum Op {
     Offer,
 }
 
+/// "Use": an equipped working tool or an ore stack asks for a world tile (work, P4);
+/// anything else goes to the server as `UseItem`.
+fn use_item(game: &mut Game, obj: Option<&ao_formats::dat::obj::ObjData>, hit: Hit) {
+    use ao_formats::dat::obj::ObjType;
+    use client_core::p4::work::{targeting_for_tool, Targeting};
+    let equipped = game.local.slot(hit.slot).is_some_and(|s| s.equipped);
+    let target = match obj {
+        Some(o) if o.obj_type == ObjType::WorkingTools && equipped => targeting_for_tool(o),
+        Some(o) if o.obj_type == ObjType::Minerals => Some(Targeting::Smelt { slot: hit.slot }),
+        _ => None,
+    };
+    match target {
+        Some(t) => {
+            game.local.p4.work.pending = Some(t);
+            game.say("Haz clic en el lugar donde quieres trabajar.", ao_protocol::Tone::Info);
+        }
+        None => {
+            game.inv_use(hit.slot);
+        }
+    }
+}
+
 /// Runs `op` on `hit`, asking for a quantity (in window `win`) when it makes sense.
 pub(crate) fn start(game: &mut Game, assets: &Assets, op: Op, hit: Hit, win: WindowId) {
     let slot = hit.slot;
@@ -467,13 +489,9 @@ pub(crate) fn start(game: &mut Game, assets: &Assets, op: Op, hit: Hit, win: Win
             Some(Primary::Equip) => {
                 game.inv_equip(slot);
             }
-            _ => {
-                game.inv_use(slot);
-            }
+            _ => use_item(game, obj, hit),
         },
-        Op::Use => {
-            game.inv_use(slot);
-        }
+        Op::Use => use_item(game, obj, hit),
         Op::Equip => {
             game.inv_equip(slot);
         }

@@ -32,6 +32,8 @@ pub struct WorkState {
     /// Successful attempts (a low-level Worker may succeed and still get 0, like the VB).
     pub hits: u32,
     pub misses: u32,
+    /// Waiting for the world click after "use" on a tool or an ore stack.
+    pub pending: Option<Targeting>,
 }
 
 impl WorkState {

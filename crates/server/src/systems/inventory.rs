@@ -649,6 +649,8 @@ impl World {
 
     /// HandleDrop (item): newbie and `Intirable` objects stay; DropObj on the own tile.
     pub(crate) fn on_drop_item(&mut self, id: u32, slot: u8, amount: u32) {
+        // TirarItem ends the automated work (Trabajo.bas).
+        self.work_cancel(id);
         if !self.checked_slot(id, slot) || amount == 0 || self.dead(id) {
             return;
         }

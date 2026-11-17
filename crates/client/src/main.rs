@@ -94,7 +94,7 @@ async fn main() {
                 // UI on top of the world, then the world input with what the UI left.
                 let hour = renderer.hour();
                 ui::frame(&mut ui, &mut game, &mut assets, &lay, hour, renderer.pixel_perfect);
-                input::update(&mut game, &mut renderer, &lay, now, &ui);
+                input::update(&mut game, &mut renderer, &lay, now, &ui, &assets);
                 dev.update(&mut game, &mut renderer, &mut ui, now);
                 if dev.maybe_capture(now) {
                     break;

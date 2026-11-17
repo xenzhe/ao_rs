@@ -182,6 +182,8 @@ impl World {
             // UsuarioAtacadoPorUsuario: every hit, not only the killing one.
             self.faction_on_player_attacked(a, id);
         }
+        // A hit ends the automated work, like the original.
+        self.work_cancel(id);
         let p = self.player_mut(id);
         p.hp = (p.hp - dmg.max(0)).max(0);
         let (map, hp, max_hp) = (p.map, p.hp, p.max_hp);

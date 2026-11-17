@@ -9,7 +9,7 @@ use ao_rules::Dir;
 use macroquad::prelude::*;
 
 /// Returns the direction held this frame (for movement), if any.
-pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, ui: &Ui) -> Option<Dir> {
+pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, ui: &Ui, assets: &crate::assets::Assets) -> Option<Dir> {
     if !ui.keyboard_captured {
         if is_key_pressed(KeyCode::F2) {
             renderer.pixel_perfect = !renderer.pixel_perfect;
@@ -17,6 +17,12 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
         // Keys 1-9 arm spells in the HUD (player-assigned, config/spellkeys.ini).
         if is_key_pressed(KeyCode::Escape) {
             game.casting = false;
+            // Esc cancels a pending work target, or stops the running work.
+            if game.local.p4.work.pending.take().is_none() {
+                if let Ok(m) = game.plan_stop_work() {
+                    game.send(&m);
+                }
+            }
         }
     }
     if !ui.mouse_captured {
@@ -29,7 +35,11 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
             }
         }
         if is_mouse_button_pressed(MouseButton::Left) {
-            world_click(game, lay);
+            if game.local.p4.work.pending.is_some() {
+                work_click(game, lay, assets);
+            } else {
+                world_click(game, lay);
+            }
         }
     }
     if ui.keyboard_captured {
@@ -50,6 +60,24 @@ pub fn tile_under_mouse(game: &Game, lay: &Layout) -> Option<(i32, i32)> {
     let origin = Renderer::origin(game);
     let wp = lay.screen_to_world(mouse_position().into(), origin)?;
     Some(((wp.x / TILE).floor() as i32 + 1, (wp.y / TILE).floor() as i32 + 1))
+}
+
+/// Click on the world after "use" on a tool or ore (P4 work): start working on that tile.
+fn work_click(game: &mut Game, lay: &Layout, assets: &crate::assets::Assets) {
+    use client_core::p4::work::Targeting;
+    let Some(target) = game.local.p4.work.pending.take() else { return };
+    let Some((tx, ty)) = tile_under_mouse(game, lay) else { return };
+    let plan = match target {
+        Targeting::Tool(_) => {
+            let tool = game.local.inventory.iter().flatten().find(|s| s.equipped && assets.objs.get(s.obj as u32).is_some_and(|o| o.obj_type == ao_formats::dat::obj::ObjType::WorkingTools)).and_then(|s| assets.objs.get(s.obj as u32));
+            game.plan_work(tool, tx, ty)
+        }
+        Targeting::Smelt { slot } => game.plan_smelt(slot, tx, ty),
+    };
+    match plan {
+        Ok(m) => game.send(&m),
+        Err(why) => game.say(why, Tone::Warn),
+    }
 }
 
 /// Click on the world: cast the armed spell, or interact with whatever is there (NPCs:
