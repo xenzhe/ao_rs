@@ -199,7 +199,7 @@ fn draw_names(game: &Game, lay: &Layout, origin: Vec2) {
         }
         let size = (14.0 * lay.scale.max(1.0)).min(22.0 * lay.u);
         if e.kind == EntityKind::Player {
-            let d = measure_text(&e.name, None, size as u16, 1.0);
+            let d = crate::ui::widgets::measure(&e.name, size);
             let c = if *id == game.my_id { Color::new(0.55, 0.8, 1.0, 1.0) } else { Color::new(0.4, 0.6, 1.0, 1.0) };
             crate::ui::widgets::text(&e.name, p.x - d.width / 2.0, p.y + 16.0 * lay.scale, size, c);
         }

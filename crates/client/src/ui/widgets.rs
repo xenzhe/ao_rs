@@ -11,10 +11,23 @@ pub fn panel(r: Rect, u: f32) {
     draw_rectangle_lines(r.x + 3.0 * u, r.y + 3.0 * u, r.w - 6.0 * u, r.h - 6.0 * u, 1.0, Color::new(0.30, 0.22, 0.12, 1.0));
 }
 
+/// Glyph sizes actually rasterised. macroquad caches every (font, size) pair in one atlas;
+/// with `size * u` for any `u` the atlas fills up and later text silently stops drawing
+/// (seen at 1920x1080). Sizes snap to this ladder and the rest is done with `font_scale`.
+/// Few sizes on purpose: with 9 sizes the atlas still overflowed when a text-heavy window
+/// (Character) was open. Text is scaled at most 1.5x from these.
+const GLYPH_SIZES: [u16; 4] = [16, 24, 36, 54];
+
+fn glyph(size: f32) -> (u16, f32) {
+    let base = GLYPH_SIZES.iter().copied().find(|b| *b as f32 >= size).unwrap_or(48);
+    (base, size / base as f32)
+}
+
 /// Text in a font, with a 1 px shadow, pixel-aligned. `y` is the baseline.
 pub fn text_with(kind: FontKind, s: &str, x: f32, y: f32, size: f32, c: Color) {
     let f = font(kind);
-    let params = |color| TextParams { font: f.as_ref(), font_size: size as u16, color, ..Default::default() };
+    let (base, scale) = glyph(size);
+    let params = |color| TextParams { font: f.as_ref(), font_size: base, font_scale: scale, color, ..Default::default() };
     draw_text_ex(s, x.round() + 1.0, y.round() + 1.0, params(Color::new(0.0, 0.0, 0.0, c.a * 0.8)));
     draw_text_ex(s, x.round(), y.round(), params(c));
 }
@@ -25,7 +38,13 @@ pub fn text(s: &str, x: f32, y: f32, size: f32, c: Color) {
 }
 
 pub fn measure(s: &str, size: f32) -> TextDimensions {
-    measure_text(s, font(FontKind::Body).as_ref(), size as u16, 1.0)
+    measure_with(FontKind::Body, s, size)
+}
+
+/// Size of `s` in a font, matching what `text_with` draws.
+pub fn measure_with(kind: FontKind, s: &str, size: f32) -> TextDimensions {
+    let (base, scale) = glyph(size);
+    measure_text(s, font(kind).as_ref(), base, scale)
 }
 
 pub fn text_centered(s: &str, cx: f32, y: f32, size: f32, c: Color) {

@@ -149,7 +149,7 @@ pub fn meter(r: Rect, v: f32, max: f32, c: Color, left: &str, right: &str, u: f3
 
 /// Width of `s` in the title font (the body-font `measure` is narrower).
 pub fn title_width(s: &str, size: f32) -> f32 {
-    measure_text(s, super::theme::font(FontKind::Title).as_ref(), size as u16, 1.0).width
+    super::widgets::measure_with(FontKind::Title, s, size).width
 }
 
 fn hover(r: Rect) -> bool {

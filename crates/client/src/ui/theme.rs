@@ -6,7 +6,7 @@ use macroquad::prelude::*;
 use std::cell::RefCell;
 use std::path::Path;
 
-pub const WOOD: Color = Color::new(0.09, 0.07, 0.05, 0.97);
+pub const WOOD: Color = Color::new(0.09, 0.07, 0.05, 1.0);
 pub const WOOD_LIGHT: Color = Color::new(0.16, 0.12, 0.08, 1.0);
 pub const GOLD: Color = Color::new(0.62, 0.48, 0.24, 1.0);
 pub const GOLD_TEXT: Color = Color::new(0.88, 0.70, 0.36, 1.0);
