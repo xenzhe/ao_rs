@@ -203,6 +203,7 @@ dependencies = [
  "macroquad",
  "serde",
  "toml",
+ "windows-sys",
 ]
 
 [[package]]

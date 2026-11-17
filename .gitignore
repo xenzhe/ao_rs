@@ -17,3 +17,4 @@ data/stats.json
 data/backups/
 config/cuenta_pruebas.txt
 /target-dev
+config/last_account.key

@@ -13,3 +13,7 @@ macroquad = { workspace = true, features = ["audio"] }
 lewton = "0.9"
 serde.workspace = true
 toml.workspace = true
+
+# DPAPI for the remembered password (secret.rs); already in the lock file via tokio/mio.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

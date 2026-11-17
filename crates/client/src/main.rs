@@ -10,6 +10,7 @@
 //! - [`devtools`]: env-driven automation for tests and screenshots
 mod assets;
 mod audio;
+mod secret;
 mod config;
 mod devtools;
 mod game;

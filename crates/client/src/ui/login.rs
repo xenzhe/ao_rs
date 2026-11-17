@@ -13,8 +13,10 @@ use crate::render::Renderer;
 use ao_rules::valid_name;
 use macroquad::prelude::*;
 
-/// Where the remembered user name is kept (only the name, never the password).
+/// Where the remembered user name is kept.
 const REMEMBER_FILE: &str = "config/last_account.txt";
+/// The remembered password, encrypted with DPAPI (`crate::secret`), never in plain text.
+const REMEMBER_PASS_FILE: &str = "config/last_account.key";
 
 /// Ink colours on the parchment.
 const INK_SOFT: Color = Color::new(0.30, 0.20, 0.11, 0.85);
@@ -71,6 +73,9 @@ fn screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
         if let Ok(user) = std::fs::read_to_string(REMEMBER_FILE) {
             st.user = user.trim().to_string();
             st.remember = !st.user.is_empty();
+            if let Some(p) = crate::secret::load(REMEMBER_PASS_FILE) {
+                st.pass = p;
+            }
         }
     }
     if st.entered {
@@ -201,7 +206,7 @@ fn screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
         } else {
             draw_circle_lines(c.x, c.y, 9.0 * u, 1.5 * u, with_a(INK_SOFT, 0.6 + 0.4 * h));
         }
-        text_with(FontKind::Body, "Recordar mi usuario", fx + 30.0 * u, y + 12.0 * u, 16.0 * u, with_a(INK, 0.8 + 0.2 * h));
+        text_with(FontKind::Body, "Recordarme", fx + 30.0 * u, y + 12.0 * u, 16.0 * u, with_a(INK, 0.8 + 0.2 * h));
         if hover && is_mouse_button_pressed(MouseButton::Left) {
             st.remember = !st.remember;
         }
@@ -459,12 +464,14 @@ fn act(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
     }
 }
 
-/// Saves (or forgets) the user name next to the other local config.
+/// Saves (or forgets) the user name and the encrypted password next to the local config.
 fn remember(st: &AccountUi) {
     if st.remember {
         let _ = std::fs::write(REMEMBER_FILE, &st.user);
+        crate::secret::save(REMEMBER_PASS_FILE, &st.pass);
     } else {
         let _ = std::fs::remove_file(REMEMBER_FILE);
+        crate::secret::forget(REMEMBER_PASS_FILE);
     }
 }
 
