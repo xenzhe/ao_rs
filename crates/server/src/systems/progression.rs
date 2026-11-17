@@ -405,13 +405,15 @@ mod tests {
         let Some(mut b) = bench() else { return };
         let id = b.id;
         b.world.player_mut(id).stats.skill_points = 3;
+        // Dev characters may start with some skills (magic's dev kit): compare with the start.
+        let before: u32 = b.world.player(id).unwrap().stats.skills.iter().map(|&s| s as u32).sum();
         b.world.on_assign_skill(id, 7, 4);
         b.world.on_assign_skill(id, 0, 1);
         b.world.on_assign_skill(id, 25, 1);
         b.world.on_assign_skill(id, 255, 1);
         let p = b.world.player(id).unwrap();
         assert_eq!((p.stats.skills[6], p.stats.skill_points), (0, 3), "nothing was spent");
-        assert_eq!(p.stats.skills.iter().map(|&s| s as u32).sum::<u32>(), 0);
+        assert_eq!(p.stats.skills.iter().map(|&s| s as u32).sum::<u32>(), before);
         // Four strikes so far (kick at 8): keep cheating and the connection ends.
         for _ in 0..4 {
             assert!(b.world.player(id).is_some());

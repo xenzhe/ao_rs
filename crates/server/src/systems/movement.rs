@@ -31,6 +31,12 @@ impl World {
             self.send(id, &S2C::Correct { seq, x, y });
             return self.strike(id, "caminar demasiado rapido (speedhack)");
         }
+        // Paralysis/immobilization (magic): refused without a strike, the client may not
+        // know yet that it was paralysed.
+        if !self.can_move(id) {
+            self.send(id, &S2C::Correct { seq, x, y });
+            return;
+        }
 
         let (dx, dy) = dir.delta();
         let (nx, ny) = (x + dx, y + dy);

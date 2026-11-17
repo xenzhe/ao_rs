@@ -175,13 +175,13 @@ impl World {
         let name = c.name.clone();
         info!(id, %name, map = c.map, x, y, "entra");
         self.send(id, &S2C::Welcome { id });
-        self.send(id, &S2C::SpellBook { spells: self.data.spells.clone() });
         self.sessions.get_mut(&id).unwrap().player = Some(player);
         self.enter_map(id, c.map, x, y);
         self.restore_equipment(id);
         self.send_progression(id);
         self.send_look(id);
         self.send_stats(id);
+        self.magic_on_enter(id);
         self.console(id, "Bienvenido a Argentum (prototipo en Rust, mapas de AO20).", Tone::Good);
         self.broadcast_all(&S2C::Console { text: format!("{name} se conecto."), color: Tone::Info }, Some(id));
         true

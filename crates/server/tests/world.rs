@@ -6,8 +6,9 @@ use ao_rules::spells::SpellEffect;
 use ao_rules::{tile_distance, walk, Dir, WALK_MS};
 use ao_testkit::{ClientEvent, TestServer};
 
-const FIREBALL: u16 = 1;
-const HEAL: u16 = 3;
+// Hechizos.dat ids (development characters get them on login).
+const DART: u16 = 1;
+const INVISIBILITY: u16 = 24;
 
 #[test]
 fn walking_into_an_exit_changes_map() {
@@ -54,19 +55,21 @@ fn mana_regenerates_with_game_time() {
     let mut bot = s.bot("Mago");
     let (x, y) = bot.pos();
     let b = s.data().balance.clone();
-    let heal = s.data().spell(HEAL).unwrap().mana;
-    assert!(bot.cast(HEAL, x, y));
+    bot.wait_until("stats", |b| b.mana() > 0);
+    let full = bot.mana();
+    let cost = bot.game.spell_by_id(INVISIBILITY).unwrap().mana;
+    assert!(bot.cast(INVISIBILITY, x, y));
     bot.sync();
-    assert_eq!(bot.mana(), b.start_mana - heal, "the cast spends mana");
+    assert_eq!(bot.mana(), full - cost, "the cast spends mana");
 
     // No real time passes: without advancing, nothing regenerates.
     bot.sync();
-    assert_eq!(bot.mana(), b.start_mana - heal);
+    assert_eq!(bot.mana(), full - cost);
 
     s.advance(1000);
-    bot.wait_until("regenera un segundo de mana", |bot| bot.mana() == (b.start_mana - heal + b.mana_regen).min(b.start_mana));
-    s.advance(60_000);
-    bot.wait_until("mana lleno", |bot| bot.mana() == b.start_mana);
+    bot.wait_until("regenera un segundo de mana", |bot| bot.mana() == (full - cost + b.mana_regen).min(full));
+    s.advance(200_000);
+    bot.wait_until("mana lleno", |bot| bot.mana() == full);
 }
 
 #[test]
@@ -84,7 +87,7 @@ fn killed_creature_respawns_after_its_time() {
         }
     });
     let mut bot = s.bot("Verdugo");
-    let range = s.data().spell(FIREBALL).unwrap().range;
+    let range = ao_rules::magic::VIEW_RANGE_Y;
     let me = bot.pos();
     let map = bot.game.map.as_ref().unwrap();
     let (nid, tx, ty) = bot
@@ -95,7 +98,7 @@ fn killed_creature_respawns_after_its_time() {
         .expect("a creature in range and sight");
     let exp0 = bot.game.stats.exp;
 
-    assert!(bot.cast(FIREBALL, tx, ty));
+    assert!(bot.cast(DART, tx, ty));
     bot.wait_until("la criatura muere", |b| b.ent(nid).is_none());
     bot.sync();
     assert!(bot.game.stats.exp > exp0, "killing gives experience");

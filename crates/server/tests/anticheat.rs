@@ -5,9 +5,10 @@ use ao_protocol::{Tone, C2S, PROTOCOL_VERSION, S2C};
 use ao_rules::{Dir, WALK_MS};
 use ao_testkit::TestServer;
 
-const FIREBALL: u16 = 1;
-const LIGHTNING: u16 = 2;
-const HEAL: u16 = 3;
+// Hechizos.dat ids (development characters get them on login).
+const DART: u16 = 1;
+const HEAL: u16 = 12;
+const INVISIBILITY: u16 = 24;
 
 fn corrections(m: &S2C) -> bool {
     matches!(m, S2C::Correct { .. })
@@ -114,7 +115,7 @@ fn oversized_and_garbage_frames_disconnect() {
 fn actions_before_login_are_kicked() {
     let s = TestServer::start();
     let mut bot = s.connect();
-    bot.cast_raw(LIGHTNING, 0, 0);
+    bot.cast_raw(DART, 0, 0);
     bot.wait_until("cierre por accion antes del login", |b| b.closed());
 }
 
@@ -136,15 +137,17 @@ fn illegal_spells_are_refused() {
     let (x, y) = bot.pos();
     let mana0 = bot.mana();
 
-    bot.cast_raw(FIREBALL, x + 30, y); // out of range
+    bot.cast_raw(DART, x + 30, y); // out of range
     bot.cast_raw(HEAL, x + 1, y + 1); // heal on an empty tile
     bot.sync();
     assert_eq!(bot.count(effects), 0, "no spell effect may happen");
     assert_eq!(bot.mana(), mana0, "mana must not be spent");
 
-    // Cooldown abuse: heal self twice in a row.
-    bot.cast_raw(HEAL, x, y);
-    bot.cast_raw(HEAL, x, y);
+    // Interval abuse: the same spell twice in a row (IntervaloLanzaHechizo). The heal
+    // above already started the interval (the VB timer runs even if nothing is hit).
+    s.advance(1300);
+    bot.cast_raw(INVISIBILITY, x, y);
+    bot.cast_raw(INVISIBILITY, x, y);
     bot.sync();
     assert_eq!(bot.count(effects), 1, "second cast inside the cooldown must be refused");
 
@@ -159,12 +162,13 @@ fn cooldown_ends_with_game_time() {
     let s = TestServer::start();
     let mut bot = s.bot("Patient");
     let (x, y) = bot.pos();
-    let cd = s.data().spell(HEAL).unwrap().cooldown_ms;
-    assert!(bot.cast(HEAL, x, y));
+    let cd = bot.game.spell_by_id(INVISIBILITY).unwrap().cooldown_ms;
+    assert!(bot.cast(INVISIBILITY, x, y));
     bot.sync();
-    assert!(!bot.cast(HEAL, x, y), "the client mirrors the cooldown and does not send");
-    s.advance(cd + 100);
-    assert!(bot.cast(HEAL, x, y), "after the cooldown the client casts again");
+    assert!(!bot.cast(INVISIBILITY, x, y), "the client mirrors the cooldown and does not send");
+    // Invisibility lasts up to Duration + 1 s: wait for it to end, then cast again.
+    s.advance(cd.max(17_000) + 100);
+    assert!(bot.cast(INVISIBILITY, x, y), "after the cooldown the client casts again");
     bot.sync();
     assert_eq!(bot.count(effects), 2);
     assert!(bot.kicked().is_none());
@@ -190,5 +194,5 @@ fn spell_book_comes_from_data_files() {
     let mut bot = s.connect();
     bot.send(&C2S::Login { name: "Reader".into(), version: PROTOCOL_VERSION });
     bot.wait_until("libro de hechizos", |b| !b.game.spells.is_empty());
-    assert!(bot.game.spells.iter().any(|s| s.id == FIREBALL && s.name == "Bola de fuego"));
+    assert!(bot.game.spells.iter().any(|s| s.id == DART && s.name == "Dardo Mágico"), "from Hechizos.dat");
 }

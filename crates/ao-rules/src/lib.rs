@@ -10,6 +10,7 @@ pub mod character;
 pub mod combat;
 pub mod creatures;
 pub mod items;
+pub mod magic;
 pub mod progression;
 pub mod spells;
 pub mod walk;
