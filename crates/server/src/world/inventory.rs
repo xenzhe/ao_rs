@@ -47,16 +47,77 @@ pub struct Inventory {
     /// Slots saved as equipped, loaded from the database: the inventory system re-equips
     /// them (deciding weapon/armor/... from obj.dat) when the player enters the world.
     pub pending_equipped: Vec<u8>,
+    /// Runtime only: when each obj.dat `CDType` can be used again (`CdTimes`).
+    pub cooldowns: std::collections::HashMap<i32, crate::clock::GameTime>,
 }
 
 impl Default for Inventory {
     fn default() -> Self {
-        Inventory { slots: vec![None; MAX_INVENTORY_SLOTS], equipped: Equipped::default(), gold: 0, pending_equipped: Vec::new() }
+        Inventory { slots: vec![None; MAX_INVENTORY_SLOTS], equipped: Equipped::default(), gold: 0, pending_equipped: Vec::new(), cooldowns: Default::default() }
     }
 }
 
 impl Inventory {
     pub fn get(&self, slot: u8) -> Option<InvItem> {
         self.slots.get((slot as usize).wrapping_sub(1)).copied().flatten()
+    }
+
+    /// Usable slots: 24, 42 with a backpack equipped (P1 contract). The official server
+    /// gives the extra slots by account tier instead (`get_num_inv_slots_from_tier`).
+    pub fn usable_slots(&self) -> u8 {
+        if self.equipped.backpack.is_some() { MAX_INVENTORY_SLOTS as u8 } else { BASE_INVENTORY_SLOTS as u8 }
+    }
+
+    pub fn cell_mut(&mut self, slot: u8) -> Option<&mut Option<InvItem>> {
+        self.slots.get_mut((slot as usize).wrapping_sub(1))
+    }
+}
+
+impl Equipped {
+    /// The equipment field for a role.
+    pub fn role_mut(&mut self, role: ao_rules::items::Role) -> &mut Option<u8> {
+        use ao_rules::items::Role::*;
+        match role {
+            Weapon => &mut self.weapon,
+            Armor => &mut self.armor,
+            Shield => &mut self.shield,
+            Helmet => &mut self.helmet,
+            Ammo => &mut self.ammo,
+            Tool => &mut self.tool,
+            Ship => &mut self.ship,
+            Saddle => &mut self.saddle,
+            Ring => &mut self.ring,
+            Amulet => &mut self.amulet,
+            Backpack => &mut self.backpack,
+        }
+    }
+
+    /// Every equipment field, to remap or clear slots (swaps, emptied stacks).
+    pub fn fields_mut(&mut self) -> [&mut Option<u8>; 11] {
+        [
+            &mut self.weapon,
+            &mut self.armor,
+            &mut self.shield,
+            &mut self.helmet,
+            &mut self.ammo,
+            &mut self.tool,
+            &mut self.ship,
+            &mut self.saddle,
+            &mut self.ring,
+            &mut self.amulet,
+            &mut self.backpack,
+        ]
+    }
+}
+
+/// Objects lying on one map's floor, one stack per tile (MapData().ObjInfo).
+#[derive(Clone, Debug, Default)]
+pub struct GroundItems {
+    pub tiles: std::collections::HashMap<(i32, i32), InvItem>,
+}
+
+impl GroundItems {
+    pub fn at(&self, x: i32, y: i32) -> Option<InvItem> {
+        self.tiles.get(&(x, y)).copied()
     }
 }

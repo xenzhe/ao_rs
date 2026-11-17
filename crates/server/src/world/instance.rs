@@ -10,11 +10,13 @@ pub struct MapInstance {
     pub npcs: HashMap<EntityId, Npc>,
     /// Players currently on this map (positions live in the player).
     pub players: HashSet<EntityId>,
+    /// Objects on the floor. OWNER: inventory system (P1, Opus C).
+    pub ground: super::inventory::GroundItems,
 }
 
 impl MapInstance {
     pub fn new(map: AoMap) -> Self {
-        MapInstance { map, npcs: HashMap::new(), players: HashSet::new() }
+        MapInstance { map, npcs: HashMap::new(), players: HashSet::new(), ground: Default::default() }
     }
 
     pub fn npc_at(&self, x: i32, y: i32) -> Option<EntityId> {
