@@ -17,7 +17,7 @@ pub struct EventState {
 impl EventState {
     pub fn apply(&mut self, msg: &EventS2C) {
         match msg {
-            EventS2C::State(v) => self.view = v.clone(),
+            EventS2C::State(v) => self.view = (**v).clone(),
             EventS2C::Auctions { lots } => self.lots = lots.clone(),
         }
         self.dirty = true;

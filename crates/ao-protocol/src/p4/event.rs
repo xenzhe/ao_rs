@@ -56,7 +56,7 @@ pub struct TournamentSpec {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EventS2C {
     /// Duels and tournament as this player sees them.
-    State(EventView),
+    State(Box<EventView>),
     /// Every open lot (sent on change to everyone, and on `Refresh`).
     Auctions { lots: Vec<AuctionLot> },
 }

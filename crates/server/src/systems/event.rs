@@ -362,7 +362,7 @@ impl World {
 
     pub(crate) fn send_event_state(&self, id: u32) {
         if self.player(id).is_some() {
-            self.send(id, &S2C::Event(EventS2C::State(self.event_view(id))));
+            self.send(id, &S2C::Event(EventS2C::State(Box::new(self.event_view(id)))));
         }
     }
 
@@ -426,7 +426,7 @@ impl World {
         }
         let players: Vec<String> = players.into_iter().map(|s| s.trim().to_string()).collect();
         let max_len = cfg.max_team * 2 - 1;
-        if players.is_empty() || players.len() > max_len || players.len() % 2 == 0 || players.iter().any(|n| n.is_empty() || n.len() > 30) {
+        if players.is_empty() || players.len() > max_len || players.len().is_multiple_of(2) || players.iter().any(|n| n.is_empty() || n.len() > 30) {
             return self.console(id, format!("Indica a tu rival (y compañeros): hasta {} vs {}.", cfg.max_team, cfg.max_team), Tone::Warn);
         }
         // NombreRepetidoEnReto
@@ -1372,9 +1372,8 @@ mod duel_tests {
         let mut t = world(4);
         t.w.duel_config();
         // Every room but one busy: fill the remaining with Pj1 vs Pj2, then Pj3 vs Pj4 waits.
-        let n = t.w.events.rooms.len();
-        for r in 1..n {
-            t.w.events.rooms[r] = Some(Duel { room: r, a: vec![], b: vec![], bet: 0, pot: 0, round: 1, wins_a: 0, wins_b: 0, fight_at: GameTime::ZERO, ends_at: GameTime(u64::MAX), forfeit: None });
+        for (r, slot) in t.w.events.rooms.iter_mut().enumerate().skip(1) {
+            *slot = Some(Duel { room: r, a: vec![], b: vec![], bet: 0, pot: 0, round: 1, wins_a: 0, wins_b: 0, fight_at: GameTime::ZERO, ends_at: GameTime(u64::MAX), forfeit: None });
         }
         t.propose(1, &[2]);
         t.accept(2, 1);
