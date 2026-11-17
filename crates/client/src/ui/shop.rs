@@ -14,7 +14,7 @@ use crate::ui::{Ui, WindowId};
 use client_core::p3::items::sale_value;
 use macroquad::prelude::*;
 
-const ROWS: usize = 5;
+const ROWS: usize = 4;
 
 /// What the merchant pays per unit of `obj` (0 = does not buy it).
 fn sale_unit(assets: &Assets, obj: u16) -> u64 {
@@ -76,12 +76,12 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
         draw_rectangle(icon.x, icon.y, icon.w, icon.h, SLOT);
         assets.draw_obj(it.obj, Rect::new(icon.x + 1.0, icon.y + 1.0, icon.w - 2.0, icon.h - 2.0));
         let price = format!("{} oro", fmt_gold(it.price as u64));
-        let pw = measure(&price, 17.0 * u).width;
+        let pw = measure(&price, 16.0 * u).width;
         let stock_s = format!("x{}", it.amount);
-        let sw = measure(&stock_s, 16.0 * u).width;
-        text_fit(&item_name(assets, it.obj), rr.x + 32.0 * u, rr.y + 18.0 * u, 17.0 * u, rr.w - 32.0 * u - pw - sw - 28.0 * u, TEXT);
-        text(&stock_s, rr.right() - pw - 14.0 * u - sw, rr.y + 18.0 * u, 16.0 * u, MUTED);
-        text(&price, rr.right() - pw - 4.0 * u, rr.y + 18.0 * u, 17.0 * u, if it.price > gold { BAD } else { GOLD_TEXT });
+        let sw = measure(&stock_s, 14.0 * u).width;
+        text_fit(&item_name(assets, it.obj), rr.x + 32.0 * u, rr.y + 18.0 * u, 16.0 * u, rr.w - 32.0 * u - pw - sw - 20.0 * u, TEXT);
+        text(&stock_s, rr.right() - pw - 10.0 * u - sw, rr.y + 18.0 * u, 14.0 * u, MUTED);
+        text(&price, rr.right() - pw - 4.0 * u, rr.y + 18.0 * u, 16.0 * u, if it.price > gold { BAD } else { GOLD_TEXT });
         if hover {
             hit = Some(Hit { from: WindowId::Shop, slot: *slot, obj: it.obj, amount: it.amount });
             if ui.drag.is_none() {
@@ -105,24 +105,23 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let by = list.bottom() + 4.0 * u;
     let sel_stock = shop.items.get(&sel).copied();
     let (b1, b2) = (btn_w("Comprar 1", u), btn_w("Comprar...", u));
-    let name_w = r.w - b1 - b2 - 12.0 * u;
     match sel_stock {
-        Some(it) => text_fit(&format!("{}: {} oro c/u", item_name(assets, it.obj), fmt_gold(it.price as u64)), r.x + 4.0 * u, by + 17.0 * u, 16.0 * u, name_w, TEXT),
-        None => text_fit("Elige algo de la lista", r.x + 4.0 * u, by + 17.0 * u, 16.0 * u, name_w, MUTED),
+        Some(it) => text_fit(&format!("{}: {} oro c/u", item_name(assets, it.obj), fmt_gold(it.price as u64)), r.x + 4.0 * u, by + 13.0 * u, 16.0 * u, r.w - 8.0 * u, TEXT),
+        None => text_fit("Elige algo de la lista", r.x + 4.0 * u, by + 13.0 * u, 16.0 * u, r.w - 8.0 * u, MUTED),
     }
     let can_buy = sel_stock.is_some() && game.shop_max_buy(sel) > 0;
-    let bm = Rect::new(r.right() - b2, by, b2, 24.0 * u);
+    let bm = Rect::new(r.right() - b2, by + 18.0 * u, b2, 24.0 * u);
     if ibtn(bm, "Comprar...", can_buy, act, u) {
         if let Some(it) = sel_stock {
             inv::start(game, assets, Op::Buy, Hit { from: WindowId::Shop, slot: sel, obj: it.obj, amount: it.amount }, w);
         }
     }
-    if ibtn(Rect::new(bm.x - 4.0 * u - b1, by, b1, 24.0 * u), "Comprar 1", can_buy, act, u) {
+    if ibtn(Rect::new(bm.x - 4.0 * u - b1, bm.y, b1, 24.0 * u), "Comprar 1", can_buy, act, u) {
         game.shop_buy(sel, 1);
     }
 
     // ---- inventory ----
-    let y2 = by + 32.0 * u;
+    let y2 = by + 48.0 * u;
     text("Tu inventario", r.x + 4.0 * u, y2 + 13.0 * u, 18.0 * u, GOLD_TEXT);
     let hint = "Paga un tercio del valor";
     text(hint, r.right() - 4.0 * u - measure(hint, 14.0 * u).width, y2 + 13.0 * u, 14.0 * u, MUTED);
@@ -142,23 +141,22 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let sy = io.y + grid.size().y + 4.0 * u;
     let sel_item = inventory.get(sel_i.wrapping_sub(1) as usize).copied().flatten();
     let (s1, s2) = (btn_w("Vender 1", u), btn_w("Vender...", u));
-    let name_w = r.w - s1 - s2 - 12.0 * u;
     let can_sell = sel_item.is_some_and(|i| !i.equipped && sale_unit(assets, i.obj) > 0);
     match sel_item {
         Some(it) => {
             let unit = sale_unit(assets, it.obj);
             let line = if unit > 0 { format!("{}: te pagan {} oro c/u", item_name(assets, it.obj), fmt_gold(unit)) } else { format!("{}: no lo compran", item_name(assets, it.obj)) };
-            text_fit(&line, r.x + 4.0 * u, sy + 17.0 * u, 16.0 * u, name_w, if can_sell { TEXT } else { MUTED });
+            text_fit(&line, r.x + 4.0 * u, sy + 13.0 * u, 16.0 * u, r.w - 8.0 * u, if can_sell { TEXT } else { MUTED });
         }
-        None => text_fit("Elige algo tuyo", r.x + 4.0 * u, sy + 17.0 * u, 16.0 * u, name_w, MUTED),
+        None => text_fit("Elige algo de tu inventario", r.x + 4.0 * u, sy + 13.0 * u, 16.0 * u, r.w - 8.0 * u, MUTED),
     }
-    let sm = Rect::new(r.right() - s2, sy, s2, 24.0 * u);
+    let sm = Rect::new(r.right() - s2, sy + 18.0 * u, s2, 24.0 * u);
     if ibtn(sm, "Vender...", can_sell, act, u) {
         if let Some(it) = sel_item {
             inv::start(game, assets, Op::Sell, Hit { from: WindowId::Inventory, slot: sel_i, obj: it.obj, amount: it.amount }, w);
         }
     }
-    if ibtn(Rect::new(sm.x - 4.0 * u - s1, sy, s1, 24.0 * u), "Vender 1", can_sell, act, u) {
+    if ibtn(Rect::new(sm.x - 4.0 * u - s1, sm.y, s1, 24.0 * u), "Vender 1", can_sell, act, u) {
         game.shop_sell(sel_i, 1);
     }
 

@@ -26,6 +26,24 @@ pub(crate) fn mouse() -> Vec2 {
 
 thread_local! {
     static DEMO_MOUSE: std::cell::Cell<Option<Vec2>> = const { std::cell::Cell::new(None) };
+    /// Scripted buttons while a demo drives the mouse: (left down, left pressed this frame,
+    /// right pressed this frame). `None`: the real mouse.
+    static DEMO_BTN: std::cell::Cell<Option<(bool, bool, bool)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Left button held (real, or scripted by the screenshot demo).
+pub(crate) fn lmb_down() -> bool {
+    DEMO_BTN.with(|b| b.get()).map_or_else(|| is_mouse_button_down(MouseButton::Left), |b| b.0)
+}
+
+/// Left button went down this frame.
+pub(crate) fn lmb_pressed() -> bool {
+    DEMO_BTN.with(|b| b.get()).map_or_else(|| is_mouse_button_pressed(MouseButton::Left), |b| b.1)
+}
+
+/// Right button went down this frame.
+pub(crate) fn rmb_pressed() -> bool {
+    DEMO_BTN.with(|b| b.get()).map_or_else(|| is_mouse_button_pressed(MouseButton::Right), |b| b.2)
 }
 
 /// Forces the mouse position seen by the item windows (screenshots only).
@@ -69,7 +87,7 @@ pub(crate) fn ibtn(r: Rect, label: &str, enabled: bool, act: bool, u: f32) -> bo
     let size = 16.0 * u;
     let d = measure(label, size);
     text(label, r.x + (r.w - d.width) / 2.0, r.y + r.h / 2.0 + d.height / 2.0, size, if !enabled { MUTED } else if hover { WHITE } else { TEXT });
-    hover && is_mouse_button_pressed(MouseButton::Left)
+    hover && lmb_pressed()
 }
 
 /// Width of a button for `label` at the standard size.
@@ -178,6 +196,8 @@ struct St {
     prompts: HashMap<WindowId, Prompt>,
     zones: HashMap<WindowId, (Rect, Vec<(Zone, Rect)>)>,
     scroll: HashMap<WindowId, usize>,
+    /// When each window last drew (a prompt or menu of a closed window is dropped).
+    last_draw: HashMap<WindowId, f64>,
 }
 
 thread_local! {
@@ -193,9 +213,11 @@ const MINE: [WindowId; 4] = [WindowId::Inventory, WindowId::Bank, WindowId::Shop
 /// Registers where the zones of window `w` are this frame (`content` is the rect `ui.window`
 /// gave: the frame around it is derived from it).
 pub(crate) fn register(w: WindowId, content: Rect, u: f32, zones: Vec<(Zone, Rect)>) {
-    let full = Rect::new(content.x - 12.0 * u, content.y - 38.0 * u, content.w + 24.0 * u, content.h + 58.0 * u);
+    let full = Rect::new(content.x - 12.0 * u, content.y - 38.0 * u, content.w + 24.0 * u, content.h + 50.0 * u);
+    let now = get_time();
     st(|s| {
         s.zones.insert(w, (full, zones));
+        s.last_draw.insert(w, now);
     });
 }
 
@@ -355,8 +377,8 @@ pub(crate) fn draw_grid(ui: &Ui, assets: &mut Assets, g: &Grid, o: Vec2, v: &Gri
 pub(crate) fn track(ui: &mut Ui, win: WindowId, act: bool, hovered: Option<Hit>) -> Option<Ev> {
     let u = ui.u;
     let m = mouse();
-    let down = is_mouse_button_down(MouseButton::Left);
-    if act && is_mouse_button_pressed(MouseButton::Left) {
+    let down = lmb_down();
+    if act && lmb_pressed() {
         if let Some(h) = hovered {
             st(|s| s.press = Some((h, win, m)));
         }
@@ -387,7 +409,7 @@ pub(crate) fn track(ui: &mut Ui, win: WindowId, act: bool, hovered: Option<Hit>)
             }
         }
     }
-    if act && is_mouse_button_pressed(MouseButton::Right) {
+    if act && rmb_pressed() {
         if let Some(h) = hovered {
             ev = Some(Ev::Right(h, m));
         }
@@ -672,11 +694,11 @@ pub(crate) fn menu_ui(ui: &mut Ui, game: &mut Game, assets: &Assets, win: Window
             draw_rectangle(rr.x, rr.y, rr.w, rr.h, Color::new(0.34, 0.23, 0.10, 1.0));
         }
         text(label, rr.x + 8.0 * u, rr.y + rr.h / 2.0 + 5.5 * u, 17.0 * u, if hover { WHITE } else { TEXT });
-        if hover && is_mouse_button_pressed(MouseButton::Left) && !menu.fresh {
+        if hover && lmb_pressed() && !menu.fresh {
             chosen = Some(*op);
         }
     }
-    let close = !menu.fresh && (is_key_pressed(KeyCode::Escape) || is_mouse_button_pressed(MouseButton::Right) || (is_mouse_button_pressed(MouseButton::Left) && !r.contains(m)));
+    let close = !menu.fresh && (is_key_pressed(KeyCode::Escape) || rmb_pressed() || (lmb_pressed() && !r.contains(m)));
     if let Some(op) = chosen {
         start(game, assets, op, menu.hit, win);
     } else if !close {
@@ -690,8 +712,10 @@ pub(crate) fn menu_ui(ui: &mut Ui, game: &mut Game, assets: &Assets, win: Window
 /// Every item window calls it first.
 pub(crate) fn begin(ui: &mut Ui, game: &mut Game, assets: &Assets) {
     demo_tick(ui, game, assets);
+    purge(ui);
     let Some(d) = ui.drag.clone() else { return };
-    if is_mouse_button_down(MouseButton::Left) {
+    // Spells and other windows share `Drag`: only settle what comes from the item windows.
+    if !is_item_drag(&d) || lmb_down() {
         return;
     }
     ui.drag = None;
@@ -706,6 +730,31 @@ pub(crate) fn begin(ui: &mut Ui, game: &mut Game, assets: &Assets) {
                 start(game, assets, Op::DropWorld, hit, src);
             }
         }
+    }
+}
+
+fn is_item_drag(d: &Drag) -> bool {
+    matches!(d.from, WindowId::Inventory | WindowId::Bank | WindowId::Shop)
+}
+
+/// Drops the quantity prompt and the menu of a window that is no longer open (the server
+/// closed it, the player walked away, the X) and gives back the keyboard they held.
+/// Called by every item window; also by `trade::draw_overlay` for the case that none is open.
+pub(crate) fn purge(ui: &mut Ui) {
+    let now = get_time();
+    let stale = |s: &St, w: WindowId| !ui.is_open(w) || now - s.last_draw.get(&w).copied().unwrap_or(-10.0) > 0.25;
+    let none_left = st(|s| {
+        let dead: Vec<WindowId> = s.prompts.keys().copied().filter(|w| stale(s, *w)).collect();
+        for w in dead {
+            s.prompts.remove(&w);
+        }
+        if s.menu.as_ref().is_some_and(|m| stale(s, m.win)) {
+            s.menu = None;
+        }
+        s.prompts.is_empty()
+    });
+    if none_left && ui.focus.as_deref().is_some_and(|f| f.starts_with("qty_")) {
+        ui.focus = None;
     }
 }
 
@@ -740,7 +789,10 @@ fn drop_on(game: &mut Game, assets: &Assets, hit: Hit, src: WindowId, w: WindowI
 /// Icon of what is being dragged, under the cursor (drawn last, over every window).
 pub fn draw_drag(ui: &mut Ui, assets: &mut Assets, d: &crate::ui::Drag) {
     let u = ui.u;
-    if !is_mouse_button_down(MouseButton::Left) {
+    if !is_item_drag(d) {
+        return;
+    }
+    if !lmb_down() {
         // Nobody settled it (every item window closed meanwhile): cancel.
         ui.drag = None;
         return;
@@ -795,14 +847,14 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
             Some((slot, it)) => {
                 if hover {
                     tip = Some(item_tip(game, assets, it.obj, 1, true, &["Clic para quitarlo".to_string()]));
-                    if is_mouse_button_pressed(MouseButton::Left) {
+                    if lmb_pressed() {
                         game.inv_equip(slot);
                     }
                 }
             }
             None => {
-                let label = cat.label();
-                let size = 13.0 * u;
+                let label = cat.short();
+                let size = 12.0 * u;
                 let d = measure(label, size);
                 text(label, cr.x + (cr.w - d.width) / 2.0, cr.y + cr.h / 2.0 + 4.0 * u, size, Color::new(0.45, 0.40, 0.33, 1.0));
                 if hover {
@@ -832,8 +884,15 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let gy = go.y + grid.size().y + 8.0 * u;
     text(&format!("Oro: {}", fmt_gold(game.local.gold as u64)), r.x + 4.0 * u, gy + 18.0 * u, 19.0 * u, GOLD_TEXT);
     let bw = btn_w("Tirar oro", u);
-    if ibtn(Rect::new(r.right() - bw, gy, bw, 26.0 * u), "Tirar oro", game.local.gold > 0, act, u) {
+    let gb = Rect::new(r.right() - bw, gy, bw, 26.0 * u);
+    if ibtn(gb, "Tirar oro", game.local.gold > 0, act, u) {
         open_prompt(w, Pending::DropGold, "Tirar oro al suelo", game.local.gold, game.local.gold.min(1), None);
+    }
+    // What lies on the tile the character stands on (an object dropped, gold thrown).
+    let pw = btn_w("Recoger", u);
+    let here = game.me().is_some_and(|me| game.local.ground.contains_key(&(me.x, me.y)));
+    if ibtn(Rect::new(gb.x - 4.0 * u - pw, gy, pw, 26.0 * u), "Recoger", here, act, u) {
+        game.inv_pick_up();
     }
 
     // ---- trade: invitation, or the players close enough to ask ----
@@ -871,6 +930,7 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
         return;
     }
     DONE_AT.with(|d| d.set(now));
+    run_script(now);
     let t0 = T0.with(|t| {
         if t.get().is_none() {
             t.set(Some(now));
@@ -936,9 +996,6 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
         return;
     }
     let n = gifts.len() as u32;
-    if std::env::var("AO_DEBUG").is_ok() {
-        eprintln!("demo t={t:.1} step={step} gifts={n} gap={gap:.1}");
-    }
     if step > n && mode != "inv" && [WindowId::Bank, WindowId::Shop, WindowId::Trade].iter().any(|w| ui.is_open(*w)) {
         ui.close(WindowId::Inventory);
     }
@@ -1027,7 +1084,70 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
             }
             advance();
         }
+        s if s == n + 6 && gap > 0.5 => {
+            // Scripted mouse through the real input path: `swap` (drag slot to slot), `world`
+            // (drag to the world), `dbl` (double click), `menu` (right click, pick an entry).
+            if let Ok(kind) = std::env::var("AO_DEMO_INPUT") {
+                let c = |slot: u8| cell_center(WindowId::Inventory, slot);
+                let (u, t) = (ui.u, now);
+                let script: Vec<(f64, Act)> = match (kind.as_str(), c(5)) {
+                    ("swap", Some(a)) => match c(12) {
+                        Some(b) => vec![(t, Act::Move(a)), (t + 0.1, Act::Down), (t + 0.2, Act::Move((a + b) / 2.0)), (t + 0.3, Act::Move(b)), (t + 0.5, Act::Up)],
+                        None => vec![],
+                    },
+                    ("world", Some(a)) => {
+                        let wr = Layout::compute(false).world;
+                        let w = vec2(wr.x + 70.0 * u, wr.y + wr.h / 2.0);
+                        vec![(t, Act::Move(a)), (t + 0.1, Act::Down), (t + 0.2, Act::Move((a + w) / 2.0)), (t + 0.3, Act::Move(w)), (t + 0.5, Act::Up)]
+                    }
+                    ("dbl", Some(a)) => vec![(t, Act::Move(a)), (t + 0.1, Act::Down), (t + 0.15, Act::Up), (t + 0.3, Act::Down), (t + 0.35, Act::Up)],
+                    ("menu", Some(a)) => vec![(t, Act::Move(a)), (t + 0.1, Act::RDown), (t + 0.4, Act::Move(a + vec2(30.0, 43.0) * u)), (t + 0.6, Act::Down), (t + 0.65, Act::Up)],
+                    _ => vec![],
+                };
+                SCRIPT.with(|s| *s.borrow_mut() = script);
+            }
+            advance();
+        }
         _ => {}
     }
-    let _ = ui;
+}
+
+#[derive(Clone, Copy)]
+enum Act {
+    Move(Vec2),
+    Down,
+    Up,
+    RDown,
+}
+
+thread_local! {
+    static SCRIPT: RefCell<Vec<(f64, Act)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Plays the scripted mouse actions that are due, once per frame.
+fn run_script(now: f64) {
+    let running = DEMO_BTN.with(|b| b.get()).is_some();
+    if !running && SCRIPT.with(|s| s.borrow().is_empty()) {
+        return;
+    }
+    let mut btn = DEMO_BTN.with(|b| b.get()).unwrap_or((false, false, false));
+    (btn.1, btn.2) = (false, false);
+    SCRIPT.with(|s| {
+        let mut s = s.borrow_mut();
+        while s.first().is_some_and(|(t, _)| *t <= now) {
+            match s.remove(0).1 {
+                Act::Move(p) => set_demo_mouse(Some(p)),
+                Act::Down => (btn.0, btn.1) = (true, true),
+                Act::Up => btn.0 = false,
+                Act::RDown => btn.2 = true,
+            }
+        }
+    });
+    let more = SCRIPT.with(|s| !s.borrow().is_empty());
+    DEMO_BTN.with(|b| b.set((more || btn.0).then_some(btn)));
+}
+
+/// Centre of inventory slot `slot` in window `w` (from the zones it drew last frame).
+fn cell_center(w: WindowId, slot: u8) -> Option<Vec2> {
+    st(|s| s.zones.get(&w).and_then(|(_, z)| z.iter().find(|(zz, _)| *zz == Zone::InvCell(slot)).map(|(_, r)| vec2(r.x + r.w / 2.0, r.y + r.h / 2.0))))
 }

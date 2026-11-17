@@ -71,10 +71,6 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let sel_inv_item = inventory.get(sel_i.wrapping_sub(1) as usize).copied().flatten();
     let (c1, c2, c3) = (btn_w("Guardar", u), btn_w("Guardar oro", u), btn_w("Cerrar", u));
     let can_store = sel_inv_item.is_some_and(|i| !i.equipped);
-    let name_w = r.w - c1 - c2 - c3 - 16.0 * u;
-    if let Some(it) = sel_inv_item.filter(|_| name_w > 50.0 * u) {
-        text_fit(&item_name(assets, it.obj), r.x + 4.0 * u, ay2 + 17.0 * u, 16.0 * u, name_w, TEXT);
-    }
     let close = Rect::new(r.right() - c3, ay2, c3, 24.0 * u);
     if ibtn(close, "Cerrar", true, act, u) {
         game.bank_close();

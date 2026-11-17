@@ -34,6 +34,7 @@ fn overlay_wired() -> bool {
 #[allow(dead_code)] // until the integrator wires it into ui::frame (see the P3 report)
 pub fn draw_overlay(ui: &mut Ui, game: &mut Game) {
     OVERLAY_AT.with(|t| t.set(get_time()));
+    inv::purge(ui);
     if game.local.social.trade.invited_by.is_none() || game.local.social.trade.player.is_some() {
         return;
     }

@@ -65,6 +65,15 @@ impl EquipCat {
             EquipCat::Other => "Otro",
         }
     }
+
+    /// Caption short enough for an empty slot of the equipment strip.
+    pub fn short(self) -> &'static str {
+        match self {
+            EquipCat::Armor => "Cuerpo",
+            EquipCat::Amulet => "Collar",
+            c => c.label(),
+        }
+    }
 }
 
 /// Equipment strip category of an object type (None: it is not equipment).
