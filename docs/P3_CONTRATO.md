@@ -47,7 +47,11 @@ es del integrador: si lo necesitas, créalo en tu archivo con nombre claro y an�
 
 1. **Lógica** sin ventana: tus acciones en `client-core/src/p3/<tuyo>.rs` con tests de unidad y,
    si hablan con el servidor, con bots de `ao-testkit` (`crates/server/tests/p3_<tuyo>.rs`).
-2. **Imagen**: capturas del propio juego (nunca del escritorio). Lanza un servidor en tu puerto
+2. **Imagen**: capturas del propio juego (nunca del escritorio), **siempre invisibles**: el
+   cliente se lanza con `powershell -File scripts\captura_invisible.ps1 -Exe <ruta\client.exe>`
+   (escritorio de Windows oculto: no aparece en pantalla ni roba el foco; hereda las variables
+   `AO_*`). Prohibido ejecutar el cliente directamente: el usuario puede estar jugando.
+   Lanza un servidor en tu puerto
    y el cliente con captura automática:
    - servidor: `AO_BIND=127.0.0.1:<puerto> AO_DB=:memory: target/debug/server.exe` (en segundo plano)
    - cliente: `AO_SERVER=127.0.0.1:<puerto> AO_SHOT=<ruta>.png AO_SHOT_AT=3 AO_OPEN=inventory,bank target/debug/client.exe`

@@ -92,6 +92,10 @@ impl WindowId {
 
     /// Size of the window in UI units (multiplied by `u`), content included.
     pub fn default_size(self) -> Vec2 {
+        // Item windows decide their own size (inventory.rs).
+        if let Some(s) = super::inventory::wanted_size(self) {
+            return s;
+        }
         match self {
             WindowId::Inventory | WindowId::Bank | WindowId::Shop => vec2(330.0, 420.0),
             WindowId::Trade => vec2(560.0, 420.0),
