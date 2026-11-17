@@ -5,6 +5,7 @@
 //! Env vars for screenshots (read here, so `devtools.rs` stays untouched):
 //! - `AO_FXSELF=<fx>`: plays that FXs.ini effect on the own character forever (e.g. 16)
 //! - `AO_EQUIP=<weapon>,<shield>,<helmet>`: shows that equipment on the own character
+//! - `AO_STATUS=<bits>`: `ao_protocol::status` bits on the own character (e.g. 2 = paralysed)
 //! - `AO_WEATHER=rain|snow|fog|storm|clear`: forces the weather
 use crate::assets::Assets;
 use crate::audio::Channel;
@@ -48,7 +49,7 @@ pub fn poll(game: &mut Game, assets: &mut Assets, fx: &mut Fx) {
                     if std::env::var("AO_DEBUG").is_ok() {
                         eprintln!("map {map} '{}' textures={files} particles={}", m.name, m.particles.len());
                     }
-                    fx.load_map(m);
+                    fx.load_map(m, &assets.db);
                     let streams: Vec<usize> = fx.map_groups.iter().map(|g| g.group.stream).collect();
                     for s in streams {
                         fx.resolve_stream(assets, s);
@@ -140,5 +141,6 @@ pub fn poll(game: &mut Game, assets: &mut Assets, fx: &mut Fx) {
             f.additive = Some(fx.additive.clone());
         }
         f.equip_override = equip_override;
+        f.status_override = env("AO_STATUS").and_then(|s| s.parse().ok());
     });
 }

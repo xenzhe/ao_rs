@@ -34,6 +34,8 @@ pub struct CharFrame {
     pub additive: Option<Material>,
     /// `AO_EQUIP=weapon,shield,helmet`: local override for screenshots (own character).
     pub equip_override: Option<(u16, u16, u16)>,
+    /// `AO_STATUS=<bits>`: local status override for screenshots (own character).
+    pub status_override: Option<u32>,
 }
 
 thread_local! {
@@ -106,12 +108,13 @@ pub fn draw_character(assets: &mut Assets, e: &Ent, origin: Vec2, t_ms: f32) {
 fn draw_with(assets: &mut Assets, e: &Ent, origin: Vec2, t_ms: f32, frame: &CharFrame) {
     let id = frame.ids.get(&key(e)).copied();
     let me = id.is_some_and(|i| i == frame.my_id);
-    let Some(tint) = tint_for(e.status, me) else { return };
+    let flags = if me { frame.status_override.unwrap_or(e.status) } else { e.status };
+    let Some(tint) = tint_for(flags, me) else { return };
     let tl = v(e.tile_tl()) - origin;
     let heading = e.dir.heading();
     let Some(body) = assets.db.bodies.get(&e.body).cloned() else { return };
-    let dead = e.status & status::DEAD != 0;
-    let frozen = e.status & (status::PARALYZED | status::IMMOBILIZED) != 0;
+    let dead = flags & status::DEAD != 0;
+    let frozen = flags &(status::PARALYZED | status::IMMOBILIZED) != 0;
     if !dead {
         draw_ellipse(tl.x + 16.0, tl.y + 29.0, 11.0, 4.0, 0.0, Color::new(0.0, 0.0, 0.0, 0.3 * tint.a));
     }

@@ -54,8 +54,8 @@ const COMPOSED_MEDITATIONS: [(u16, u16); 15] = [(122, 126), (123, 130), (124, 13
 
 /// Intro + loop FX for a meditation. The server sends the AO20 server ids of
 /// Meditaciones.dat (153..=172 by level, odd = citizen, even = criminal), which the
-/// client's fxs.ind (150 FX) does not have: they map to the composed meditations in
-/// level order, as the official client shows them.
+/// client's fxs.ind (150 FX) does not have. Our fallback (not official behaviour): map
+/// them to the official composed meditations in level order.
 pub fn meditation_clips(fx: u16) -> Option<(u16, u16)> {
     if let Some(c) = COMPOSED_MEDITATIONS.iter().find(|c| c.0 == fx) {
         return Some(*c);
@@ -626,7 +626,8 @@ impl FxCues {
                     self.my_tile = None;
                     out.push(Cue::Gone { id: u32::MAX });
                 }
-                S2C::Moved { id, x, y, .. } if *id != game.my_id => {
+                // Only a real step (state.rs also uses Moved for turns and snaps).
+                S2C::Moved { id, x, y, .. } if *id != game.my_id && game.ents.get(id).is_some_and(|e| e.t == 0.0 && (e.px, e.py) != (e.x, e.y)) => {
                     let s = self.terrain_step(game, *x, *y, files);
                     out.push(Cue::Sound { id: s, at: Some((*x, *y)) });
                 }
@@ -680,6 +681,35 @@ mod tests {
             let all = load_fxs(&r);
             assert!(all.len() > 100, "FXs.ini: {}", all.len());
         }
+    }
+
+    /// Data audit: spell FX of Hechizos.dat missing from FXs.ini, and map music ids
+    /// without an `ost_N.ogg` (printed with `--nocapture`).
+    #[test]
+    fn official_data_coverage() {
+        let Some(r) = root() else { return };
+        let fxs = load_fxs(&r);
+        let spells = ao_formats::dat::spells::load(&r).unwrap().data;
+        let mut missing: Vec<i32> = spells.iter().map(|(_, s)| s.fx).filter(|f| *f > 0 && !fxs.contains_key(&(*f as u16))).collect();
+        missing.sort();
+        missing.dedup();
+        let mut no_ost = std::collections::BTreeMap::new();
+        for n in 1..=1000u16 {
+            if let Some(m) = map_music(&r, n).filter(|m| *m > 0) {
+                if !r.join("OGG").join(format!("ost_{m}.ogg")).exists() {
+                    no_ost.entry(m).or_insert_with(Vec::new).push(n);
+                }
+            }
+        }
+        if std::env::var("AO_DUMP_STREAMS").is_ok() {
+            let m = ao_formats::AoMap::load(&r, 1).unwrap();
+            for (x, y, s) in m.particles.iter().filter(|p| (38..=48).contains(&p.0) && (55..=64).contains(&p.1)) {
+                eprintln!("p ({x},{y}) s={s} trig={}", m.triggers[ao_formats::csm::tile(*x, *y)]);
+            }
+        }
+        eprintln!("spell fx sin FXs.ini: {missing:?}");
+        eprintln!("musica sin ost: {:?}", no_ost.iter().map(|(m, v)| (m, v.len())).collect::<Vec<_>>());
+        assert!(missing.len() < 10, "{missing:?}");
     }
 
     #[test]

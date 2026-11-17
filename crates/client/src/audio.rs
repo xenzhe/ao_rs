@@ -162,7 +162,13 @@ impl Audio {
         if let Some(s) = self.effects.get(&id) {
             return s.clone();
         }
-        let s = effect_paths(&self.root, id).iter().find_map(|p| std::fs::read(p).ok().and_then(|b| load_now(&b)));
+        // Ogg goes through lewton first (errors, never panics): release builds use
+        // `panic = "abort"`, so the mixer's unwrapping decoder only ever sees clean WAV.
+        let s = effect_paths(&self.root, id).iter().find_map(|p| {
+            let b = std::fs::read(p).ok()?;
+            let b = if b.starts_with(b"OggS") { ogg_to_wav(b)? } else { b };
+            load_now(&b)
+        });
         self.effects.insert(id, s.clone());
         s
     }

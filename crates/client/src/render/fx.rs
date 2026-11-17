@@ -117,6 +117,15 @@ pub struct PlacedGroup {
     pub group: ParticleGroup,
     /// Anchor in world pixels (`ScreenX * 32 + 15` of the official map loop).
     pub at: Vec2,
+    /// Under a roof: hidden (with its light) unless the player is indoors too, as the
+    /// official tile loop draws roofs over them.
+    pub roofed: bool,
+}
+
+impl PlacedGroup {
+    fn visible(&self, indoor: bool) -> bool {
+        !self.roofed || indoor
+    }
 }
 
 pub struct Fx {
@@ -398,6 +407,9 @@ impl Fx {
         // Additive map streams light their surroundings with their own colour.
         if let Some(o) = &self.official {
             for g in &self.map_groups {
+                if !g.visible(self.weather.indoor) {
+                    continue;
+                }
                 let Some(def) = o.streams.get(g.group.stream - 1).filter(|d| d.additive) else { continue };
                 let c = stream_color(def);
                 out.push((g.at, 80.0, Color::new(c.r, c.g, c.b, 0.55)));
@@ -405,6 +417,28 @@ impl Fx {
         }
         out
     }
+}
+
+/// Whether a world pixel is covered by a roof sprite (layer 4). The official client
+/// renders map particles before layer 4, so roofs hide them; here they are drawn after
+/// the world, so a group under a roof is hidden instead (shown when the player is
+/// indoors and roofs fade).
+fn under_layer4(db: &ao_formats::GraphicsDb, map: &AoMap, p: Vec2) -> bool {
+    let (tx, ty) = ((p.x / 32.0) as i32 + 1, (p.y / 32.0) as i32 + 1);
+    for y in ty..=ty + 8 {
+        for x in tx - 6..=tx + 6 {
+            if !ao_formats::csm::on_map(x, y) {
+                continue;
+            }
+            let g = map.layers[3][ao_formats::csm::tile(x, y)];
+            let Some(gr) = (g > 0).then(|| db.frame(g, 0.0)).flatten() else { continue };
+            let (ax, ay) = anchor(gr, (x - 1) as f32 * 32.0, (y - 1) as f32 * 32.0, true);
+            if Rect::new(ax, ay, gr.w, gr.h).contains(p) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Average corner colour of a stream (for its light).
@@ -463,7 +497,7 @@ impl Fx {
     }
 
     /// Places the map's own particle streams (`.csm` particles) and drops the old ones.
-    pub fn load_map(&mut self, map: &AoMap) {
+    pub fn load_map(&mut self, map: &AoMap, db: &ao_formats::GraphicsDb) {
         self.map_groups.clear();
         self.char_fx.clear();
         let Some(o) = &self.official else { return };
@@ -471,7 +505,8 @@ impl Fx {
             let s = *s as usize;
             let Some(def) = (s >= 1).then(|| o.streams.get(s - 1)).flatten() else { continue };
             let at = vec2((x - 1) as f32 * 32.0 + 15.0, (y - 1) as f32 * 32.0 + 15.0);
-            self.map_groups.push(PlacedGroup { group: ParticleGroup::new(s, def, -1, 0x9E37_79B9 ^ (i as u32 * 7919 + 1)), at });
+            let roofed = under_layer4(db, map, at);
+            self.map_groups.push(PlacedGroup { group: ParticleGroup::new(s, def, -1, 0x9E37_79B9 ^ (i as u32 * 7919 + 1)), at, roofed });
         }
     }
 
@@ -539,6 +574,9 @@ impl Fx {
         for g in &self.map_groups {
             let Some(def) = o.streams.get(g.group.stream - 1) else { continue };
             if def.additive != additive {
+                continue;
+            }
+            if !g.visible(self.weather.indoor) {
                 continue;
             }
             let at = g.at - off;
