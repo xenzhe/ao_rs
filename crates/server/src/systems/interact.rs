@@ -41,6 +41,8 @@ impl World {
         let (npos, kind) = ((n.x, n.y), n.kind);
         let Some(d) = ao.npcs.get(n.def as u32) else { return };
         let dist = distancia((px, py), npos);
+        // LookatTile updates "visit this NPC" quest counters for any NPC clicked.
+        self.quest_on_npc_target(id, nid);
 
         // LookatTile: the description over its head.
         if d.description.chars().count() > 1 {
