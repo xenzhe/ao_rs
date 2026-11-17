@@ -34,8 +34,7 @@ pub struct Settings {
 impl Settings {
     /// Repository defaults: used by tests and when no config file exists.
     pub fn defaults() -> Settings {
-        let mut config = ServerConfig::default();
-        config.database = ":memory:".into();
+        let config = ServerConfig { database: ":memory:".into(), ..ServerConfig::default() };
         let recursos = config.recursos_path();
         Settings { config, data: GameData::defaults(), recursos }
     }

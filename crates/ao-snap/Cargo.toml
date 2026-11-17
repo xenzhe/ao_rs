@@ -1,0 +1,9 @@
+[package]
+name = "ao-snap"
+version = "0.1.0"
+edition = "2021"
+description = "Headless AO20 screenshots: a CPU compositor for maps and characters, with golden-image comparison."
+
+[dependencies]
+ao-formats.workspace = true
+image.workspace = true
