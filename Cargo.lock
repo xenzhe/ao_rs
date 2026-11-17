@@ -703,6 +703,7 @@ dependencies = [
  "ao-rules",
  "ao-testkit",
  "argon2",
+ "client-core",
  "rand_core",
  "rusqlite",
  "serde",
