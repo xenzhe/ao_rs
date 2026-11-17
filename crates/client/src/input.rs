@@ -15,6 +15,18 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
             renderer.pixel_perfect = !renderer.pixel_perfect;
         }
         // Keys 1-9 arm spells in the HUD (player-assigned, config/spellkeys.ini).
+        // Ctrl: melee attack on the tile in front (AO), at the server's attack pace while held.
+        if is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl) {
+            thread_local! {
+                static LAST: std::cell::Cell<f64> = const { std::cell::Cell::new(-10.0) };
+            }
+            let interval = ao_rules::combat::ATTACK_INTERVAL_MS as f64 / 1000.0;
+            if now - LAST.get() >= interval && game.me().is_some() {
+                LAST.set(now);
+                let seq = game.next_seq();
+                game.send(&ao_protocol::C2S::Melee { seq });
+            }
+        }
         if is_key_pressed(KeyCode::Escape) {
             game.casting = false;
             // Esc cancels a pending work target, or stops the running work.

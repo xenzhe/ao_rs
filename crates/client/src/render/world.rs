@@ -8,7 +8,7 @@
 use super::layout::TILE;
 use crate::assets::Assets;
 use crate::game::{Ent, Game};
-use ao_formats::csm::{is_roof_trigger, tile, MAP_SIZE};
+use ao_formats::csm::{tile, MAP_SIZE};
 use ao_formats::AoMap;
 use ao_rules::{VIEW_TILES_H, VIEW_TILES_W};
 use client_core::p3::world::ContinuousWorld;
@@ -140,7 +140,7 @@ pub fn draw_world(game: &Game, assets: &mut Assets, fades: &mut WorldFades, cw: 
             if roof != 0 {
                 let a = fades.roofs.entry(roof).or_insert(1.0);
                 if updated.insert(roof) {
-                    let target = if is_roof_trigger(my_trigger) && my_trigger == roof { 0.0 } else { 1.0 };
+                    let target = if map.is_roof(my_trigger) && my_trigger == roof { 0.0 } else { 1.0 };
                     *a += (target - *a) * (dt / 0.25).min(1.0);
                 }
                 alpha = *a;

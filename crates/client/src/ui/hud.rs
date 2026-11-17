@@ -103,16 +103,66 @@ pub fn bmp_texture(path: &Path, filter: FilterMode) -> Option<Texture2D> {
     tex
 }
 
-/// Minimap texture of the current map: the official image, or one generated from the map.
-pub fn minimap_texture(game: &Game) -> Option<Texture2D> {
+/// Pixels per tile of the generated minimap (100 tiles -> 800 px: crisp at any HUD size).
+const MINIMAP_TILE_PX: f32 = 8.0;
+
+/// Minimap texture of the current map, rendered once from the map's own layers (floor,
+/// overlays, objects and roofs at 1/4 scale). The official 100x100 image (one pixel per
+/// tile) looked blurry/pixelated when zoomed; it stays as the fallback.
+pub fn minimap_texture(game: &Game, assets: &mut Assets) -> Option<Texture2D> {
     let map = game.map.as_ref()?;
     if let Some(t) = SHARED.with(|s| s.borrow().minimaps.get(&map.number).cloned()) {
         return t;
     }
-    let img = logic::load_minimap(&game.recursos, map.number).unwrap_or_else(|| logic::fallback_minimap(map));
-    let tex = Some(to_texture(&img, FilterMode::Linear));
+    let tex = Some(render_minimap(map, assets)).or_else(|| {
+        let img = logic::load_minimap(&game.recursos, map.number).unwrap_or_else(|| logic::fallback_minimap(map));
+        Some(to_texture(&img, FilterMode::Linear))
+    });
     SHARED.with(|s| s.borrow_mut().minimaps.insert(map.number, tex.clone()));
     tex
+}
+
+fn render_minimap(map: &ao_formats::AoMap, assets: &mut Assets) -> Texture2D {
+    // Built on the CPU from the tiles' real pixels (8 px per tile), in world order with the
+    // same anchoring as the world view; a GPU render target mid-frame came out black.
+    const DOWN: i32 = 4;
+    let n = ao_formats::csm::MAP_SIZE;
+    let side = (n as f32 * MINIMAP_TILE_PX) as i32;
+    let mut out = Image::gen_image_color(side as u16, side as u16, Color::new(0.05, 0.06, 0.04, 1.0));
+    let mut files: HashMap<u32, Option<Image>> = HashMap::new();
+    let dir = assets.root.join("Graficos");
+    for l in 0..ao_formats::csm::LAYERS {
+        for y in 1..=n {
+            for x in 1..=n {
+                let g = map.layer(l, x, y);
+                if g == 0 {
+                    continue;
+                }
+                let Some(fr) = assets.db.frame(g, 0.0).cloned() else { continue };
+                let img = files.entry(fr.file).or_insert_with(|| ["png", "PNG"].iter().find_map(|ext| std::fs::read(dir.join(format!("{}.{ext}", fr.file))).ok()).and_then(|b| Image::from_file_with_format(&b, None).ok()));
+                let Some(img) = img.as_ref() else { continue };
+                let (wx, wy) = ao_formats::graphics::anchor(&fr, (x - 1) as f32 * 32.0, (y - 1) as f32 * 32.0, l > 0);
+                let (dx0, dy0) = ((wx as i32).div_euclid(DOWN), (wy as i32).div_euclid(DOWN));
+                let (iw, ih) = (img.width() as i32, img.height() as i32);
+                for dy in 0..((fr.h as i32) / DOWN).max(1) {
+                    for dx in 0..((fr.w as i32) / DOWN).max(1) {
+                        let (ox, oy) = (dx0 + dx, dy0 + dy);
+                        let (sx, sy) = (fr.sx as i32 + dx * DOWN + DOWN / 2, fr.sy as i32 + dy * DOWN + DOWN / 2);
+                        if ox < 0 || oy < 0 || ox >= side || oy >= side || sx >= iw || sy >= ih {
+                            continue;
+                        }
+                        let c = img.get_pixel(sx as u32, sy as u32);
+                        if c.a > 0.5 {
+                            out.set_pixel(ox as u32, oy as u32, Color::new(c.r, c.g, c.b, 1.0));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let t = Texture2D::from_image(&out);
+    t.set_filter(FilterMode::Linear);
+    t
 }
 
 /// World maps grid and map names.
@@ -630,7 +680,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, hou
         window_icons(ui, game, &deck, lay, &mut tip);
     }
     if on("map") {
-        minimap(ui, game, lay, hour, pixel_perfect, &mut tip);
+        minimap(ui, game, assets, lay, hour, pixel_perfect, &mut tip);
     }
     tooltip(&tip, lay.u);
     if let Some(t0) = t0 {
@@ -1255,7 +1305,8 @@ fn window_icons(ui: &mut Ui, game: &Game, d: &Deck, lay: &Layout, tip: &mut Vec<
 /// Tiles of the map shown across the minimap's diameter.
 const MINIMAP_SPAN: f32 = 60.0;
 
-fn minimap(ui: &mut Ui, game: &mut Game, lay: &Layout, hour: f32, pixel_perfect: bool, tip: &mut Vec<String>) {
+#[allow(clippy::too_many_arguments)]
+fn minimap(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, hour: f32, pixel_perfect: bool, tip: &mut Vec<String>) {
     let u = lay.u;
     let p = lay.panel;
     let r = (p.w / 2.0 - 10.0 * u).round();
@@ -1269,7 +1320,7 @@ fn minimap(ui: &mut Ui, game: &mut Game, lay: &Layout, hour: f32, pixel_perfect:
     let to = |x: f32, y: f32| c + (vec2(x, y) - center) / MINIMAP_SPAN * 2.0 * r;
     glow(c + vec2(0.0, 4.0 * u), r * 1.3, Color::new(0.0, 0.0, 0.0, 0.6));
     disc(c, r, Color::new(0.02, 0.02, 0.02, 1.0));
-    if let Some(t) = minimap_texture(game) {
+    if let Some(t) = minimap_texture(game, assets) {
         // Textured disc: UVs of the map region.
         let k = sides(r) as u16;
         let uv = |q: Vec2| ((q - c) / (2.0 * r) * MINIMAP_SPAN + center) / n;

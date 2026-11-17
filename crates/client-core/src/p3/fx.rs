@@ -500,7 +500,7 @@ pub fn under_roof(game: &Game, x: i32, y: i32) -> bool {
     if !ao_formats::csm::on_map(x, y) {
         return false;
     }
-    m.triggers.get(ao_formats::csm::tile(x, y)).is_some_and(|t| ao_formats::csm::is_roof_trigger(*t))
+    m.triggers.get(ao_formats::csm::tile(x, y)).is_some_and(|t| m.is_roof(*t))
 }
 
 // ---------------------------------------------------------------- sound

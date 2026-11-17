@@ -70,6 +70,25 @@ pub struct AoMap {
     exit_at: Vec<i32>,
     /// Bytes left after the last section (ignored, like the VB6 loaders do).
     pub trailing: usize,
+    /// Trigger values that mark the inside of a roofed building on this map. The public
+    /// AO20 maps use per-building ids (20-59) that the old client constant (>= 60) misses;
+    /// a trigger counts when most of its tiles are under a layer-5 roof.
+    pub roof_triggers: Vec<u16>,
+}
+
+/// Triggers whose tiles are mostly (≥ 60 %, at least 4) under a layer-5 roof.
+fn roof_triggers_of(triggers: &[u16], roofs: &[u32]) -> Vec<u16> {
+    let mut stats: std::collections::BTreeMap<u16, (usize, usize)> = std::collections::BTreeMap::new();
+    for (t, r) in triggers.iter().zip(roofs) {
+        if *t != 0 {
+            let e = stats.entry(*t).or_default();
+            e.0 += 1;
+            if *r > 0 {
+                e.1 += 1;
+            }
+        }
+    }
+    stats.into_iter().filter(|(_, (n, roofed))| *roofed >= 4 && *roofed * 10 >= *n * 6).map(|(t, _)| t).collect()
 }
 
 #[derive(Debug)]
@@ -238,6 +257,7 @@ impl AoMap {
             exits: Vec::new(),
             exit_at: vec![-1; n],
             trailing: 0,
+            roof_triggers: Vec::new(),
         };
         for l in map.layers.iter_mut() {
             *l = vec![0; n];
@@ -297,7 +317,14 @@ impl AoMap {
                 map.blocked[i] |= FLAG_WATER;
             }
         }
+        map.roof_triggers = roof_triggers_of(&map.triggers, &map.layers[4]);
         Ok(map)
+    }
+
+    /// Is `t` a roof trigger on this map (the official ones, or one whose area is mostly
+    /// under layer-5 roofs)?
+    pub fn is_roof(&self, t: u16) -> bool {
+        t != 0 && (is_roof_trigger(t) || self.roof_triggers.contains(&t))
     }
 
     pub fn layer(&self, l: usize, x: i32, y: i32) -> u32 {
@@ -325,7 +352,7 @@ impl AoMap {
         for ly in y - 1..=y + 1 {
             for lx in x - 1..=x + 1 {
                 let t = self.trigger(lx, ly);
-                if is_roof_trigger(t) {
+                if self.is_roof(t) {
                     return t;
                 }
             }

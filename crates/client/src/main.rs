@@ -60,7 +60,8 @@ async fn main() {
 
         game.now = now;
         game::poll(&mut game, &mut assets, &mut renderer.fx);
-        ui.in_game = game.screen == Screen::Game;
+        // Window hotkeys only in the world and never while typing in the chat.
+        ui.in_game = game.screen == Screen::Game && game.chat.is_none();
         match &game.screen {
             // Account screens: scenes of the world (ui/scene.rs) under the account UI.
             Screen::Login => {

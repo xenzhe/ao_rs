@@ -42,6 +42,15 @@ opt-level = 3
 [profile.dev.package.lewton]
 opt-level = 3
 
+# Optimised build for playing and testing (scripts/jugar.cmd): release speed in the game,
+# much faster to compile than the full release (no LTO, parallel codegen).
+[profile.play]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = false
+panic = "unwind"
+
 [profile.release]
 opt-level = 3
 lto = true

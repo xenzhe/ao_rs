@@ -246,7 +246,7 @@ pub fn divider(cx: f32, y: f32, w: f32, u: f32) {
         for i in 0..n {
             let t0 = i as f32 / n as f32;
             let t1 = (i + 1) as f32 / n as f32;
-            let a = if x1 > x0 { 1.0 - t0 } else { 1.0 - t0 };
+            let a = 1.0 - t0;
             draw_line(x0 + (x1 - x0) * t0, y, x0 + (x1 - x0) * t1, y, 1.2 * u, Color::new(GOLD.r, GOLD.g, GOLD.b, 0.85 * a));
         }
     };
