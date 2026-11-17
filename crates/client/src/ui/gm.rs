@@ -1,13 +1,14 @@
-//! Window: game master panel. OWNER: Opus C (docs/P4_CONTRATO.md).
+//! Window: game master panel. Sober and quick: who is online with their state, the actions
+//! for the chosen player, a free command line and the recent GM log.
 //!
-//! Online players (search, select) with the usual actions, a free command line and the
-//! recent GM log. It only draws for GMs: for anyone else it closes itself (the server
-//! answers nothing to them anyway). Every button just sends the typed command, so the
-//! server checks the rank exactly as for the chat.
+//! It only draws for GMs: for anyone else it closes itself (the server answers nothing to
+//! them anyway). Every button just sends the typed command, so the server checks the rank
+//! exactly as for the chat.
 use crate::assets::Assets;
 use crate::game::Game;
-use crate::ui::theme::{BAD, GOLD, GOLD_TEXT, GOOD, MUTED, TEXT};
-use crate::ui::widgets::{button, text, text_field, text_fit, tooltip};
+use crate::ui::character::kit::{self, Icon};
+use crate::ui::theme::{FontKind, BAD, GOLD, GOLD_BRIGHT, GOLD_DIM, GOLD_TEXT, GOOD, TEXT, TEXT_DIM, TEXT_FAINT};
+use crate::ui::widgets::{button_kind, text_field, text_with, tooltip, Kind};
 use crate::ui::{Ui, WindowId};
 use client_core::p4::gm::action_line;
 use macroquad::prelude::*;
@@ -53,6 +54,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
         ui.close(WindowId::Gm);
         return;
     }
+    kit::begin(ui, WindowId::Gm);
     STATE.with_borrow_mut(|st| panel(ui, game, r, st));
 }
 
@@ -66,57 +68,57 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
     let gm = &game.local.p4.gm;
     let rank = gm.rank.label();
     let mut tips: Vec<String> = Vec::new();
+    let r = Rect::new(r.x + 6.0 * u, r.y + 2.0 * u, r.w - 12.0 * u, r.h - 4.0 * u);
 
-    // ---- header: rank and search
-    let y0 = r.y + 6.0 * u;
-    text(&format!("Rango: {rank}"), r.x, y0 + 17.0 * u, 18.0 * u, GOLD_TEXT);
-    text(&format!("{} conectados", gm.online.len()), r.x + 150.0 * u, y0 + 17.0 * u, 16.0 * u, MUTED);
-    let search = Rect::new(r.right() - 220.0 * u, y0, 220.0 * u, 26.0 * u);
-    text("Buscar", search.x - 54.0 * u, y0 + 18.0 * u, 16.0 * u, MUTED);
+    // ---- header: rank, online count, search
+    let y0 = r.y;
+    kit::icon(Icon::Crown, r.x + 12.0 * u, y0 + 16.0 * u, 18.0 * u, GOLD_BRIGHT);
+    text_with(FontKind::Title, &rank.to_uppercase(), r.x + 30.0 * u, y0 + 22.0 * u, 18.0 * u, GOLD_BRIGHT);
+    text_with(FontKind::Body, &format!("{} conectados", gm.online.len()), r.x + 150.0 * u, y0 + 22.0 * u, 16.0 * u, TEXT_DIM);
+    let search = Rect::new(r.right() - 230.0 * u, y0 + 2.0 * u, 230.0 * u, 28.0 * u);
     text_field(ui, "gm_search", &mut st.search, search, 16, false, |c| c.is_alphanumeric());
+    if st.search.is_empty() && ui.focus.as_deref() != Some("gm_search") {
+        super::widgets::placeholder(search, "Buscar jugador", u);
+    }
+    kit::rule(r.x, y0 + 40.0 * u, r.w, GOLD);
 
     // ---- player list (left)
-    let list_w = r.w * 0.52;
-    let list = Rect::new(r.x, y0 + 34.0 * u, list_w, r.h * 0.56);
-    draw_rectangle(list.x, list.y, list.w, list.h, Color::new(0.0, 0.0, 0.0, 0.3));
-    draw_rectangle_lines(list.x, list.y, list.w, list.h, 1.0, GOLD);
-    let row_h = 26.0 * u;
+    let list_w = (r.w * 0.55).floor();
+    let list = Rect::new(r.x, y0 + 52.0 * u, list_w, 262.0 * u);
+    let head_y = list.y;
+    text_with(FontKind::Title, "JUGADOR", list.x + 10.0 * u, head_y + 12.0 * u, 12.0 * u, GOLD_DIM);
+    text_with(FontKind::Title, "NV", list.x + list.w * 0.43, head_y + 12.0 * u, 12.0 * u, GOLD_DIM);
+    text_with(FontKind::Title, "UBICACIÓN", list.x + list.w * 0.55, head_y + 12.0 * u, 12.0 * u, GOLD_DIM);
+    let body = Rect::new(list.x, list.y + 20.0 * u, list.w, list.h - 20.0 * u);
+    kit::well(body, u);
+    let row_h = 28.0 * u;
     let rows: Vec<_> = game.local.p4.gm.filtered(&st.search).into_iter().cloned().collect();
-    let fits = ((list.h - 4.0 * u) / row_h).floor().max(1.0) as usize;
-    if list.contains(mouse_position().into()) {
-        let wheel = mouse_wheel().1;
-        if wheel < 0.0 {
-            st.scroll += 1;
-        } else if wheel > 0.0 {
-            st.scroll = st.scroll.saturating_sub(1);
-        }
-    }
-    st.scroll = st.scroll.min(rows.len().saturating_sub(fits));
+    let fits = ((body.h - 4.0 * u) / row_h).floor().max(1.0) as usize;
+    st.scroll = kit::wheel(body, st.scroll, rows.len(), fits, 1);
     if rows.is_empty() {
-        text("Nadie coincide con la búsqueda.", list.x + 10.0 * u, list.y + 22.0 * u, 16.0 * u, MUTED);
+        text_with(FontKind::NarrativeItalic, "Nadie coincide con la búsqueda.", body.x + 12.0 * u, body.y + 26.0 * u, 16.0 * u, TEXT_FAINT);
     }
     for (i, p) in rows.iter().skip(st.scroll).take(fits).enumerate() {
-        let row = Rect::new(list.x + 2.0 * u, list.y + 2.0 * u + i as f32 * row_h, list.w - 4.0 * u, row_h - 2.0 * u);
+        let row = Rect::new(body.x + 2.0 * u, body.y + 2.0 * u + i as f32 * row_h, body.w - 8.0 * u, row_h - 1.0 * u);
         let sel = st.selected.as_deref() == Some(p.name.as_str());
-        let hover = row.contains(mouse_position().into());
-        draw_rectangle(row.x, row.y, row.w, row.h, if sel { Color::new(0.45, 0.30, 0.10, 0.55) } else if hover { Color::new(1.0, 1.0, 1.0, 0.06) } else { Color::new(0.0, 0.0, 0.0, 0.0) });
-        if hover && is_mouse_button_pressed(MouseButton::Left) {
+        let (_, click) = kit::row(row, sel, u);
+        if click {
             st.selected = Some(p.name.clone());
         }
-        let color = if p.rank.is_gm() { GOLD_TEXT } else if p.dead { MUTED } else { TEXT };
-        text_fit(&p.name, row.x + 8.0 * u, row.y + 18.0 * u, 17.0 * u, row.w * 0.42, color);
-        text(&format!("Nv {}", p.level), row.x + row.w * 0.45, row.y + 18.0 * u, 15.0 * u, MUTED);
-        text(&format!("{} · {},{}", p.map, p.x, p.y), row.x + row.w * 0.6, row.y + 18.0 * u, 15.0 * u, MUTED);
+        let color = if p.rank.is_gm() { GOLD_TEXT } else if p.dead { TEXT_FAINT } else { TEXT };
+        kit::fit(FontKind::Body, &p.name, row.x + 10.0 * u, row.y + 19.0 * u, 16.0 * u, row.w * 0.38, color);
+        text_with(FontKind::Body, &p.level.to_string(), row.x + list.w * 0.43 - 2.0 * u, row.y + 19.0 * u, 15.0 * u, TEXT_DIM);
+        kit::fit(FontKind::Body, &format!("{} · {},{}", p.map, p.x, p.y), row.x + list.w * 0.55 - 2.0 * u, row.y + 19.0 * u, 14.0 * u, row.w * 0.2, TEXT_DIM);
         // Badges: jail, silence, dead, rank.
-        let mut bx = row.right() - 8.0 * u;
+        let mut bx = row.right() - 6.0 * u;
         let mut badge = |label: &str, c: Color, tip: String| {
             let w = 20.0 * u;
             bx -= w + 3.0 * u;
             let b = Rect::new(bx, row.y + 4.0 * u, w, row.h - 8.0 * u);
-            draw_rectangle(b.x, b.y, b.w, b.h, Color::new(c.r, c.g, c.b, 0.25));
+            draw_rectangle(b.x, b.y, b.w, b.h, Color::new(c.r, c.g, c.b, 0.22));
             draw_rectangle_lines(b.x, b.y, b.w, b.h, 1.0, c);
-            text(label, b.x + 5.0 * u, b.y + b.h - 4.0 * u, 14.0 * u, c);
-            if b.contains(mouse_position().into()) {
+            kit::text_mid(FontKind::Body, label, b.center().x, b.bottom() - 4.0 * u, 13.0 * u, c);
+            if kit::hover(b) {
                 tips = vec![tip];
             }
         };
@@ -127,55 +129,72 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
             badge("S", BAD, format!("Silenciado: {} min", mins(p.silence_secs)));
         }
         if p.dead {
-            badge("M", MUTED, "Muerto".into());
+            badge("M", TEXT_DIM, "Muerto".into());
         }
         if p.rank.is_gm() {
             badge("G", GOLD_TEXT, p.rank.label().into());
         }
     }
+    kit::scrollbar(body, rows.len(), fits, st.scroll, u);
 
     // ---- actions (right)
-    let ax = list.right() + 12.0 * u;
+    let ax = list.right() + 20.0 * u;
     let aw = r.right() - ax;
     let mut y = list.y;
     let selected = st.selected.clone().filter(|n| rows.iter().any(|p| &p.name == n));
     match &selected {
-        Some(n) => text_fit(n, ax, y + 18.0 * u, 20.0 * u, aw, GOLD_TEXT),
-        None => text_fit("Elige un jugador de la lista", ax, y + 18.0 * u, 16.0 * u, aw, MUTED),
+        Some(n) => {
+            text_with(FontKind::Title, "JUGADOR", ax, y + 12.0 * u, 12.0 * u, GOLD_DIM);
+            kit::fit(FontKind::Title, n, ax, y + 40.0 * u, 24.0 * u, aw, GOLD_BRIGHT);
+            if let Some(p) = rows.iter().find(|p| &p.name == n) {
+                text_with(FontKind::Body, &format!("Nivel {} · mapa {} ({}, {})", p.level, p.map, p.x, p.y), ax, y + 60.0 * u, 14.0 * u, TEXT_DIM);
+            }
+        }
+        None => {
+            text_with(FontKind::Title, "JUGADOR", ax, y + 12.0 * u, 12.0 * u, GOLD_DIM);
+            text_with(FontKind::NarrativeItalic, "Elige un jugador de la lista", ax, y + 40.0 * u, 17.0 * u, TEXT_FAINT);
+        }
     }
-    y += 28.0 * u;
-    let bw = (aw - 8.0 * u) / 2.0;
-    let bh = 26.0 * u;
+    y += 70.0 * u;
+    let bw = (aw - 16.0 * u) / 3.0;
+    let bh = 28.0 * u;
     let mut send: Option<&str> = None;
     let grid = [("Ir", "ir", "Ir hasta él (/IRA)"), ("Traer", "traer", "Traerlo a tu lado (/SUM)"), ("Info", "info", "Datos del personaje (/INFO)"), ("Penas", "penas", "Historial de penas (/PENAS)"), ("Revivir", "revivir", "Resucitar o curar (/REVIVIR)"), ("Echar", "echar", "Desconectarlo (/ECHAR)")];
     for (i, (label, action, tip)) in grid.iter().enumerate() {
-        let b = Rect::new(ax + (i % 2) as f32 * (bw + 8.0 * u), y + (i / 2) as f32 * (bh + 6.0 * u), bw, bh);
-        if button(b, label, false, u) && selected.is_some() {
+        let b = Rect::new(ax + (i % 3) as f32 * (bw + 8.0 * u), y + (i / 3) as f32 * (bh + 6.0 * u), bw, bh);
+        if button_kind(b, label, Kind::Secondary, selected.is_some(), u) && selected.is_some() {
             send = Some(action);
         }
-        if b.contains(mouse_position().into()) {
+        if kit::hover(b) {
             tips = vec![tip.to_string()];
         }
     }
-    y += 3.0 * (bh + 6.0 * u) + 6.0 * u;
-    text("Minutos", ax, y + 17.0 * u, 16.0 * u, MUTED);
-    text_field(ui, "gm_minutes", &mut st.minutes, Rect::new(ax + 70.0 * u, y, aw - 70.0 * u, 26.0 * u), 6, false, |c| c.is_ascii_digit());
-    y += 32.0 * u;
-    text("Motivo", ax, y + 17.0 * u, 16.0 * u, MUTED);
-    text_field(ui, "gm_reason", &mut st.reason, Rect::new(ax + 70.0 * u, y, aw - 70.0 * u, 26.0 * u), 60, false, |c| c != '@');
-    y += 34.0 * u;
-    let b1 = Rect::new(ax, y, bw, bh);
-    let b2 = Rect::new(ax + bw + 8.0 * u, y, bw, bh);
-    if button(b1, "Silenciar", false, u) && selected.is_some() {
+    y += 2.0 * (bh + 6.0 * u) + 2.0 * u;
+    let mut sy = kit::section("Sanción", ax, y, aw, u);
+    let min_r = Rect::new(ax, sy, 64.0 * u, 26.0 * u);
+    text_field(ui, "gm_minutes", &mut st.minutes, min_r, 6, false, |c| c.is_ascii_digit());
+    if st.minutes.is_empty() && ui.focus.as_deref() != Some("gm_minutes") {
+        super::widgets::placeholder(min_r, "min", u);
+    }
+    let why_r = Rect::new(min_r.right() + 8.0 * u, sy, aw - 72.0 * u, 26.0 * u);
+    text_field(ui, "gm_reason", &mut st.reason, why_r, 60, false, |c| c != '@');
+    if st.reason.is_empty() && ui.focus.as_deref() != Some("gm_reason") {
+        super::widgets::placeholder(why_r, "Motivo (opcional)", u);
+    }
+    sy += 34.0 * u;
+    let hw = (aw - 8.0 * u) / 2.0;
+    let b1 = Rect::new(ax, sy, hw, bh);
+    let b2 = Rect::new(ax + hw + 8.0 * u, sy, hw, bh);
+    if button_kind(b1, "Silenciar", Kind::Secondary, selected.is_some(), u) && selected.is_some() {
         send = Some("silenciar");
     }
-    if button(b2, "Encarcelar", false, u) && selected.is_some() {
+    if button_kind(b2, "Encarcelar", Kind::Danger, selected.is_some(), u) && selected.is_some() {
         send = Some("carcel");
     }
-    if b1.contains(mouse_position().into()) {
+    if kit::hover(b1) {
         tips = vec!["Silenciar los minutos indicados (0 = quitar)".into()];
     }
-    if b2.contains(mouse_position().into()) {
+    if kit::hover(b2) {
         tips = vec!["Encarcelar los minutos indicados (0 = liberar)".into()];
     }
     if let (Some(action), Some(name)) = (send, &selected) {
@@ -185,11 +204,14 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
     }
 
     // ---- command line
-    let cy = list.bottom() + 10.0 * u;
-    text("Comando", r.x, cy + 18.0 * u, 16.0 * u, MUTED);
-    let field = Rect::new(r.x + 72.0 * u, cy, r.w - 72.0 * u - 96.0 * u, 26.0 * u);
+    let cy = list.bottom() + 12.0 * u;
+    text_with(FontKind::Title, "COMANDO", r.x, cy + 19.0 * u, 13.0 * u, GOLD_TEXT);
+    let field = Rect::new(r.x + 84.0 * u, cy, r.w - 84.0 * u - 100.0 * u, 28.0 * u);
     let enter = text_field(ui, "gm_line", &mut st.line, field, 200, false, |_| true);
-    if (button(Rect::new(field.right() + 8.0 * u, cy, 88.0 * u, 26.0 * u), "Enviar", false, u) || enter) && !st.line.trim().is_empty() {
+    if st.line.is_empty() && ui.focus.as_deref() != Some("gm_line") {
+        super::widgets::placeholder(field, "/comando argumentos", u);
+    }
+    if (button_kind(Rect::new(field.right() + 10.0 * u, cy, 90.0 * u, 28.0 * u), "Enviar", Kind::Primary, true, u) || enter) && !st.line.trim().is_empty() {
         let line = if st.line.starts_with('/') { st.line.clone() } else { format!("/{}", st.line) };
         game.gm_command(line);
         st.line.clear();
@@ -197,21 +219,21 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
     }
 
     // ---- recent log
-    let ly = cy + 34.0 * u;
-    text("Registro reciente", r.x, ly + 16.0 * u, 17.0 * u, GOLD_TEXT);
-    let log_r = Rect::new(r.x, ly + 22.0 * u, r.w, r.bottom() - ly - 22.0 * u);
-    draw_rectangle(log_r.x, log_r.y, log_r.w, log_r.h, Color::new(0.0, 0.0, 0.0, 0.3));
-    let lines = ((log_r.h - 6.0 * u) / (19.0 * u)).floor().max(0.0) as usize;
+    let ly = cy + 40.0 * u;
+    let hy = kit::section("Registro reciente", r.x, ly, r.w, u);
+    let log_r = Rect::new(r.x, hy - 4.0 * u, r.w, r.bottom() - hy + 4.0 * u);
+    kit::well(log_r, u);
+    let lines = ((log_r.h - 8.0 * u) / (20.0 * u)).floor().max(0.0) as usize;
     let log = &game.local.p4.gm.log;
     if log.is_empty() {
-        text("Sin acciones registradas.", log_r.x + 8.0 * u, log_r.y + 19.0 * u, 15.0 * u, MUTED);
+        text_with(FontKind::NarrativeItalic, "Sin acciones registradas.", log_r.x + 12.0 * u, log_r.y + 24.0 * u, 15.0 * u, TEXT_FAINT);
     }
     for (i, e) in log.iter().take(lines).enumerate() {
-        let yy = log_r.y + 18.0 * u + i as f32 * 19.0 * u;
-        text(&hhmm(e.at), log_r.x + 8.0 * u, yy, 15.0 * u, MUTED);
-        text_fit(&e.gm, log_r.x + 56.0 * u, yy, 15.0 * u, 90.0 * u, GOLD_TEXT);
-        text_fit(&e.action, log_r.x + 150.0 * u, yy, 15.0 * u, 90.0 * u, GOOD);
-        text_fit(&format!("{} {}", e.target, e.detail), log_r.x + 244.0 * u, yy, 15.0 * u, log_r.w - 252.0 * u, TEXT);
+        let yy = log_r.y + 22.0 * u + i as f32 * 20.0 * u;
+        text_with(FontKind::Body, &hhmm(e.at), log_r.x + 12.0 * u, yy, 14.0 * u, TEXT_FAINT);
+        kit::fit(FontKind::Body, &e.gm, log_r.x + 62.0 * u, yy, 14.0 * u, 90.0 * u, GOLD_TEXT);
+        kit::fit(FontKind::Body, &e.action, log_r.x + 160.0 * u, yy, 14.0 * u, 90.0 * u, GOOD);
+        kit::fit(FontKind::Body, &format!("{} {}", e.target, e.detail), log_r.x + 256.0 * u, yy, 14.0 * u, log_r.w - 270.0 * u, TEXT);
     }
     if !tips.is_empty() {
         tooltip(&tips, u);

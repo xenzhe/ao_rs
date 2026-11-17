@@ -95,17 +95,17 @@ impl WindowId {
         match self {
             WindowId::Inventory | WindowId::Bank | WindowId::Shop => vec2(330.0, 420.0),
             WindowId::Trade => vec2(560.0, 420.0),
-            WindowId::Spells => vec2(300.0, 440.0),
-            WindowId::Character => vec2(420.0, 480.0),
-            WindowId::Guild => vec2(560.0, 480.0),
-            WindowId::Party => vec2(300.0, 320.0),
-            WindowId::Quests => vec2(560.0, 440.0),
-            WindowId::WorldMap => vec2(720.0, 560.0),
-            WindowId::Options => vec2(420.0, 400.0),
-            WindowId::Crafting => vec2(620.0, 480.0),
-            WindowId::Gm => vec2(620.0, 520.0),
-            WindowId::Events => vec2(560.0, 460.0),
-            WindowId::Auction => vec2(640.0, 480.0),
+            WindowId::Spells => vec2(720.0, 560.0),
+            WindowId::Character => vec2(780.0, 580.0),
+            WindowId::Guild => vec2(740.0, 580.0),
+            WindowId::Party => vec2(380.0, 430.0),
+            WindowId::Quests => vec2(780.0, 580.0),
+            WindowId::WorldMap => vec2(800.0, 640.0),
+            WindowId::Options => vec2(660.0, 540.0),
+            WindowId::Crafting => vec2(760.0, 560.0),
+            WindowId::Gm => vec2(720.0, 580.0),
+            WindowId::Events => vec2(780.0, 580.0),
+            WindowId::Auction => vec2(780.0, 560.0),
         }
     }
 }

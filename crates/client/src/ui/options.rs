@@ -1,10 +1,12 @@
-//! Window: options (screen, sound, interface, keys). OWNER: Sonnet 4 (docs/P3_CONTRATO.md).
+//! Window: options (screen, sound, interface, keys). Switches and sliders with a hand-made
+//! feel, grouped in sections; the keys appear as little keycaps.
 //!
 //! Saved in `config/options.ini` (see `client_core::p3::hud::Options`). The audio code reads
 //! the volumes with [`current`] (in memory) or `client_core::p3::hud::audio_volumes()` (file).
+use super::character::kit;
 use super::hud::{set_options, set_options_in_memory};
-use super::theme::{FontKind, GOLD, GOLD_TEXT, GOOD, MUTED, TEXT};
-use super::widgets::{measure, text, text_with};
+use super::theme::{self, FontKind, Surface, GOLD, GOLD_BRIGHT, GOLD_DIM, GOLD_TEXT, MUTED, TEXT, TEXT_DIM, TEXT_FAINT};
+use super::widgets::{measure_with, text_with};
 use super::WindowId;
 use crate::assets::Assets;
 use crate::game::Game;
@@ -14,9 +16,9 @@ use macroquad::prelude::*;
 use std::cell::Cell;
 
 thread_local! {
-    /// Slider being dragged (0 = music, 1 = effects).
-    static DRAG: Cell<Option<u8>> = const { Cell::new(None) };
     static FULLSCREEN: Cell<bool> = const { Cell::new(false) };
+    /// A slider was dragged since the last save.
+    static SAVE_PENDING: Cell<bool> = const { Cell::new(false) };
 }
 
 /// The current options (the in-memory copy, no disk read). Volumes to apply: [`Options::volumes`].
@@ -25,104 +27,93 @@ pub fn current() -> Options {
     super::hud::options()
 }
 
-fn slider(r: Rect, v: f32, id: u8, enabled: bool, u: f32) -> f32 {
-    let track = Rect::new(r.x, r.y + r.h / 2.0 - 4.0 * u, r.w, 8.0 * u);
-    draw_rectangle(track.x, track.y, track.w, track.h, Color::new(0.0, 0.0, 0.0, 0.7));
-    let fill = if enabled { Color::new(0.75, 0.55, 0.16, 1.0) } else { Color::new(0.35, 0.3, 0.22, 1.0) };
-    draw_rectangle(track.x, track.y, track.w * v, track.h, fill);
-    draw_rectangle_lines(track.x, track.y, track.w, track.h, 1.0, GOLD);
-    let m: Vec2 = mouse_position().into();
-    if r.contains(m) && is_mouse_button_pressed(MouseButton::Left) {
-        DRAG.with(|d| d.set(Some(id)));
+/// A switch row: label and a small hint on the left, the switch on the right. Returns the value.
+fn switch_row(r: Rect, label: &str, hint: &str, on: bool, u: f32) -> bool {
+    let (hov, _) = kit::row(r, false, u);
+    let _ = hov;
+    text_with(FontKind::Body, label, r.x + 10.0 * u, r.y + 20.0 * u, 17.0 * u, TEXT);
+    if !hint.is_empty() {
+        text_with(FontKind::NarrativeItalic, hint, r.x + 10.0 * u, r.y + 38.0 * u, 14.0 * u, TEXT_DIM);
     }
-    let mut v = v;
-    if DRAG.with(Cell::get) == Some(id) {
-        if is_mouse_button_down(MouseButton::Left) {
-            v = ((m.x - r.x) / r.w).clamp(0.0, 1.0);
-        } else {
-            DRAG.with(|d| d.set(None));
-        }
+    let sw = Rect::new(r.right() - 54.0 * u, r.y + (r.h - 24.0 * u) / 2.0, 46.0 * u, 24.0 * u);
+    let v = kit::toggle(sw, on, u);
+    // The whole row is the click target, not just the switch.
+    if kit::clicked(r) && !sw.contains(mouse_position().into()) {
+        return !on;
     }
-    let tx = r.x + r.w * v;
-    draw_rectangle(tx - 5.0 * u, r.y + 2.0 * u, 10.0 * u, r.h - 4.0 * u, if r.contains(m) || DRAG.with(Cell::get) == Some(id) { Color::new(1.0, 0.9, 0.55, 1.0) } else { Color::new(0.85, 0.7, 0.35, 1.0) });
-    draw_rectangle_lines(tx - 5.0 * u, r.y + 2.0 * u, 10.0 * u, r.h - 4.0 * u, 1.0, BLACK);
     v
 }
 
-/// Check box with a label; returns the new value.
-fn checkbox(r: Rect, label: &str, on: bool, u: f32) -> bool {
-    let b = Rect::new(r.x, r.y + (r.h - 18.0 * u) / 2.0, 18.0 * u, 18.0 * u);
-    draw_rectangle(b.x, b.y, b.w, b.h, Color::new(0.0, 0.0, 0.0, 0.7));
-    draw_rectangle_lines(b.x, b.y, b.w, b.h, 1.0, if r.contains(mouse_position().into()) { GOLD_TEXT } else { GOLD });
-    if on {
-        draw_line(b.x + 4.0 * u, b.y + 9.0 * u, b.x + 8.0 * u, b.y + 14.0 * u, 2.5 * u, GOOD);
-        draw_line(b.x + 8.0 * u, b.y + 14.0 * u, b.x + 15.0 * u, b.y + 4.0 * u, 2.5 * u, GOOD);
-    }
-    text(label, b.right() + 8.0 * u, b.y + 14.5 * u, 16.0 * u, TEXT);
-    if r.contains(mouse_position().into()) && is_mouse_button_pressed(MouseButton::Left) {
-        !on
-    } else {
-        on
-    }
-}
-
-fn heading(label: &str, r: Rect, y: f32, u: f32) {
-    text_with(FontKind::Title, label, r.x, y + 15.0 * u, 18.0 * u, GOLD_TEXT);
-    draw_line(r.x, y + 20.0 * u, r.right(), y + 20.0 * u, 1.0, Color::new(0.30, 0.22, 0.12, 1.0));
+/// A keycap: a raised little block with the key name on it. Returns its width.
+fn keycap(x: f32, y: f32, key: &str, u: f32) -> f32 {
+    let size = 13.0 * u;
+    let w = (measure_with(FontKind::Title, key, size).width + 14.0 * u).max(26.0 * u);
+    let r = Rect::new(x, y, w, 24.0 * u);
+    draw_rectangle(r.x, r.y + 2.0 * u, r.w, r.h, Color::new(0.0, 0.0, 0.0, 0.5));
+    theme::surface(r, Surface::Raised, u);
+    draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, GOLD_DIM);
+    kit::text_mid(FontKind::Title, key, r.center().x, r.y + 17.0 * u, size, GOLD_BRIGHT);
+    w
 }
 
 /// Draws the content of the window inside `r` (the frame is already drawn).
 pub fn draw(ui: &mut Ui, _game: &mut Game, _assets: &mut Assets, r: Rect) {
     let u = ui.u;
+    kit::begin(ui, WindowId::Options);
     let before = super::hud::options();
     let mut o = before.clone();
-    let mut y = r.y;
+    let r = Rect::new(r.x + 8.0 * u, r.y + 2.0 * u, r.w - 16.0 * u, r.h - 4.0 * u);
+    let col_w = (r.w - 30.0 * u) / 2.0;
+    let (lx, rx) = (r.x, r.x + col_w + 30.0 * u);
 
-    heading("Pantalla", r, y, u);
-    y += 27.0 * u;
-    text(&format!("Ventana de {} x {} px (se puede redimensionar)", screen_width() as i32, screen_height() as i32), r.x, y + 13.0 * u, 15.0 * u, TEXT);
-    y += 20.0 * u;
-    text(&format!("Interfaz x{u:.2}: se adapta sola a la altura de la ventana"), r.x, y + 13.0 * u, 15.0 * u, MUTED);
-    y += 20.0 * u;
-    text("F2: pixel-perfect (escalado entero del mundo)", r.x, y + 13.0 * u, 15.0 * u, MUTED);
-    y += 22.0 * u;
+    // ---- screen (left)
+    let mut y = kit::section("Pantalla", lx, r.y, col_w, u);
+    text_with(FontKind::Title, &format!("{} × {}", screen_width() as i32, screen_height() as i32), lx + 10.0 * u, y + 24.0 * u, 22.0 * u, GOLD_TEXT);
+    text_with(FontKind::NarrativeItalic, "la ventana se puede redimensionar", lx + 10.0 * u, y + 44.0 * u, 14.0 * u, TEXT_DIM);
+    y += 56.0 * u;
     let fs = FULLSCREEN.with(Cell::get);
-    let nfs = checkbox(Rect::new(r.x, y, r.w, 22.0 * u), "Pantalla completa", fs, u);
+    let nfs = switch_row(Rect::new(lx, y, col_w, 50.0 * u), "Pantalla completa", "", fs, u);
     if nfs != fs {
         FULLSCREEN.with(|f| f.set(nfs));
         set_fullscreen(nfs);
     }
-    y += 28.0 * u;
+    y += 50.0 * u;
+    text_with(FontKind::Body, &format!("Interfaz ×{u:.2}"), lx + 10.0 * u, y + 22.0 * u, 16.0 * u, TEXT);
+    text_with(FontKind::NarrativeItalic, "se adapta sola a la altura", lx + 10.0 * u, y + 40.0 * u, 14.0 * u, TEXT_DIM);
+    y += 56.0 * u;
+    text_with(FontKind::Body, "F2", lx + 10.0 * u, y + 22.0 * u, 16.0 * u, GOLD_BRIGHT);
+    text_with(FontKind::Body, "mundo en píxeles enteros", lx + 40.0 * u, y + 22.0 * u, 16.0 * u, TEXT);
 
-    heading("Sonido", r, y, u);
-    y += 27.0 * u;
-    let label_w = 70.0 * u;
-    let val_w = 44.0 * u;
+    // ---- sound (right)
+    let mut sy = kit::section("Sonido", rx, r.y, col_w, u);
+    let muted = before.mute;
     for (i, (name, value)) in [("Música", &mut o.music), ("Efectos", &mut o.sfx)].into_iter().enumerate() {
-        text(name, r.x, y + 17.0 * u, 16.0 * u, TEXT);
-        *value = slider(Rect::new(r.x + label_w, y, r.w - label_w - val_w - 8.0 * u, 24.0 * u), *value, i as u8, !before.mute, u);
+        text_with(FontKind::Body, name, rx + 10.0 * u, sy + 18.0 * u, 17.0 * u, if muted { TEXT_FAINT } else { TEXT });
         let pct = format!("{}%", (*value * 100.0).round() as i32);
-        text(&pct, r.right() - measure(&pct, 16.0 * u).width, y + 17.0 * u, 16.0 * u, if before.mute { MUTED } else { WHITE });
-        y += 28.0 * u;
+        kit::text_right(FontKind::Title, &pct, rx + col_w - 6.0 * u, sy + 18.0 * u, 16.0 * u, if muted { TEXT_FAINT } else { GOLD_BRIGHT });
+        *value = kit::slider(Rect::new(rx + 10.0 * u, sy + 28.0 * u, col_w - 24.0 * u, 24.0 * u), *value, i as u32 + 1, !muted, u);
+        sy += 62.0 * u;
     }
-    o.mute = checkbox(Rect::new(r.x, y, r.w * 0.5, 22.0 * u), "Silenciar todo", o.mute, u);
-    o.show_fps = checkbox(Rect::new(r.x + r.w * 0.5, y, r.w * 0.5, 22.0 * u), "Mostrar fps", o.show_fps, u);
-    y += 30.0 * u;
+    o.mute = switch_row(Rect::new(rx, sy, col_w, 50.0 * u), "Silenciar todo", "", o.mute, u);
+    sy += 50.0 * u;
+    o.show_fps = switch_row(Rect::new(rx, sy, col_w, 50.0 * u), "Mostrar fps", "", o.show_fps, u);
 
-    heading("Teclas", r, y, u);
-    y += 27.0 * u;
+    // ---- keys
+    let ky = kit::section("Teclas", r.x, (y + 44.0 * u).max(sy + 56.0 * u), r.w, u);
     let mut keys: Vec<(String, &str)> = WindowId::ALL.iter().filter_map(|w| w.hotkey().map(|k| (format!("{k:?}"), if *w == WindowId::WorldMap { "Mapa" } else { w.title() }))).collect();
     keys.extend([("Enter".into(), "Hablar"), ("Flechas".into(), "Caminar"), ("1-9".into(), "Lanzar"), ("Esc".into(), "Cancelar")]);
-    let colw = r.w / 3.0;
+    let cols = 3;
+    let colw = r.w / cols as f32;
     for (i, (k, what)) in keys.iter().enumerate() {
-        let (cx, cy) = (r.x + (i % 3) as f32 * colw, y + (i / 3) as f32 * 19.0 * u);
-        text(k, cx, cy + 13.0 * u, 15.0 * u, GOLD_TEXT);
-        text(what, cx + 52.0 * u, cy + 13.0 * u, 15.0 * u, TEXT);
+        let (cx, cy) = (r.x + (i % cols) as f32 * colw, ky + 4.0 * u + (i / cols) as f32 * 32.0 * u);
+        let w = keycap(cx + 6.0 * u, cy, k, u);
+        text_with(FontKind::Body, what, cx + 6.0 * u + w + 10.0 * u, cy + 17.0 * u, 15.0 * u, TEXT);
     }
-    text("Los ajustes se guardan solos en config/options.ini", r.x, r.bottom() - 4.0 * u, 13.0 * u, MUTED);
+    text_with(FontKind::NarrativeItalic, "Los ajustes se guardan solos", r.x + 6.0 * u, r.bottom() - 2.0 * u, 13.0 * u, TEXT_FAINT);
+    let _ = (GOLD, MUTED);
 
     // While a slider is dragged only memory changes; the file is written when it is released.
-    let dragging = DRAG.with(Cell::get).is_some();
+    let dragging = kit::dragging();
     if o != before {
         if dragging {
             set_options_in_memory(o);
@@ -135,9 +126,4 @@ pub fn draw(ui: &mut Ui, _game: &mut Game, _assets: &mut Assets, r: Rect) {
         set_options(before);
         SAVE_PENDING.with(|p| p.set(false));
     }
-}
-
-thread_local! {
-    /// A slider was dragged since the last save.
-    static SAVE_PENDING: Cell<bool> = const { Cell::new(false) };
 }
