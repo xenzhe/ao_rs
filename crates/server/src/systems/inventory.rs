@@ -32,7 +32,7 @@ impl World {
         let Some(def) = ao.npcs.get(dat) else { return };
         // NPCTirarOro: only when a player killed it; stacks of MaxInventoryObjs.
         if self.player(killer).is_some() && def.gold > 0 {
-            let mut gold = def.gold as u64 * items::GOLD_MULT as u64;
+            let mut gold = def.gold as u64 * self.cfg.world.gold_mult.max(1) as u64;
             while gold > 0 {
                 let chunk = gold.min(MAX_STACK as u64) as u32;
                 gold -= chunk as u64;
@@ -40,9 +40,10 @@ impl World {
             }
         }
         // NpcDropObj: each drop falls with probability 1 in (DropChance / DropMult).
+        let drop_mult = self.cfg.world.drop_mult.max(1) as i32;
         for d in &def.drops {
-            let one_in = d.chance / items::DROP_MULT;
-            if one_in <= 0 || d.obj <= 0 || ao.objs.get(d.obj as u32).is_none() {
+            let one_in = (d.chance / drop_mult).max(1);
+            if d.chance <= 0 || d.obj <= 0 || ao.objs.get(d.obj as u32).is_none() {
                 continue;
             }
             if self.rng.range(1, one_in) != 1 {

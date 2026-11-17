@@ -280,7 +280,8 @@ impl World {
         n.hp = (n.hp - amount.max(0)).max(0);
         let (name, hp, max_hp) = (n.name.clone(), n.hp, n.max_hp);
         self.console(attacker, format!("Le has causado {amount} de dano a {name}."), Tone::Combat);
-        let exp = rules::exp_for_damage(exp_total, max_hp, before, hp);
+        // CalcularDarExp: share of life taken, then `ExpMult`.
+        let exp = rules::exp_for_damage(exp_total, max_hp, before, hp) * self.cfg.world.exp_mult.max(1);
         if exp > 0 && self.player(attacker).is_some() {
             self.give_exp(attacker, exp);
         }

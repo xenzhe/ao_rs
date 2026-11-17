@@ -32,6 +32,12 @@ pub struct SecurityConfig {
 #[serde(default)]
 pub struct WorldConfig {
     pub tick_ms: u64,
+    /// `ExpMult` of AO20 Configuracion.ini: multiplies the experience NPCs give (0 = 1).
+    pub exp_mult: u32,
+    /// `OroMult`: multiplies the gold NPCs drop (0 = 1).
+    pub gold_mult: u32,
+    /// `DropMult`: divides the npcs.dat drop chance "1 in N" (0 = 1).
+    pub drop_mult: u32,
 }
 
 impl Default for ServerConfig {
@@ -56,7 +62,7 @@ impl Default for SecurityConfig {
 
 impl Default for WorldConfig {
     fn default() -> Self {
-        WorldConfig { tick_ms: 50 }
+        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1 }
     }
 }
 

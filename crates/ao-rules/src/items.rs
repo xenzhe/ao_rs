@@ -16,9 +16,6 @@ pub const MAX_GOLD_DROP: u32 = 100_000;
 pub const WALLET_GOLD_PER_LEVEL: u32 = 1_000;
 /// `MaxHam` / `MaxAGU`: hunger and thirst cap.
 pub const MAX_FOOD: i32 = 100;
-/// `GoldMult` / `DropMult` (Configuracion.ini).
-pub const GOLD_MULT: u32 = 1;
-pub const DROP_MULT: i32 = 1;
 /// Tilelibre: rings searched around a point for a free floor tile.
 pub const FREE_TILE_RINGS: i32 = 15;
 

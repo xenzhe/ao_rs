@@ -30,3 +30,8 @@ max_failed_logins = 3
 [world]
 # Frecuencia de la simulacion (IA, regeneracion), en milisegundos.
 tick_ms = 50
+# Multiplicador de experiencia de las criaturas (ExpMult de AO20; 1 = oficial).
+exp_mult = 1
+# Multiplicador del oro que sueltan (OroMult) y de la probabilidad de botin (DropMult).
+gold_mult = 1
+drop_mult = 1
