@@ -400,6 +400,82 @@ impl SpellKeys {
         }
         self.ids[key] = spell;
     }
+
+    /// Swaps what keys `a` and `b` (0-based) cast (dragging on the action bar).
+    pub fn swap(&mut self, a: usize, b: usize, book: &[u16]) {
+        if a >= 9 || b >= 9 || a == b {
+            return;
+        }
+        if !self.custom {
+            for k in 0..9 {
+                self.ids[k] = self.spell_on(k, book);
+            }
+            self.custom = true;
+        }
+        self.ids.swap(a, b);
+    }
+}
+
+/// Short label of a spell for an action slot: the most telling word, cut to `max` chars
+/// ("Curar Heridas Leves" -> "Heridas", "Dardo Mágico" -> "Dardo").
+pub fn short_spell_name(name: &str, max: usize) -> String {
+    const WEAK: [&str; 7] = ["curar", "remover", "menor", "leves", "graves", "de", "del"];
+    let words: Vec<&str> = name.split_whitespace().collect();
+    let pick = words.iter().find(|w| !WEAK.contains(&w.to_lowercase().as_str()) && w.chars().count() > 2).or(words.first()).copied().unwrap_or("");
+    let mut s: String = pick.chars().take(max).collect();
+    if pick.chars().count() > max && max > 1 {
+        s = pick.chars().take(max - 1).collect::<String>() + ".";
+    }
+    s
+}
+
+/// A value shown by a HUD gauge (0..1) with a trailing "recent damage" part: when the value
+/// drops, the trail waits `hold` seconds and then slides down; when it rises, the trail jumps.
+/// `hit` is the time of the last drop (for the flash).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Trail {
+    pub value: f32,
+    pub trail: f32,
+    pub hit: f64,
+    pub gain: f64,
+    started: bool,
+}
+
+impl Default for Trail {
+    fn default() -> Self {
+        Trail { value: 1.0, trail: 1.0, hit: f64::MIN, gain: f64::MIN, started: false }
+    }
+}
+
+impl Trail {
+    pub const HOLD: f64 = 0.45;
+    /// Fraction per second the trail slides.
+    pub const SPEED: f32 = 0.8;
+
+    /// Feeds the current value; the first call only sets it (no flash on entering).
+    pub fn update(&mut self, v: f32, now: f64, dt: f32) {
+        let v = v.clamp(0.0, 1.0);
+        if !self.started {
+            *self = Trail { value: v, trail: v, started: true, ..Trail::default() };
+            return;
+        }
+        if v < self.value - 1e-4 {
+            self.hit = now;
+        } else if v > self.value + 1e-4 {
+            self.gain = now;
+        }
+        self.value = v;
+        if self.trail < v {
+            self.trail = v;
+        } else if now - self.hit > Self::HOLD {
+            self.trail = (self.trail - Self::SPEED * dt).max(v);
+        }
+    }
+
+    /// 1 right after a drop, fading to 0 in `secs`.
+    pub fn flash(&self, now: f64, secs: f64) -> f32 {
+        (1.0 - (now - self.hit) / secs).clamp(0.0, 1.0) as f32
+    }
 }
 
 /// Player options saved in `config/options.ini`.
@@ -693,5 +769,45 @@ mod tests {
         assert_eq!((g.local.skills[0], g.local.free_skill_points), (1, 0));
         assert!(!g.assign_skill(1, 1), "no free points");
         assert!(!g.assign_skill(0, 1) && !g.assign_skill(25, 1), "out of range");
+    }
+
+    #[test]
+    fn swapping_keys_materialises_the_book_default() {
+        let book = [7u16, 0, 9, 11];
+        let mut k = SpellKeys::default();
+        k.swap(0, 2, &book);
+        assert!(k.custom);
+        assert_eq!((k.spell_on(0, &book), k.spell_on(1, &book), k.spell_on(2, &book)), (11, 9, 7));
+        k.swap(0, 9, &book);
+        assert_eq!(k.spell_on(0, &book), 11, "out of range is ignored");
+    }
+
+    #[test]
+    fn short_spell_names_keep_the_telling_word() {
+        assert_eq!(short_spell_name("Curar Heridas Leves", 8), "Heridas");
+        assert_eq!(short_spell_name("Dardo Mágico", 8), "Dardo");
+        assert_eq!(short_spell_name("Invisibilidad Menor", 8), "Invisib.");
+        assert_eq!(short_spell_name("", 8), "");
+    }
+
+    #[test]
+    fn trail_holds_then_slides_and_jumps_up() {
+        let mut t = Trail::default();
+        t.update(0.8, 0.0, 0.016);
+        assert_eq!((t.value, t.trail), (0.8, 0.8), "first value: no flash");
+        assert_eq!(t.flash(0.0, 0.3), 0.0);
+        t.update(0.5, 1.0, 0.016);
+        assert_eq!((t.value, t.trail), (0.5, 0.8));
+        assert!(t.flash(1.0, 0.3) > 0.99);
+        t.update(0.5, 1.2, 0.1);
+        assert_eq!(t.trail, 0.8, "holds");
+        t.update(0.5, 1.6, 0.1);
+        assert!(t.trail < 0.8 && t.trail >= 0.5, "slides");
+        for i in 0..40 {
+            t.update(0.5, 2.0 + i as f64 * 0.1, 0.1);
+        }
+        assert_eq!(t.trail, 0.5);
+        t.update(0.9, 9.0, 0.016);
+        assert_eq!((t.value, t.trail), (0.9, 0.9), "healing raises both");
     }
 }
