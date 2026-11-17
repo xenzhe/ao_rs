@@ -269,6 +269,7 @@ impl World {
     /// One world tick at game time `now`: creatures, and regeneration when due.
     pub fn tick(&mut self, now: GameTime) {
         self.tick_npcs(now);
+        self.tick_magic(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);
             self.regen();
