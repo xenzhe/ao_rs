@@ -65,6 +65,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ao-testkit"
+version = "0.1.0"
+dependencies = [
+ "ao-formats",
+ "ao-protocol",
+ "ao-rules",
+ "client-core",
+ "server",
+ "tokio",
+]
+
+[[package]]
 name = "argon2"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -168,9 +180,19 @@ dependencies = [
  "ao-formats",
  "ao-protocol",
  "ao-rules",
+ "client-core",
  "macroquad",
  "serde",
  "toml",
+]
+
+[[package]]
+name = "client-core"
+version = "0.1.0"
+dependencies = [
+ "ao-formats",
+ "ao-protocol",
+ "ao-rules",
 ]
 
 [[package]]
@@ -679,6 +701,7 @@ dependencies = [
  "ao-formats",
  "ao-protocol",
  "ao-rules",
+ "ao-testkit",
  "argon2",
  "rand_core",
  "rusqlite",

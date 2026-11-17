@@ -16,3 +16,6 @@ tracing-subscriber.workspace = true
 rusqlite.workspace = true
 argon2.workspace = true
 rand_core.workspace = true
+
+[dev-dependencies]
+ao-testkit.workspace = true

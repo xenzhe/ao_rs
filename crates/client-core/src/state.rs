@@ -1,14 +1,13 @@
 //! Entities, stats and the handling of every server message.
-use crate::assets::Assets;
+use crate::events::{pt, ClientEvent, Pt};
 use crate::guard::Guarded;
 use crate::net::Net;
-use crate::render::fx::Fx;
 use ao_formats::AoMap;
 use ao_protocol::{CharacterSummary, EntityKind, Tone, C2S, PROTOCOL_VERSION, S2C};
 use ao_rules::spells::SpellDef;
 use ao_rules::Dir;
-use macroquad::prelude::*;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 
 pub const TILE: f32 = 32.0;
 
@@ -36,16 +35,16 @@ impl Ent {
     }
 
     /// Interpolated top-left of the character's tile, in world pixels.
-    pub fn tile_tl(&self) -> Vec2 {
+    pub fn tile_tl(&self) -> Pt {
         let t = self.t.min(1.0);
         let x = self.px as f32 + (self.x - self.px) as f32 * t;
         let y = self.py as f32 + (self.y - self.py) as f32 * t;
-        vec2((x - 1.0) * TILE, (y - 1.0) * TILE)
+        pt((x - 1.0) * TILE, (y - 1.0) * TILE)
     }
 
     /// Feet position in world pixels.
-    pub fn world_pos(&self) -> Vec2 {
-        self.tile_tl() + vec2(16.0, 28.0)
+    pub fn world_pos(&self) -> Pt {
+        self.tile_tl() + pt(16.0, 28.0)
     }
 
     pub fn moving(&self) -> bool {
@@ -69,8 +68,8 @@ impl Ent {
     }
 }
 
-pub fn tile_center(x: i32, y: i32) -> Vec2 {
-    vec2((x - 1) as f32 * TILE + 16.0, (y - 1) as f32 * TILE + 14.0)
+pub fn tile_center(x: i32, y: i32) -> Pt {
+    pt((x - 1) as f32 * TILE + 16.0, (y - 1) as f32 * TILE + 14.0)
 }
 
 /// Displayed stats, kept obfuscated in memory (see `guard`).
@@ -84,7 +83,7 @@ pub struct Stats {
     pub next_exp: u32,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Screen {
     Login,
     Game,
@@ -95,6 +94,8 @@ pub struct Game {
     pub screen: Screen,
     pub name_input: String,
     pub server_addr: String,
+    /// AO20 `Recursos` folder (maps are needed for walk prediction).
+    pub recursos: PathBuf,
     pub net: Option<Net>,
     pub my_id: u32,
     pub map: Option<AoMap>,
@@ -104,33 +105,28 @@ pub struct Game {
     pub selected: usize,
     pub casting: bool,
     pub seq: u32,
+    /// Current time in seconds, set by the frontend (frame clock) or a bot (virtual clock).
+    pub now: f64,
     pub last_step: f64,
     /// Local mirror of server cooldowns, so a legit player never triggers a strike.
     pub cd_until: HashMap<u16, f64>,
     pub pending: HashMap<u16, f64>,
-    pub console: VecDeque<(String, Color)>,
+    pub console: VecDeque<(String, Tone)>,
     pub chat: Option<String>,
     pub tampered: bool,
     /// Characters of the logged account (character selection screen).
     pub characters: Vec<CharacterSummary>,
-}
-
-pub fn tone_color(t: Tone) -> Color {
-    match t {
-        Tone::Combat => Color::new(1.0, 0.45, 0.35, 1.0),
-        Tone::Warn => Color::new(1.0, 0.85, 0.3, 1.0),
-        Tone::Chat => WHITE,
-        Tone::Good => Color::new(0.45, 1.0, 0.5, 1.0),
-        Tone::Info => Color::new(0.65, 0.8, 1.0, 1.0),
-    }
+    /// Visual events produced by `poll`, drained by the frontend.
+    pub events: Vec<ClientEvent>,
 }
 
 impl Game {
-    pub fn new(name: String, server_addr: String) -> Game {
+    pub fn new(name: String, server_addr: String, recursos: PathBuf) -> Game {
         Game {
             screen: Screen::Login,
             name_input: name,
             server_addr,
+            recursos,
             net: None,
             my_id: 0,
             map: None,
@@ -140,18 +136,21 @@ impl Game {
             selected: 0,
             casting: false,
             seq: 0,
-            last_step: 0.0,
+            now: 0.0,
+            // Far in the past, so the first step is never held back by the local pace.
+            last_step: -1.0e9,
             cd_until: HashMap::new(),
             pending: HashMap::new(),
             console: VecDeque::new(),
             chat: None,
             tampered: false,
             characters: Vec::new(),
+            events: Vec::new(),
         }
     }
 
     pub fn say(&mut self, text: impl Into<String>, tone: Tone) {
-        self.console.push_back((text.into(), tone_color(tone)));
+        self.console.push_back((text.into(), tone));
         while self.console.len() > 60 {
             self.console.pop_front();
         }
@@ -171,12 +170,18 @@ impl Game {
         }
     }
 
+    /// Opens the connection without logging in (accounts, or tests).
+    pub fn open(&mut self) -> std::io::Result<()> {
+        self.net = Some(Net::connect(&self.server_addr)?);
+        Ok(())
+    }
+
+    /// Development login: plays `name_input` directly (`C2S::Login`).
     pub fn connect(&mut self) {
-        let name = self.name_input.clone();
-        match Net::connect(&self.server_addr) {
-            Ok(mut n) => {
-                n.send(&C2S::Login { name, version: PROTOCOL_VERSION });
-                self.net = Some(n);
+        match self.open() {
+            Ok(()) => {
+                let name = self.name_input.clone();
+                self.send(&C2S::Login { name, version: PROTOCOL_VERSION });
                 self.screen = Screen::Game;
             }
             Err(e) => {
@@ -186,16 +191,18 @@ impl Game {
         }
     }
 
-    /// Reads the network and applies every message. Returns false if the link dropped.
-    pub fn poll(&mut self, assets: &mut Assets, fx: &mut Fx) {
-        let Some(net) = &mut self.net else { return };
+    /// Reads the network and applies every message; returns them (bots log them). Visual
+    /// consequences go to `events`.
+    pub fn poll(&mut self) -> Vec<S2C> {
+        let Some(net) = &mut self.net else { return Vec::new() };
         let (msgs, alive) = net.poll();
-        for m in msgs {
-            self.handle(m, assets, fx);
+        for m in &msgs {
+            self.handle(m.clone());
         }
         if !alive && self.screen == Screen::Game {
             self.screen = Screen::Kicked("Conexion cerrada por el servidor.".into());
         }
+        msgs
     }
 
     /// Integrity check of the obfuscated stats (see `guard`).
@@ -206,14 +213,11 @@ impl Game {
         }
     }
 
-    fn load_map(&mut self, number: u16, assets: &mut Assets) {
-        match AoMap::load(&assets.root, number) {
+    fn load_map(&mut self, number: u16) {
+        match AoMap::load(&self.recursos, number) {
             Ok(m) => {
-                let files = assets.preload_map(&m);
-                if std::env::var("AO_DEBUG").is_ok() {
-                    eprintln!("map {number} '{}' textures={files}", m.name);
-                }
                 self.map = Some(m);
+                self.events.push(ClientEvent::MapEntered { map: number });
             }
             Err(e) => self.say(format!("No se pudo cargar el mapa {number}: {e:?}"), Tone::Warn),
         }
@@ -223,7 +227,7 @@ impl Game {
         self.spells.iter().find(|s| s.id == id)
     }
 
-    fn handle(&mut self, msg: S2C, assets: &mut Assets, fx: &mut Fx) {
+    pub fn handle(&mut self, msg: S2C) {
         match msg {
             S2C::Welcome { id } => self.my_id = id,
             S2C::SpellBook { spells } => {
@@ -232,7 +236,7 @@ impl Game {
             }
             S2C::EnterMap { map, x, y } => {
                 if self.map.as_ref().map(|m| m.number) != Some(map) {
-                    self.load_map(map, assets);
+                    self.load_map(map);
                 }
                 // The previous map's entities are gone; the server resends this map's.
                 let me = self.ents.remove(&self.my_id);
@@ -252,12 +256,12 @@ impl Game {
                     return;
                 }
                 self.ents.insert(id, Ent::new(name, kind, body, head, x, y, dir, hp, max_hp));
-                fx.spawn_puff(tile_center(x, y) + vec2(0.0, 10.0));
+                self.events.push(ClientEvent::Puff { at: tile_center(x, y) + pt(0.0, 10.0) });
             }
             S2C::Despawn { id } => {
                 if let Some(e) = self.ents.remove(&id) {
                     if e.kind == EntityKind::Creature {
-                        fx.death_burst(e.world_pos());
+                        self.events.push(ClientEvent::DeathBurst { at: e.world_pos() });
                     }
                 }
             }
@@ -289,22 +293,21 @@ impl Game {
             S2C::Effect { spell, from, tx, ty } => {
                 let Some(def) = self.spell_by_id(spell).cloned() else { return };
                 if from == self.my_id {
-                    self.cd_until.insert(spell, get_time() + def.cooldown_ms as f64 / 1000.0 + 0.05);
+                    self.cd_until.insert(spell, self.now + def.cooldown_ms as f64 / 1000.0 + 0.05);
                     self.pending.remove(&spell);
                 }
                 let to = tile_center(tx, ty);
-                let from_pos = self.ents.get(&from).map(|e| e.world_pos() - vec2(0.0, 24.0)).unwrap_or(to);
-                fx.cast(def.effect, from_pos, to);
+                let from_pos = self.ents.get(&from).map(|e| e.world_pos() - pt(0.0, 24.0)).unwrap_or(to);
+                self.events.push(ClientEvent::Effect { effect: def.effect, from: from_pos, to });
             }
             S2C::Hp { id, hp, max_hp } => {
                 if let Some(e) = self.ents.get_mut(&id) {
                     let diff = hp - e.hp;
                     if diff != 0 {
-                        let p = e.world_pos() - vec2(0.0, 56.0);
-                        let c = if diff < 0 { Color::new(1.0, 0.3, 0.25, 1.0) } else { Color::new(0.4, 1.0, 0.45, 1.0) };
-                        fx.float_text(p, if diff < 0 { format!("{diff}") } else { format!("+{diff}") }, c);
+                        let p = e.world_pos() - pt(0.0, 56.0);
+                        self.events.push(ClientEvent::FloatText { at: p, amount: diff });
                         if diff < 0 {
-                            fx.blood(p + vec2(0.0, 30.0));
+                            self.events.push(ClientEvent::Blood { at: p + pt(0.0, 30.0) });
                         }
                     }
                     e.hp = hp;
@@ -322,7 +325,11 @@ impl Game {
     pub fn update(&mut self, dt: f32) {
         for e in self.ents.values_mut() {
             if e.t < 1.0 {
-                e.t = (e.t + dt * 1000.0 / ao_rules::WALK_MS as f32).min(1.0);
+                e.t += dt * 1000.0 / ao_rules::WALK_MS as f32;
+                // f32 sums like 0.35 + 0.65 can land just under 1: that step is done.
+                if e.t > 0.9999 {
+                    e.t = 1.0;
+                }
                 e.walk_ms += dt * 1000.0;
             } else {
                 e.walk_ms = 0.0;

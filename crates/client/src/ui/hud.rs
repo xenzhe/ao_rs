@@ -1,7 +1,7 @@
 //! In-game interface: console on top, chat/status bar at the bottom, character and spell
 //! panel on the right.
 use super::widgets::{bar, button, panel, text, GOLD_TEXT};
-use crate::game::Game;
+use crate::game::{tone_color, Game};
 use crate::render::layout::Layout;
 use macroquad::prelude::*;
 
@@ -16,7 +16,7 @@ fn console(game: &Game, lay: &Layout) {
     panel(r, u);
     let lines: Vec<_> = game.console.iter().rev().take(5).collect();
     for (i, (t, c)) in lines.iter().rev().enumerate() {
-        text(t, r.x + 12.0 * u, r.y + 22.0 * u + i as f32 * 17.0 * u, 17.0 * u, *c);
+        text(t, r.x + 12.0 * u, r.y + 22.0 * u + i as f32 * 17.0 * u, 17.0 * u, tone_color(*c));
     }
 }
 

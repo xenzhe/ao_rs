@@ -3,11 +3,10 @@
 use crate::world::World;
 use ao_protocol::S2C;
 use ao_rules::{walk, Dir};
-use std::time::Instant;
 
 impl World {
     pub(crate) fn on_walk(&mut self, id: u32, dir: Dir, seq: u32) {
-        let now = Instant::now();
+        let now = self.now();
         let (map, x, y, seq_ok, pace_ok) = {
             let p = self.player_mut(id);
             let seq_ok = p.seq.accept(seq);

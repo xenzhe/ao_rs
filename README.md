@@ -63,20 +63,25 @@ data/           Datos de juego editables sin recompilar: hechizos, criaturas, eq
 3. Datos en `data/items.toml` y su carga en `crates/server/src/data.rs`.
 4. Sistema del servidor en `crates/server/src/systems/inventory.rs` (+ una línea en el
    `match` de `systems/mod.rs`).
-5. Estado en `crates/client/src/game/`, ventana en `crates/client/src/ui/inventory.rs`.
-6. Test de integración en `crates/server/tests/` (incluido qué pasa si un cliente hace trampa).
+5. Estado en `crates/client-core/src/` (sin gráficos), ventana en `crates/client/src/ui/inventory.rs`.
+6. Test de integración en `crates/server/tests/` con `ao-testkit` (incluido qué pasa si un
+   cliente hace trampa).
 
 ## Pruebas automáticas
 
 - `ao-formats`: los 842 mapas oficiales se leen byte a byte; tablas de gráficos.
 - `ao-rules`: reglas de paso de AO20, niveles.
-- `server`: piezas de seguridad, datos válidos, y tests de integración que atacan un
+- `server`: piezas de seguridad, datos válidos, y escenarios con `ao-testkit` que atacan un
   servidor real (speedhack, replay, paquetes gigantes o basura, hechizos ilegales, flood),
-  cruzan una salida de mapa y comprueban la población de criaturas.
+  cruzan una salida de mapa, comprueban criaturas, regeneración y reaparición.
+- `ao-testkit`: `TestServer` (servidor en el mismo proceso con **reloj virtual**:
+  `advance(ms)` hace pasar el tiempo de juego al instante) y `Bot` (cliente sin ventana
+  sobre `client-core`, con esperas por condición y `sync()` como barrera exacta). Ningún
+  test espera tiempo real; el punto de aparición se fija con `Settings::start`.
 
 Para capturas y pruebas del cliente: `AO_SHOT=archivo.png`, `AO_SHOT_AT`, `AO_WALK`,
 `AO_FXDEMO`, `AO_HOUR`, `AO_NAME` (ver `crates/client/src/devtools.rs`). En el servidor,
-`AO_START=mapa,x,y` cambia el punto de aparición y `RUST_LOG=debug` da más registros.
+`RUST_LOG=debug` da más registros.
 
 ## Pendiente (siguientes pasos)
 

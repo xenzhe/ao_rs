@@ -2,8 +2,8 @@
 use crate::security::{RateLimiter, SeqGuard, Strikes, WalkLimiter};
 use ao_protocol::{EntityKind, S2C};
 use ao_rules::Dir;
+use crate::clock::GameTime;
 use std::collections::HashMap;
-use std::time::Instant;
 
 pub type EntityId = u32;
 
@@ -28,7 +28,7 @@ pub struct Player {
     pub exp: u32,
     pub walk: WalkLimiter,
     pub seq: SeqGuard,
-    pub cooldowns: HashMap<u16, Instant>,
+    pub cooldowns: HashMap<u16, GameTime>,
     pub strikes: Strikes,
     pub chat: RateLimiter,
 }
@@ -51,9 +51,9 @@ pub struct Npc {
     pub hp: i32,
     pub max_hp: i32,
     pub home: (i32, i32),
-    pub next_move: Instant,
-    pub next_attack: Instant,
-    pub dead_until: Option<Instant>,
+    pub next_move: GameTime,
+    pub next_attack: GameTime,
+    pub dead_until: Option<GameTime>,
 }
 
 impl Npc {

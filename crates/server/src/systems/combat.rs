@@ -2,7 +2,6 @@
 use crate::world::World;
 use ao_protocol::{Tone, S2C};
 use ao_rules::progression::add_exp;
-use std::time::{Duration, Instant};
 
 impl World {
     pub(crate) fn damage_npc(&mut self, map: u16, nid: u32, amount: i32, attacker: u32) {
@@ -18,11 +17,12 @@ impl World {
     }
 
     fn kill_npc(&mut self, map: u16, nid: u32, killer: u32) {
-        let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
+        let now = self.now();
+        let n =self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
         let def = self.data.creature(n.def).cloned();
         let respawn = def.as_ref().map_or(8, |d| d.respawn_secs);
         let reward = def.as_ref().map_or(0, |d| d.exp);
-        n.dead_until = Some(Instant::now() + Duration::from_secs(respawn));
+        n.dead_until = Some(now.after_secs(respawn));
         let name = n.name.clone();
         self.broadcast(map, &S2C::Despawn { id: nid }, None);
         self.console(killer, format!("Has matado a {name}! Ganas {reward} de experiencia."), Tone::Good);

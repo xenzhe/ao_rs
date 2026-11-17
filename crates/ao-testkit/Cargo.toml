@@ -1,0 +1,13 @@
+[package]
+name = "ao-testkit"
+version = "0.1.0"
+edition = "2021"
+description = "Headless test bench: in-process server on a virtual clock and bots built on client-core."
+
+[dependencies]
+server.workspace = true
+client-core.workspace = true
+ao-formats.workspace = true
+ao-protocol.workspace = true
+ao-rules.workspace = true
+tokio.workspace = true

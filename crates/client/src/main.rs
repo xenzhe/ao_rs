@@ -1,18 +1,18 @@
 //! Argentum-style client on the real AO20 maps and graphics, at modern resolutions.
 //!
 //! Layout:
-//! - [`game`]: client state, server messages, player actions (mirroring server rules)
+//! This crate is only the frontend; the game logic (state, server messages, prediction,
+//! network, obfuscated stats) lives in `client-core`, shared with the test bots.
+//! - [`game`]: glue with `client-core` (colours, core events to particles/textures)
 //! - [`render`]: world, lighting, effects, screen layout
 //! - [`ui`]: HUD and login screens
-//! - [`input`], [`net`], [`assets`], [`config`], [`guard`] (obfuscated stats)
+//! - [`input`], [`assets`], [`config`]
 //! - [`devtools`]: env-driven automation for tests and screenshots
 mod assets;
 mod config;
 mod devtools;
 mod game;
-mod guard;
 mod input;
-mod net;
 mod render;
 mod ui;
 
@@ -40,7 +40,7 @@ async fn main() {
     let mut dev = DevTools::from_env();
     let hour = std::env::var("AO_HOUR").ok().and_then(|h| h.parse().ok()).unwrap_or(12.0);
     let mut renderer = Renderer::new(cfg.video.pixel_perfect, hour);
-    let mut game = Game::new(DevTools::default_name().unwrap_or_default(), cfg.server.clone());
+    let mut game = Game::new(DevTools::default_name().unwrap_or_default(), cfg.server.clone(), assets.root.clone());
     if dev.auto_login {
         if game.name_input.is_empty() {
             game.name_input = "Tester".into();
@@ -55,7 +55,8 @@ async fn main() {
         let lay = Layout::compute(renderer.pixel_perfect);
         clear_background(Color::new(0.05, 0.04, 0.03, 1.0));
 
-        game.poll(&mut assets, &mut renderer.fx);
+        game.now = now;
+        game::poll(&mut game, &mut assets, &mut renderer.fx);
         match &game.screen {
             Screen::Login => ui::login::draw(&mut game, lay.u),
             Screen::Kicked(reason) => {
