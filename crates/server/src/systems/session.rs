@@ -6,7 +6,6 @@ use ao_protocol::{Tone, PROTOCOL_VERSION, S2C};
 use ao_rules::progression::exp_for_level;
 use ao_rules::{valid_name, Dir, WALK_MS};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 impl World {
@@ -38,7 +37,7 @@ impl World {
             return;
         }
         let (x, y) = self.free_tile_near(map, sx, sy, 4);
-        let now = Instant::now();
+        let now = self.now();
         let b = &self.data.balance;
         let hash = name.bytes().fold(7u32, |a, c| a.wrapping_mul(31).wrapping_add(c as u32));
         let sec = &self.cfg.security;
@@ -59,8 +58,8 @@ impl World {
             walk: WalkLimiter::new(WALK_MS, sec.walk_tolerance, now),
             seq: SeqGuard::default(),
             cooldowns: HashMap::new(),
-            strikes: Strikes::new(Duration::from_secs(sec.strike_decay_secs), now),
-            chat: RateLimiter::new(4, Duration::from_secs(3)),
+            strikes: Strikes::new(sec.strike_decay_secs * 1000, now),
+            chat: RateLimiter::new(4, 3000),
         };
         info!(id, %name, map, x, y, "entra");
         self.send(id, &S2C::Welcome { id });
@@ -94,8 +93,9 @@ impl World {
     /// Records a cheat attempt; enough of them (with decay) ends in a kick.
     pub(crate) fn strike(&mut self, id: u32, what: &str) {
         let limit = self.cfg.security.kick_strikes;
+        let now = self.now();
         let p = self.player_mut(id);
-        let count = p.strikes.add(Instant::now());
+        let count = p.strikes.add(now);
         warn!(id, name = %p.name, what, count, limit, "anticheat");
         if count >= limit {
             self.kick(id, &format!("Expulsado por el servidor: {what}"));

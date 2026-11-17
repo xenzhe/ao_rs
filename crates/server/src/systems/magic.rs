@@ -3,14 +3,13 @@ use crate::world::World;
 use ao_protocol::{Tone, S2C};
 use ao_rules::spells::SpellTarget;
 use ao_rules::{tile_distance, walk};
-use std::time::{Duration, Instant};
 
 impl World {
     pub(crate) fn on_cast(&mut self, id: u32, spell_id: u16, tx: i32, ty: i32, seq: u32) {
         let Some(spell) = self.data.spell(spell_id).cloned() else {
             return self.strike(id, "hechizo inexistente");
         };
-        let now = Instant::now();
+        let now = self.now();
         let (map, px, py, seq_ok, cd_ok, mana_ok, level) = {
             let p = self.player_mut(id);
             let seq_ok = p.seq.accept(seq);
@@ -59,8 +58,9 @@ impl World {
     }
 
     fn spend(&mut self, id: u32, spell: u16, mana: i32, cooldown_ms: u64) {
+        let now = self.now();
         let p = self.player_mut(id);
         p.mana -= mana;
-        p.cooldowns.insert(spell, Instant::now() + Duration::from_millis(cooldown_ms));
+        p.cooldowns.insert(spell, now.after_ms(cooldown_ms));
     }
 }

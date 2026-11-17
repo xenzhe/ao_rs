@@ -6,6 +6,8 @@ members = [
     "crates/ao-protocol",
     "crates/server",
     "crates/client",
+    "crates/client-core",
+    "crates/ao-testkit",
 ]
 
 # One place for dependency versions; crates use `dep.workspace = true`.
@@ -13,6 +15,9 @@ members = [
 ao-formats = { path = "crates/ao-formats" }
 ao-rules = { path = "crates/ao-rules" }
 ao-protocol = { path = "crates/ao-protocol" }
+client-core = { path = "crates/client-core" }
+ao-testkit = { path = "crates/ao-testkit" }
+server = { path = "crates/server" }
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3"
 toml = "0.8"

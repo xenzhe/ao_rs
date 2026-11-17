@@ -11,7 +11,7 @@ pub mod lighting;
 pub mod world;
 
 use crate::assets::Assets;
-use crate::game::Game;
+use crate::game::{v, Game};
 use ao_protocol::EntityKind;
 use fx::Fx;
 use layout::{Layout, RT_H, RT_W, TILE};
@@ -46,7 +46,7 @@ impl Renderer {
 
     /// World pixel shown at the top-left of the world view (camera follows the player).
     pub fn origin(game: &Game) -> Vec2 {
-        let tl = game.me().map(|e| e.tile_tl()).unwrap_or(Vec2::ZERO);
+        let tl = game.me().map(|e| v(e.tile_tl())).unwrap_or(Vec2::ZERO);
         (tl - PLAYER_ANCHOR).round()
     }
 
@@ -100,7 +100,7 @@ fn draw_target_square(game: &Game, lay: &Layout, origin: Vec2) {
 /// Names and HP bars in screen space, crisp at any scale.
 fn draw_names(game: &Game, lay: &Layout, origin: Vec2) {
     for (id, e) in &game.ents {
-        let p = lay.world_to_screen(e.world_pos(), origin);
+        let p = lay.world_to_screen(v(e.world_pos()), origin);
         if !lay.world.contains(p) {
             continue;
         }

@@ -1,0 +1,10 @@
+[package]
+name = "client-core"
+version = "0.1.0"
+edition = "2021"
+description = "Client logic without graphics: state, server messages, prediction, network. Shared by the game client and the test bots."
+
+[dependencies]
+ao-formats.workspace = true
+ao-rules.workspace = true
+ao-protocol.workspace = true

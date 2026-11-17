@@ -3,7 +3,7 @@ use crate::world::entities::Npc;
 use crate::world::World;
 use ao_protocol::S2C;
 use ao_rules::{tile_distance, walk, Dir};
-use std::time::{Duration, Instant};
+use crate::clock::GameTime;
 
 impl World {
     /// Fills a freshly loaded, non-safe map with creatures picked by `spawn_weight`.
@@ -33,7 +33,7 @@ impl World {
                 }
             }
             let Some((x, y)) = pos else { continue };
-            let now = Instant::now();
+            let now = self.now();
             let id = self.next_npc;
             self.next_npc += 1;
             let npc = Npc {
@@ -55,17 +55,20 @@ impl World {
         }
     }
 
-    pub(crate) fn tick_npcs(&mut self, now: Instant) {
-        let maps: Vec<u16> = self.maps.keys().copied().collect();
+    /// Sorted iteration: HashMap order is random and would make RNG use non-deterministic.
+    pub(crate) fn tick_npcs(&mut self, now: GameTime) {
+        let mut maps: Vec<u16> = self.maps.keys().copied().collect();
+        maps.sort_unstable();
         for map in maps {
-            let ids: Vec<u32> = self.instance(map).npcs.keys().copied().collect();
+            let mut ids: Vec<u32> = self.instance(map).npcs.keys().copied().collect();
+            ids.sort_unstable();
             for nid in ids {
                 self.tick_npc(map, nid, now);
             }
         }
     }
 
-    fn tick_npc(&mut self, map: u16, nid: u32, now: Instant) {
+    fn tick_npc(&mut self, map: u16, nid: u32, now: GameTime) {
         let n = &self.instance(map).npcs[&nid];
         if let Some(t) = n.dead_until {
             if now >= t {
@@ -87,13 +90,13 @@ impl World {
             .iter()
             .filter_map(|pid| self.player(*pid).map(|p| (*pid, p.x, p.y)))
             .filter(|(_, x, y)| tile_distance((nx, ny), (*x, *y)) <= def.aggro_range && walk::line_of_sight(m, nx, ny, *x, *y))
-            .min_by_key(|(_, x, y)| (x - nx).abs() + (y - ny).abs());
+            .min_by_key(|(pid, x, y)| ((x - nx).abs() + (y - ny).abs(), *pid));
 
         match target {
             Some((pid, px, py)) if (px - nx).abs() + (py - ny).abs() == 1 => {
                 if now >= n.next_attack {
                     let dmg = self.rng.range(def.damage[0], def.damage[1]);
-                    self.npc_mut(map, nid).next_attack = now + Duration::from_millis(def.attack_ms);
+                    self.npc_mut(map, nid).next_attack = now.after_ms(def.attack_ms);
                     self.damage_player(pid, dmg, &def.name);
                 }
             }
@@ -105,7 +108,7 @@ impl World {
                     if !self.npc_step(map, nid, primary) {
                         self.npc_step(map, nid, secondary);
                     }
-                    self.npc_mut(map, nid).next_move = now + Duration::from_millis(def.step_ms);
+                    self.npc_mut(map, nid).next_move = now.after_ms(def.step_ms);
                 }
             }
             None => {
@@ -116,7 +119,7 @@ impl World {
                         self.npc_step(map, nid, dir);
                     }
                     let wait = self.rng.range(1200, 2800) as u64;
-                    self.npc_mut(map, nid).next_move = now + Duration::from_millis(wait);
+                    self.npc_mut(map, nid).next_move = now.after_ms(wait);
                 }
             }
         }

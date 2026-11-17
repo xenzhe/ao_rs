@@ -5,8 +5,7 @@ use ao_protocol::S2C;
 impl World {
     pub(crate) fn regen(&mut self) {
         let (hp_regen, mana_regen) = (self.data.balance.hp_regen, self.data.balance.mana_regen);
-        let ids: Vec<u32> = self.sessions.iter().filter(|(_, s)| s.player.is_some()).map(|(id, _)| *id).collect();
-        for id in ids {
+        for id in self.player_ids() {
             let p = self.player_mut(id);
             let before = (p.hp, p.mana);
             p.hp = (p.hp + hp_regen).min(p.max_hp);

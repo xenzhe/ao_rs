@@ -30,5 +30,5 @@ async fn main() {
         Ok(l) => l,
         Err(e) => return error!("no se pudo escuchar en {}: {e}", config.bind),
     };
-    server::run(listener, Settings { config, data, recursos }).await;
+    server::run(listener, Settings::new(config, data, recursos)).await;
 }

@@ -1,219 +1,173 @@
 //! Attacks a real server instance the way a cheat client would, and checks every attempt
-//! is rejected (and that a legit client is never punished).
-use ao_formats::{recursos_dir, AoMap};
-use ao_protocol::*;
-use ao_rules::{walk, Dir, WALK_MS};
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::time::{sleep, timeout};
+//! is rejected (and that a legit client is never punished). Virtual clock: no test waits
+//! for real time to pass.
+use ao_protocol::{Tone, C2S, PROTOCOL_VERSION, S2C};
+use ao_rules::{Dir, WALK_MS};
+use ao_testkit::TestServer;
 
 const FIREBALL: u16 = 1;
 const LIGHTNING: u16 = 2;
 const HEAL: u16 = 3;
 
-struct Bot {
-    sock: TcpStream,
-    reader: FrameReader,
-    seq: u32,
+fn corrections(m: &S2C) -> bool {
+    matches!(m, S2C::Correct { .. })
 }
 
-impl Bot {
-    async fn connect(addr: &str) -> Bot {
-        Bot { sock: TcpStream::connect(addr).await.unwrap(), reader: FrameReader::default(), seq: 0 }
-    }
-
-    async fn send(&mut self, msg: &C2S) {
-        self.sock.write_all(&encode(msg)).await.unwrap();
-    }
-
-    async fn raw(&mut self, bytes: &[u8]) {
-        let _ = self.sock.write_all(bytes).await;
-    }
-
-    /// Collects every message the server sends within `ms`; returns (msgs, closed).
-    async fn drain(&mut self, ms: u64) -> (Vec<S2C>, bool) {
-        let mut out = Vec::new();
-        let mut buf = [0u8; 65536];
-        let deadline = tokio::time::Instant::now() + Duration::from_millis(ms);
-        loop {
-            while let Some(Ok(m)) = self.reader.next::<S2C>(MAX_SERVER_FRAME) {
-                out.push(m);
-            }
-            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-            if left.is_zero() {
-                return (out, false);
-            }
-            match timeout(left, self.sock.read(&mut buf)).await {
-                Ok(Ok(0)) | Ok(Err(_)) => {
-                    while let Some(Ok(m)) = self.reader.next::<S2C>(MAX_SERVER_FRAME) {
-                        out.push(m);
-                    }
-                    return (out, true);
-                }
-                Ok(Ok(n)) => self.reader.push(&buf[..n]),
-                Err(_) => return (out, false),
-            }
-        }
-    }
-
-    async fn login(&mut self, name: &str) -> (i32, i32) {
-        self.send(&C2S::Login { name: name.into(), version: PROTOCOL_VERSION }).await;
-        let (msgs, _) = self.drain(300).await;
-        msgs.iter()
-            .find_map(|m| if let S2C::EnterMap { x, y, .. } = m { Some((*x, *y)) } else { None })
-            .expect("enter map")
-    }
-
-    async fn walk(&mut self, dir: Dir) {
-        self.seq += 1;
-        let seq = self.seq;
-        self.send(&C2S::Walk { dir, seq }).await;
-    }
-
-    async fn cast(&mut self, spell: u16, tx: i32, ty: i32) {
-        self.seq += 1;
-        let seq = self.seq;
-        self.send(&C2S::Cast { spell, tx, ty, seq }).await;
-    }
+fn effects(m: &S2C) -> bool {
+    matches!(m, S2C::Effect { .. })
 }
 
-async fn start() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap().to_string();
-    tokio::spawn(server::run(listener, server::Settings::defaults()));
-    addr
-}
-
-/// A direction with 3 legal steps from the spawn tile on the real Ullathorpe map, so any
-/// rejection in the tests is due to timing and not to a wall.
-fn free_dir(x: i32, y: i32) -> Dir {
-    let map = AoMap::load(&recursos_dir(), 1).expect("AO maps");
-    for d in [Dir::Right, Dir::Left, Dir::Down, Dir::Up] {
-        let (dx, dy) = d.delta();
-        if (1..=3).all(|k| walk::can_enter(&map, x + k * dx, y + k * dy, d) && map.exit(x + k * dx, y + k * dy).is_none()) {
-            return d;
-        }
-    }
-    panic!("no free direction around the spawn");
-}
-
-#[tokio::test]
-async fn speedhack_is_rejected_and_kicked() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    let (x, y) = bot.login("Speedy").await;
-    let dir = free_dir(x, y);
-    // 12 steps in a burst: a legit client needs 12 * 200 ms.
+#[test]
+fn speedhack_is_rejected_and_kicked() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Speedy");
+    let dir = bot.free_dir(3).expect("free direction");
+    // 12 steps with no game time between them: a legit client needs 12 * WALK_MS.
     for _ in 0..12 {
-        bot.walk(dir).await;
+        bot.walk_raw(dir);
     }
-    let (msgs, closed) = bot.drain(500).await;
-    let corrections = msgs.iter().filter(|m| matches!(m, S2C::Correct { .. })).count();
-    let kicked = msgs.iter().any(|m| matches!(m, S2C::Kicked { .. }));
-    assert!(corrections >= 8, "server must reject the extra steps");
-    assert!(kicked && closed, "repeat offender must be kicked");
+    bot.sync();
+    assert!(bot.count(corrections) >= 8, "server must reject the extra steps");
+    assert!(bot.kicked().is_some(), "repeat offender must be kicked");
+    bot.wait_until("conexion cerrada", |b| b.closed());
 }
 
-#[tokio::test]
-async fn legit_walk_is_accepted() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    let (x, y) = bot.login("Walker").await;
-    let dir = free_dir(x, y);
+#[test]
+fn legit_walk_is_accepted() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Walker");
+    let dir = bot.free_dir(3).expect("free direction");
+    let (x, y) = bot.pos();
     for _ in 0..3 {
-        bot.walk(dir).await;
-        sleep(Duration::from_millis(WALK_MS + 5)).await;
+        assert!(bot.walk(dir), "the client must allow a step at legit pace");
+        s.advance(WALK_MS);
     }
-    let (msgs, closed) = bot.drain(200).await;
-    assert!(!closed);
-    assert!(!msgs.iter().any(|m| matches!(m, S2C::Correct { .. })), "legit pace must never be corrected: {msgs:?}");
+    bot.sync();
+    assert!(!bot.closed());
+    assert_eq!(bot.count(corrections), 0, "legit pace must never be corrected: {:?}", bot.log());
+    let (dx, dy) = dir.delta();
+    assert_eq!(bot.pos(), (x + 3 * dx, y + 3 * dy));
 }
 
-#[tokio::test]
-async fn replayed_packets_are_ignored() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    bot.login("Replayer").await;
+#[test]
+fn client_prediction_never_outruns_the_server() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Eager");
+    let dir = bot.free_dir(3).expect("free direction");
+    assert!(bot.walk(dir));
+    assert!(!bot.walk(dir), "the client itself holds the second step until WALK_MS passes");
+    s.advance(WALK_MS / 2);
+    assert!(!bot.walk(dir));
+    s.advance(WALK_MS / 2);
+    assert!(bot.walk(dir));
+    bot.sync();
+    assert_eq!(bot.count(corrections), 0);
+}
+
+#[test]
+fn replayed_packets_are_ignored() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Replayer");
     for _ in 0..10 {
-        bot.send(&C2S::Walk { dir: Dir::Left, seq: 1 }).await;
-        sleep(Duration::from_millis(WALK_MS + 5)).await;
+        bot.send(&C2S::Walk { dir: Dir::Left, seq: 1 });
+        s.advance(WALK_MS + 5);
     }
-    let (msgs, closed) = bot.drain(300).await;
-    assert!(closed && msgs.iter().any(|m| matches!(m, S2C::Kicked { .. })), "replay spam must end in a kick");
+    bot.sync();
+    assert!(bot.kicked().is_some(), "replay spam must end in a kick");
+    bot.wait_until("conexion cerrada", |b| b.closed());
 }
 
-#[tokio::test]
-async fn oversized_and_garbage_frames_disconnect() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    bot.login("Fuzzer").await;
-    bot.raw(&(100_000_000u32).to_le_bytes()).await;
-    let (_, closed) = bot.drain(500).await;
-    assert!(closed, "oversized frame must close the connection");
+#[test]
+fn oversized_and_garbage_frames_disconnect() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Fuzzer");
+    bot.send_bytes(&(100_000_000u32).to_le_bytes());
+    bot.wait_until("cierre por paquete gigante", |b| b.closed());
 
-    let mut bot2 = Bot::connect(&addr).await;
-    bot2.login("Fuzzer2").await;
-    bot2.raw(&[8, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]).await;
-    let (_, closed2) = bot2.drain(500).await;
-    assert!(closed2, "malformed frame must close the connection");
+    let mut bot2 = s.bot("Fuzzer2");
+    bot2.send_bytes(&[8, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+    bot2.wait_until("cierre por paquete malformado", |b| b.closed());
 }
 
-#[tokio::test]
-async fn actions_before_login_are_kicked() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    bot.cast(LIGHTNING, 0, 0).await;
-    let (_, closed) = bot.drain(500).await;
-    assert!(closed);
+#[test]
+fn actions_before_login_are_kicked() {
+    let s = TestServer::start();
+    let mut bot = s.connect();
+    bot.cast_raw(LIGHTNING, 0, 0);
+    bot.wait_until("cierre por accion antes del login", |b| b.closed());
 }
 
-#[tokio::test]
-async fn illegal_spells_are_refused() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    let (x, y) = bot.login("Caster").await;
+#[test]
+fn packet_flood_is_kicked() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Flooder");
+    // 60 frames inside one second of game time (limit: security.max_msgs_per_sec = 40).
+    for _ in 0..60 {
+        bot.say("x");
+    }
+    bot.wait_until("cierre por flood de paquetes", |b| b.closed());
+}
 
-    bot.cast(FIREBALL, x + 30, y).await; // out of range
-    bot.cast(HEAL, x + 1, y + 1).await; // heal on an empty tile
-    let (msgs, _) = bot.drain(300).await;
-    assert!(!msgs.iter().any(|m| matches!(m, S2C::Effect { .. })), "no spell effect may happen");
-    let mana = msgs.iter().filter_map(|m| if let S2C::Stats { mana, .. } = m { Some(*mana) } else { None }).last();
-    assert!(mana.is_none() || mana == Some(120), "mana must not be spent");
+#[test]
+fn illegal_spells_are_refused() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Caster");
+    let (x, y) = bot.pos();
+    let mana0 = bot.mana();
+
+    bot.cast_raw(FIREBALL, x + 30, y); // out of range
+    bot.cast_raw(HEAL, x + 1, y + 1); // heal on an empty tile
+    bot.sync();
+    assert_eq!(bot.count(effects), 0, "no spell effect may happen");
+    assert_eq!(bot.mana(), mana0, "mana must not be spent");
 
     // Cooldown abuse: heal self twice in a row.
-    bot.cast(HEAL, x, y).await;
-    bot.cast(HEAL, x, y).await;
-    let (msgs, _) = bot.drain(300).await;
-    let effects = msgs.iter().filter(|m| matches!(m, S2C::Effect { .. })).count();
-    assert_eq!(effects, 1, "second cast inside the cooldown must be refused");
+    bot.cast_raw(HEAL, x, y);
+    bot.cast_raw(HEAL, x, y);
+    bot.sync();
+    assert_eq!(bot.count(effects), 1, "second cast inside the cooldown must be refused");
 
     // A spell id that does not exist.
-    bot.cast(999, x, y).await;
-    let (msgs, _) = bot.drain(200).await;
-    assert!(!msgs.iter().any(|m| matches!(m, S2C::Effect { .. })));
+    bot.cast_raw(999, x, y);
+    bot.sync();
+    assert_eq!(bot.count(effects), 1);
 }
 
-#[tokio::test]
-async fn chat_flood_and_control_chars_are_filtered() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    bot.login("Talker").await;
+#[test]
+fn cooldown_ends_with_game_time() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Patient");
+    let (x, y) = bot.pos();
+    let cd = s.data().spell(HEAL).unwrap().cooldown_ms;
+    assert!(bot.cast(HEAL, x, y));
+    bot.sync();
+    assert!(!bot.cast(HEAL, x, y), "the client mirrors the cooldown and does not send");
+    s.advance(cd + 100);
+    assert!(bot.cast(HEAL, x, y), "after the cooldown the client casts again");
+    bot.sync();
+    assert_eq!(bot.count(effects), 2);
+    assert!(bot.kicked().is_none());
+}
+
+#[test]
+fn chat_flood_and_control_chars_are_filtered() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Talker");
     for _ in 0..10 {
-        bot.send(&C2S::Say { text: "hola\u{7}\u{1b}[31m".into() }).await;
+        bot.say("hola\u{7}\u{1b}[31m");
     }
-    let (msgs, _) = bot.drain(300).await;
-    let chats: Vec<&String> = msgs.iter().filter_map(|m| if let S2C::Console { text, color: Tone::Chat } = m { Some(text) } else { None }).collect();
+    bot.sync();
+    let chats: Vec<&String> = bot.log().iter().filter_map(|m| if let S2C::Console { text, color: Tone::Chat } = m { Some(text) } else { None }).collect();
     assert!(chats.len() <= 4, "flood must be capped, got {}", chats.len());
+    assert!(!chats.is_empty());
     assert!(chats.iter().all(|t| !t.chars().any(|c| c.is_control())), "control chars must be stripped");
 }
 
-#[tokio::test]
-async fn spell_book_comes_from_data_files() {
-    let addr = start().await;
-    let mut bot = Bot::connect(&addr).await;
-    bot.send(&C2S::Login { name: "Reader".into(), version: PROTOCOL_VERSION }).await;
-    let (msgs, _) = bot.drain(300).await;
-    let book = msgs.iter().find_map(|m| if let S2C::SpellBook { spells } = m { Some(spells.clone()) } else { None }).expect("spell book");
-    assert!(book.iter().any(|s| s.id == FIREBALL && s.name == "Bola de fuego"));
+#[test]
+fn spell_book_comes_from_data_files() {
+    let s = TestServer::start();
+    let mut bot = s.connect();
+    bot.send(&C2S::Login { name: "Reader".into(), version: PROTOCOL_VERSION });
+    bot.wait_until("libro de hechizos", |b| !b.game.spells.is_empty());
+    assert!(bot.game.spells.iter().any(|s| s.id == FIREBALL && s.name == "Bola de fuego"));
 }

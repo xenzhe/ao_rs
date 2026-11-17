@@ -1,7 +1,7 @@
 //! Non-blocking TCP connection polled once per frame (no threads needed).
 use ao_protocol::{encode, FrameReader, C2S, MAX_SERVER_FRAME, S2C};
 use std::io::{ErrorKind, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 pub struct Net {
@@ -9,6 +9,8 @@ pub struct Net {
     reader: FrameReader,
     out: Vec<u8>,
     alive: bool,
+    /// Bytes received so far (tests use it as a barrier against the server's count).
+    pub bytes_in: u64,
 }
 
 impl Net {
@@ -17,11 +19,30 @@ impl Net {
         let sock = TcpStream::connect_timeout(&sa, Duration::from_secs(2))?;
         sock.set_nodelay(true)?;
         sock.set_nonblocking(true)?;
-        Ok(Net { sock, reader: FrameReader::default(), out: Vec::new(), alive: true })
+        Ok(Net { sock, reader: FrameReader::default(), out: Vec::new(), alive: true, bytes_in: 0 })
+    }
+
+    /// Our end of the connection (the server sees it as the peer address).
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.sock.local_addr().ok()
+    }
+
+    pub fn alive(&self) -> bool {
+        self.alive
+    }
+
+    /// Bytes not yet accepted by the OS.
+    pub fn pending_out(&self) -> usize {
+        self.out.len()
     }
 
     pub fn send(&mut self, msg: &C2S) {
-        self.out.extend_from_slice(&encode(msg));
+        self.send_bytes(&encode(msg));
+    }
+
+    /// Raw bytes, framed or not (fuzzing tests).
+    pub fn send_bytes(&mut self, bytes: &[u8]) {
+        self.out.extend_from_slice(bytes);
         self.flush();
     }
 
@@ -54,7 +75,10 @@ impl Net {
                     self.alive = false;
                     break;
                 }
-                Ok(n) => self.reader.push(&buf[..n]),
+                Ok(n) => {
+                    self.bytes_in += n as u64;
+                    self.reader.push(&buf[..n]);
+                }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => break,
                 Err(_) => {
                     self.alive = false;

@@ -3,7 +3,7 @@
 //! fade when you walk behind them), and finally layer-5 roofs that fade while under them.
 use super::layout::TILE;
 use crate::assets::Assets;
-use crate::game::{Ent, Game};
+use crate::game::{v, Ent, Game};
 use ao_formats::csm::{is_roof_trigger, tile};
 use ao_rules::{VIEW_TILES_H, VIEW_TILES_W};
 use macroquad::prelude::*;
@@ -115,7 +115,7 @@ pub fn draw_world(game: &Game, assets: &mut Assets, fades: &mut WorldFades, orig
 
 /// Body + head at the character's tile, as the official composed character.
 pub fn draw_character(assets: &mut Assets, e: &Ent, origin: Vec2) {
-    let tl = e.tile_tl() - origin;
+    let tl = v(e.tile_tl()) - origin;
     let heading = e.dir.heading();
     let Some(body) = assets.db.bodies.get(&e.body).cloned() else { return };
     draw_ellipse(tl.x + 16.0, tl.y + 29.0, 11.0, 4.0, 0.0, Color::new(0.0, 0.0, 0.0, 0.3));

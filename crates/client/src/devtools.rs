@@ -4,7 +4,7 @@
 //! - `AO_WALK=up|down|left|right`: keep walking in that direction
 //! - `AO_FXDEMO=1`: play the spell effects locally (never sent to the server) and capture
 //! - `AO_HOUR=h`: start at that hour of the day
-use crate::game::Game;
+use crate::game::{v, Game};
 use crate::render::Renderer;
 use ao_rules::spells::SpellEffect;
 use ao_rules::Dir;
@@ -58,7 +58,7 @@ impl DevTools {
         }
         if self.fx_demo {
             let Some(me) = game.me() else { return };
-            let c = me.world_pos() - vec2(0.0, 24.0);
+            let c = v(me.world_pos()) - vec2(0.0, 24.0);
             let fx = &mut renderer.fx;
             match self.demo_step {
                 0 if t > 1.6 => {

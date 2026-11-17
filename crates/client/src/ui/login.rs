@@ -1,6 +1,6 @@
 //! Login screen.
 use super::widgets::{button, panel, text, text_centered};
-use crate::game::Game;
+use crate::game::{tone_color, Game};
 use ao_protocol::Tone;
 use ao_rules::valid_name;
 use macroquad::prelude::*;
@@ -42,6 +42,6 @@ pub fn draw(game: &mut Game, u: f32) {
         }
     }
     if let Some((msg, c)) = game.console.back() {
-        text(msg, r.x + 20.0 * u, r.bottom() - 14.0 * u, 16.0 * u, *c);
+        text(msg, r.x + 20.0 * u, r.bottom() - 14.0 * u, 16.0 * u, tone_color(*c));
     }
 }

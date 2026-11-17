@@ -3,7 +3,7 @@
 //! multiplied over the world.
 use super::fx::Fx;
 use super::layout::{RT_H, RT_W, TILE};
-use crate::game::{tile_center, Game};
+use crate::game::{tile_center, v, Game};
 use macroquad::prelude::*;
 
 /// 24 in-game hours every 4 real minutes.
@@ -40,13 +40,13 @@ pub fn build_light_map(game: &Game, fx: &Fx, origin: Vec2, amb: Color, t_ms: f32
     if night > 0.02 {
         if let Some(me) = game.me() {
             let flick = 1.0 + (t_ms * 0.009).sin() * 0.03 + (t_ms * 0.023).sin() * 0.02;
-            fx.light(me.world_pos() - origin - vec2(0.0, 20.0), 140.0 * flick, Color::new(1.0, 0.75, 0.45, 0.85 * night));
+            fx.light(v(me.world_pos()) - origin - vec2(0.0, 20.0), 140.0 * flick, Color::new(1.0, 0.75, 0.45, 0.85 * night));
         }
         if let Some(map) = &game.map {
             for l in &map.lights {
                 // Official ranges: < 100 square lights, >= 100 round lights of (range - 99).
                 let tiles = if l.range < 100 { l.range as f32 } else { (l.range - 99) as f32 };
-                let p = tile_center(l.x, l.y) - origin;
+                let p = v(tile_center(l.x, l.y)) - origin;
                 if p.x < -400.0 || p.y < -400.0 || p.x > RT_W + 400.0 || p.y > RT_H + 400.0 {
                     continue;
                 }
