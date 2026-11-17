@@ -186,8 +186,9 @@ impl World {
         rules::attack_power(f.skill(skill), f.agility, f.level, rules::attack_skill_modifier(&f.mods, skill), rules::weapon_hit_bonus(&f.mods, w))
     }
 
-    /// `GetArmorPenetration` (armor_penetration_feature is on).
-    fn armor_penetration(&mut self, f: &Fighter) -> i32 {
+    /// `GetArmorPenetration` (armor_penetration_feature is on): flat roll plus a share of
+    /// the target's armor.
+    fn armor_penetration(&mut self, f: &Fighter, target_armor: i32) -> i32 {
         let Some(w) = self.obj(f.weapon).cloned() else { return 0 };
         if !rules::FEATURE_ARMOR_PENETRATION {
             return 0;
@@ -197,7 +198,8 @@ impl World {
             return 0;
         }
         let (a, b) = (w.min_armor_penetration_flat.max(0), w.max_armor_penetration_flat.max(0));
-        self.roll(a.min(b), a.max(b))
+        let flat = self.roll(a.min(b), a.max(b));
+        flat + rules::armor_penetration_share(w.armor_penetration_percent, target_armor)
     }
 
     fn weapon_extra_chance(&self, f: &Fighter) -> i32 {
@@ -236,7 +238,7 @@ impl World {
             return true;
         }
         let base = self.base_damage(&f, true);
-        let def = (npc.defense - self.armor_penetration(&f)).max(0) as i64;
+        let def = (npc.defense - self.armor_penetration(&f, npc.defense)).max(0) as i64;
         let damage = (base - def).max(0);
         // healers_and_tanks: warriors heal a share of what they deal.
         if rules::FEATURE_HEALERS_AND_TANKS && f.class == Class::Warrior && damage > 0 {
@@ -359,7 +361,7 @@ impl World {
                 def += self.roll(o.min_def, o.max_def);
             }
         }
-        let def = (def - self.armor_penetration(&fa)).max(0) as i64;
+        let def = (def - self.armor_penetration(&fa, def)).max(0) as i64;
         let damage = (base - def).max(0);
         let w = self.obj(fa.weapon).cloned();
         // GetBackHitBonusChanceAgainstUsers: same heading and adjacent.

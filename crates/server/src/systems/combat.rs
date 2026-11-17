@@ -362,3 +362,192 @@ impl World {
         obj.and_then(|o| self.ao.objs.get(o as u32))
     }
 }
+
+/// World-level tests for what bots cannot set up yet (equipment, skills, direct hooks).
+#[cfg(test)]
+mod tests {
+    use crate::clock::{Clock, GameTime, VirtualClock};
+    use crate::db::{CharacterRecord, CharacterState};
+    use crate::world::entities::Npc;
+    use crate::world::inventory::InvItem;
+    use crate::world::{Session, World};
+    use crate::Settings;
+    use ao_formats::dat::obj::ObjType;
+    use ao_rules::combat::{BOW_INTERVAL_MS, DEAD_BODY};
+    use ao_rules::Dir;
+
+    const MAP: u16 = 2;
+
+    fn world() -> (World, VirtualClock) {
+        let mut s = Settings::defaults();
+        s.data.balance.creatures_per_map = 0;
+        let clock = VirtualClock::new();
+        clock.set(GameTime(10_000));
+        s.clock = Clock::Virtual(clock.clone());
+        let mut w = World::new(s);
+        assert!(w.ensure_map(MAP));
+        (w, clock)
+    }
+
+    fn join(w: &mut World, id: u32, class: u8, x: i32, y: i32) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        std::mem::forget(rx);
+        w.sessions.insert(id, Session::new(tx, "127.0.0.1:9".parse().unwrap()));
+        let r = CharacterRecord {
+            id: 0,
+            account_id: 0,
+            name: format!("P{id}"),
+            race: 1,
+            class,
+            gender: 1,
+            body: 1,
+            head: 7,
+            level: 1,
+            exp: 0,
+            hp: 50,
+            max_hp: 50,
+            mana: 0,
+            max_mana: 0,
+            map: MAP,
+            x,
+            y,
+        };
+        assert!(w.spawn_player(id, &r, &CharacterState::default(), None));
+        let p = w.player_mut(id);
+        p.stats.sta = 1000;
+        p.stats.max_sta = 1000;
+    }
+
+    fn wolf(w: &mut World, nid: u32, x: i32, y: i32, hp: i32) {
+        let now = w.now();
+        let npc = Npc { def: 1, name: "Lobo".into(), body: 1, head: 0, x, y, dir: Dir::Down, hp, max_hp: hp, home: (x, y), next_move: now, next_attack: now, dead_until: None };
+        w.maps.get_mut(&MAP).unwrap().npcs.insert(nid, npc);
+    }
+
+    fn first_obj(w: &World, f: impl Fn(&ao_formats::dat::obj::ObjData) -> bool) -> u16 {
+        w.ao.objs.iter().find(|(_, o)| f(o)).map(|(id, _)| id as u16).expect("official object")
+    }
+
+    fn give(w: &mut World, id: u32, slot: u8, obj: u16, amount: u32) {
+        w.player_mut(id).inv.slots[slot as usize - 1] = Some(InvItem { obj, amount });
+    }
+
+    #[test]
+    fn bow_needs_matching_arrows_and_spends_them() {
+        let (mut w, clock) = world();
+        let (px, py) = w.free_tile_near(MAP, 50, 50, 3);
+        join(&mut w, 1, 8, px, py);
+        let (px, py) = (w.player(1).unwrap().x, w.player(1).unwrap().y);
+        let (wx, wy) = w.free_tile_near(MAP, px + 3, py, 3);
+        wolf(&mut w, 900_001, wx, wy, 100_000);
+        let bow = first_obj(&w, |o| o.projectile == 1 && o.ammo > 0 && o.max_hit > 0);
+        let ammo_kind = w.ao.objs.get(bow as u32).unwrap().ammo;
+        let arrow = first_obj(&w, |o| o.obj_type == ObjType::Arrows && o.subtype == ammo_kind);
+        give(&mut w, 1, 1, bow, 1);
+        w.player_mut(1).inv.equipped.weapon = Some(1);
+
+        // Bow but no arrows: refused before any timer or stamina.
+        w.on_shoot(1, wx, wy, 1);
+        assert!(w.player(1).unwrap().combat.last_shot.is_none());
+        assert_eq!(w.instance(MAP).npcs[&900_001].hp, 100_000);
+
+        give(&mut w, 1, 2, arrow, 2);
+        w.player_mut(1).inv.equipped.ammo = Some(2);
+        w.on_shoot(1, wx, wy, 2);
+        assert_eq!(w.player(1).unwrap().inv.get(2).unwrap().amount, 1, "one arrow per shot");
+        // Within IntervaloFlechasCazadores: ignored, nothing spent.
+        w.on_shoot(1, wx, wy, 3);
+        assert_eq!(w.player(1).unwrap().inv.get(2).unwrap().amount, 1);
+        clock.set(GameTime(w.now().0 + BOW_INTERVAL_MS));
+        w.on_shoot(1, wx, wy, 4);
+        let p = w.player(1).unwrap();
+        assert!(p.inv.get(2).is_none() && p.inv.equipped.ammo.is_none(), "the last arrow empties and unequips the slot");
+    }
+
+    #[test]
+    fn npc_hits_respect_armor_and_kill_into_a_ghost() {
+        let (mut w, _clock) = world();
+        join(&mut w, 1, 3, 50, 50);
+        let (x, y) = (w.player(1).unwrap().x, w.player(1).unwrap().y);
+        wolf(&mut w, 900_001, x + 1, y, 60);
+        let armor = first_obj(&w, |o| o.obj_type == ObjType::Armor && o.min_def >= 5 && o.max_def >= o.min_def);
+        give(&mut w, 1, 1, armor, 1);
+        w.player_mut(1).inv.equipped.armor = Some(1);
+        let (min_def, max_def) = { let a = w.ao.objs.get(armor as u32).unwrap(); (a.min_def, a.max_def) };
+        let npc = w.npc_combat(MAP, 900_001).unwrap();
+        assert_eq!((npc.min_hit, npc.max_hit, npc.attack_power), (6, 12, 20), "npcs.dat Lobo");
+
+        let p = w.player_mut(1);
+        (p.hp, p.max_hp) = (1_000_000, 1_000_000);
+        let (mut hits, mut absorbed) = (0, 0);
+        for _ in 0..400 {
+            let before = w.player(1).unwrap().hp;
+            w.npc_attacks_player(MAP, 900_001, 1);
+            let d = before - w.player(1).unwrap().hp;
+            assert!((0..=npc.max_hit).contains(&d), "damage {d}");
+            if d < npc.min_hit {
+                absorbed += 1;
+            }
+            if d > 0 {
+                hits += 1;
+            }
+        }
+        assert!(hits > 0, "some bites land");
+        assert!(absorbed > 0, "armor {min_def}..{max_def} absorbs part of 6..12");
+
+        w.player_mut(1).hp = 1;
+        for _ in 0..200 {
+            if w.is_dead(1) {
+                break;
+            }
+            w.npc_attacks_player(MAP, 900_001, 1);
+        }
+        // An armor of min_def >= 6 could absorb every bite: then use a naked victim.
+        if !w.is_dead(1) {
+            w.player_mut(1).inv.equipped.armor = None;
+            while !w.is_dead(1) {
+                w.npc_attacks_player(MAP, 900_001, 1);
+            }
+        }
+        let p = w.player(1).unwrap();
+        assert_eq!((p.hp, p.body, p.head, p.combat.dead), (0, DEAD_BODY, 0, true));
+        let hp = p.hp;
+        w.npc_attacks_player(MAP, 900_001, 1);
+        assert_eq!(w.player(1).unwrap().hp, hp, "ghosts are not attacked");
+        assert_eq!(w.heal_player(1, 10), 0, "nor healed");
+
+        w.resurrect(1);
+        let p = w.player(1).unwrap();
+        assert_eq!((p.hp, p.body, p.head, p.combat.dead), (p.max_hp, 1, 7, false));
+        assert!(!w.is_dead(1));
+        w.resurrect(1);
+        assert_eq!(w.player(1).unwrap().body, 1, "resurrecting the living does nothing");
+    }
+
+    #[test]
+    fn safe_trigger_blocks_pvp() {
+        let (mut w, _clock) = world();
+        join(&mut w, 1, 3, 50, 50);
+        let (x, y) = (w.player(1).unwrap().x, w.player(1).unwrap().y);
+        let (bx, by) = (x + 1, y);
+        join(&mut w, 2, 3, bx, by);
+        let p2 = w.player(2).unwrap();
+        assert_eq!((p2.x, p2.y), (bx, by), "second player right of the first");
+        w.player_mut(1).dir = Dir::Right;
+        for k in 0..20 {
+            w.player_mut(1).combat.last_attack = None;
+            w.on_melee(1, k + 1);
+        }
+        let hp = w.player(2).unwrap().hp;
+        assert!(hp < 50, "control: on a plain tile the warrior hurts");
+        let m = &mut w.maps.get_mut(&MAP).unwrap().map;
+        let i = ((by - 1) * 100 + (bx - 1)) as usize;
+        m.triggers[i] = ao_rules::combat::TRIGGER_SAFE_ZONE;
+        assert_eq!(m.trigger(bx, by), ao_rules::combat::TRIGGER_SAFE_ZONE);
+        for k in 20..40 {
+            w.player_mut(1).combat.last_attack = None;
+            w.on_melee(1, k + 1);
+        }
+        assert_eq!(w.player(2).unwrap().hp, hp, "nobody fights on a ZonaSegura tile");
+    }
+}

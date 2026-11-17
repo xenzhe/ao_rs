@@ -178,6 +178,19 @@ pub fn user_damage(weapon_roll: i32, max_weapon: i32, strength: u8, user_roll: i
     vb_round((3.0 * weapon_roll as f64 + max_weapon as f64 * 0.2 * str_bonus + user_roll as f64) * class_modifier)
 }
 
+/// Percent part of `GetArmorPenetration`: `ArmorPenetrationPercent` (as 0..1, or 0..100
+/// when above 1) of the target's armor, assigned to an Integer.
+pub fn armor_penetration_share(percent: i32, target_armor: i32) -> i32 {
+    if percent <= 0 {
+        return 0;
+    }
+    let mut pct = percent as f64;
+    if pct > 1.0 {
+        pct /= 100.0;
+    }
+    vb_round(target_armor as f64 * pct.min(1.0)) as i32
+}
+
 /// `PuedeApuñalar`.
 pub fn can_stab(is_assassin: bool, stab_skill: u8, weapon: Option<&ObjData>) -> bool {
     weapon.is_some_and(|w| w.stabs == 1) && (is_assassin || stab_skill >= MIN_STAB_SKILL)
