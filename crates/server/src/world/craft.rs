@@ -31,6 +31,9 @@ pub struct Job {
 pub struct CraftPiece {
     pub open: Option<OpenTrade>,
     pub job: Option<Job>,
+    /// `Counters.TimerPuedeTrabajar`: per player, not per order, so stopping, reopening or
+    /// sending new orders never builds faster than one step per interval.
+    pub next_step_at: GameTime,
 }
 
 #[derive(Debug, Default)]

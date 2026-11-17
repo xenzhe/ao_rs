@@ -51,6 +51,12 @@ impl CraftState {
                     self.built.clear();
                 }
             }
+            CraftS2C::Recipes { trade, recipes, per_step } => {
+                if let Some(o) = self.open.as_mut().filter(|o| o.trade == *trade) {
+                    o.recipes = recipes.clone();
+                    o.per_step = *per_step;
+                }
+            }
             CraftS2C::Progress { obj, done, total } => {
                 self.order = (done < total).then_some(Order { obj: *obj, done: *done, total: *total });
                 self.last_stop = None;
@@ -63,6 +69,10 @@ impl CraftState {
                 match self.built.iter_mut().find(|(o, _)| o == obj) {
                     Some(b) => b.1 += amount,
                     None => self.built.push((*obj, *amount)),
+                }
+                // Until the frontend drains it, keep only the latest few.
+                if self.sounds.len() >= 16 {
+                    self.sounds.remove(0);
                 }
                 self.sounds.push(*sound);
             }

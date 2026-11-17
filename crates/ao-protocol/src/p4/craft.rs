@@ -38,6 +38,8 @@ pub enum CraftS2C {
     /// The trade is open (window): what can be built now, the units built per step and the
     /// station tile (blacksmith).
     Open { trade: Trade, recipes: Vec<Recipe>, per_step: u32, station: Option<(i32, i32)> },
+    /// New list for the open trade (a skill went up): never opens a closed window.
+    Recipes { trade: Trade, recipes: Vec<Recipe>, per_step: u32 },
     /// Progress of the order: `done` of `total` units of `obj` (`done == total`: finished).
     Progress { obj: u16, done: u32, total: u32 },
     /// The order stopped before finishing (no materials, too tired, moved away...).

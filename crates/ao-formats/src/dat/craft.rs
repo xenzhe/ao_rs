@@ -201,8 +201,7 @@ mod tests {
         let on_map = map_objects(&root, 1);
         assert!(!on_map.is_empty(), "map 1 carries objects");
         let anvils = objects_of_type(&on_map, &objs.data, crate::dat::obj::ObjType::Anvil);
-        println!("anvils map 1: {anvils:?}");
-        assert!(!anvils.is_empty(), "Ullathorpe has an anvil");
+        assert!(anvils.iter().any(|a| (a.x, a.y, a.obj) == (34, 65, 384)), "the anvil of Ullathorpe: {anvils:?}");
     }
 
     #[test]

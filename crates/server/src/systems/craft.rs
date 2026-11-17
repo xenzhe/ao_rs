@@ -353,7 +353,8 @@ impl World {
         }
         let now = self.now();
         let p = self.player_mut(id);
-        p.craft.job = Some(Job { obj, total: amount, done: 0, next_at: now });
+        let next_at = now.max(p.craft.next_step_at);
+        p.craft.job = Some(Job { obj, total: amount, done: 0, next_at });
         self.craft_step(id);
     }
 
@@ -369,11 +370,14 @@ impl World {
         let now = self.now();
         let Some(p) = self.player(id) else { return };
         let (Some(open), Some(job)) = (p.craft.open, p.craft.job) else { return };
-        // IntervaloPermiteTrabajarConstruir.
-        if job.next_at > now {
+        // IntervaloPermiteTrabajarConstruir: an attempt that passes the gate consumes it,
+        // whether it then builds or fails.
+        if job.next_at > now || p.craft.next_step_at > now {
             return;
         }
         let trade = open.trade;
+        self.player_mut(id).craft.next_step_at = now.after_ms(rules::BUILD_INTERVAL_MS);
+        let Some(p) = self.player(id) else { return };
         let (dead, sta, skill, level, food, water) = (p.hp <= 0, p.stats.sta, p.stats.skills[trade.skill()], p.level, p.stats.food, p.stats.water);
         let (map, px, py) = (p.map, p.x, p.y);
         if dead {
@@ -402,7 +406,6 @@ impl World {
         }
         let (min_sta, cost) = trade.stamina();
         if sta <= min_sta {
-            self.send(id, &S2C::NpcSay { id, text: "¡No tengo energía!".into() });
             return self.craft_fail(id, TIRED);
         }
         let n = (job.total - job.done).min(rules::units_per_step(trade, class, skill));
@@ -464,7 +467,6 @@ impl World {
         // A higher skill may unlock objects: refresh the window list.
         let recipes = self.craft_recipes(id, trade);
         let per_step = rules::units_per_step(trade, self.craft_class(id), new);
-        let station = self.player(id).and_then(|p| p.craft.open).and_then(|o| o.station).map(|(_, x, y, _)| (x, y));
-        send_craft(self, id, CraftS2C::Open { trade, recipes, per_step, station });
+        send_craft(self, id, CraftS2C::Recipes { trade, recipes, per_step });
     }
 }

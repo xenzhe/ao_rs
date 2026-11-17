@@ -92,6 +92,12 @@ fn craft(b: &mut Bot, m: CraftC2S) {
     b.sync();
 }
 
+/// One build interval (`IntervaloTrabajarConstruir`).
+fn step(s: &TestServer, b: &mut Bot) {
+    s.advance(500);
+    b.sync();
+}
+
 fn said(b: &Bot, text: &str) -> bool {
     b.console().any(|t| t.contains(text))
 }
@@ -128,13 +134,16 @@ fn carpenter_worker_builds_a_batch_and_the_traps_fail() {
     assert_eq!(b.game.local.sta, sta - 2);
     assert!(b.game.local.p4.craft.order.is_none(), "orden terminada");
 
-    // Trap: not enough materials (5 bows = 1000 wood): nothing is spent.
+    // Trap: not enough materials (5 bows = 1000 wood): nothing is spent. (The next step
+    // waits for the 500 ms interval.)
     craft(&mut b, CraftC2S::Build { obj: 479, amount: 5 });
+    step(&s, &mut b);
     assert!(said(&b, "No tenés suficiente madera."));
     assert_eq!((has(&b, 479), has(&b, WOOD)), (3, 400));
 
     // Trap: in the list but above the skill.
     craft(&mut b, CraftC2S::Build { obj: 1869, amount: 1 });
+    step(&s, &mut b);
     assert!(said(&b, "No tenés los conocimientos suficientes"));
     assert_eq!(has(&b, 1869), 0);
     assert_eq!(has(&b, WOOD), 400);
@@ -178,12 +187,25 @@ fn carpenter_order_runs_one_step_per_interval_and_raises_the_skill() {
     assert!((1..=3).contains(&skill), "sube por uso hasta el tope del nivel 1: {skill}");
     assert!(said(&b, "¡Has mejorado tu habilidad Carpintería en un punto!"));
 
+    // Trap: new orders do not skip the interval (it is the player's, not the order's):
+    // five orders at the same instant right after the last step build nothing yet, and
+    // then one step's worth.
+    for _ in 0..5 {
+        b.send(&C2S::Craft(CraftC2S::Build { obj: 163, amount: 1 }));
+    }
+    b.sync();
+    assert_eq!(has(&b, 163), 30, "el intervalo sigue corriendo");
+    step(&s, &mut b);
+    s.advance(1000);
+    b.sync();
+    assert_eq!(has(&b, 163), 31, "un solo paso");
+
     // Stop: an order in progress halts.
     craft(&mut b, CraftC2S::Build { obj: 163, amount: 5 });
     craft(&mut b, CraftC2S::Stop);
     s.advance(2000);
     b.sync();
-    assert_eq!(has(&b, 163), 31, "solo el paso inmediato");
+    assert_eq!(has(&b, 163), 32, "solo el paso inmediato");
 
     // Without the saw in the hand the order cannot even open.
     let mut c = s.connect();
@@ -233,6 +255,7 @@ fn blacksmith_at_the_ullathorpe_anvil() {
     assert_eq!((has(&b, 165), has(&b, IRON_INGOT)), (2, 140));
 
     // Walking away from the anvil closes the forge and stops the order.
+    step(&s, &mut b);
     craft(&mut b, CraftC2S::Build { obj: 165, amount: 3 });
     assert_eq!(has(&b, 165), 3);
     for _ in 0..4 {
@@ -302,43 +325,11 @@ fn alchemy_needs_the_recipe_and_tailoring_the_skill() {
     assert!(said(&t, "No tenés los conocimientos suficientes"));
     assert_eq!((has(&t, 30), has(&t, 414)), (0, 100));
     craft(&mut t, CraftC2S::Build { obj: 3578, amount: 1 });
+    step(&s, &mut t);
     assert_eq!((has(&t, 3578), has(&t, 414)), (1, 99));
     // Build without anything open (closed window).
     craft(&mut t, CraftC2S::Close);
     craft(&mut t, CraftC2S::Build { obj: 3578, amount: 1 });
     assert!(said(&t, "No estás trabajando en ningún oficio."));
     assert_eq!(has(&t, 3578), 1);
-}
-
-/// Seeds a database for the window screenshots (`AO_CRAFT_SEED=<path>`; ignored test):
-/// account `artesano` / `secreta1`, character `Artesano` (worker, level 40) next to the
-/// Ullathorpe anvil with every tool and a pile of materials.
-#[test]
-#[ignore]
-fn seed_capture_db() {
-    let Ok(path) = std::env::var("AO_CRAFT_SEED") else { return };
-    let path = PathBuf::from(path);
-    // AO_CRAFT_EQUIP: which tool is in the hand (hammer by default).
-    let tool = match std::env::var("AO_CRAFT_EQUIP").as_deref() {
-        Ok("saw") => 1,
-        Ok("pot") => 2,
-        Ok("box") => 3,
-        _ => 0,
-    };
-    let eq = |i: usize| i == tool;
-    for ext in ["", "-wal", "-shm"] {
-        let _ = std::fs::remove_file(format!("{}{ext}", path.display()));
-    }
-    seed(
-        &path,
-        &[Pj {
-            name: "Artesano",
-            class: WORKER,
-            level: 40,
-            skills: &[(SMITH, 70), (CARPENTRY, 60), (ALCHEMY, 45), (TAILOR, 40)],
-            items: &[(HAMMER, 1, eq(0)), (SAW, 1, eq(1)), (POT, 1, eq(2)), (SEWING_BOX, 1, eq(3)), (IRON_INGOT, 400, false), (387, 40, false), (WOOD, 2500, false), (414, 120, false), (4316, 8, false), (3075, 8, false), (4997, 8, false)],
-            spells: &[285, 286],
-            pos: (ANVIL.0, ANVIL.1 + 2),
-        }],
-    );
 }
