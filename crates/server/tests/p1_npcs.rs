@@ -153,17 +153,63 @@ fn banker_refuses_from_too_far() {
 }
 
 #[test]
-fn trap_interact_with_absurd_coordinates() {
+fn far_clicks_are_ignored_and_empty_tiles_answered() {
     let s = TestServer::start_at(1, 50, 50);
-    let mut bot = s.bot("Tramposo");
-    for (tx, ty) in [(i32::MIN, i32::MAX), (i32::MAX, i32::MIN), (0, 0), (101, 50), (50 + 40, 50)] {
-        bot.send(&C2S::Interact { tx, ty });
-    }
+    let mut bot = s.bot("Despistado");
+    // Inside the map but outside the visible area: a stale click, silently ignored.
+    bot.send(&C2S::Interact { tx: 50 + 30, ty: 50 });
     bot.sync();
-    assert!(bot.in_map(), "the server survives and keeps the player");
-    // Clicking an empty tile in range is a normal miss.
+    assert!(!bot.closed());
     bot.clear_log();
     bot.send(&C2S::Interact { tx: 50, ty: 51 });
     bot.sync();
-    assert!(bot.console().any(|t| t.contains("No hay nada")));
+    assert!(bot.console().any(|t| t.contains("No hay nada")), "a normal miss");
+}
+
+#[test]
+fn trap_interact_outside_the_map_is_struck_and_kicked() {
+    let s = TestServer::start_at(1, 50, 50);
+    let mut bot = s.bot("Tramposo");
+    for i in 0..20 {
+        let (tx, ty) = [(i32::MIN, i32::MAX), (i32::MAX, i32::MIN), (0, 0), (101, 50)][i % 4];
+        bot.send(&C2S::Interact { tx, ty });
+    }
+    bot.wait_until("conexion cerrada", |b| b.closed());
+    assert!(bot.kicked().is_some(), "repeated impossible clicks end in a kick");
+}
+
+#[test]
+fn merchant_answers_that_trade_comes_in_p2() {
+    let dat = npcs_dat();
+    let map = AoMap::load(&recursos_dir(), 1).unwrap();
+    let m = map.npcs.iter().find(|e| dat.get(e.npc as u32).is_some_and(|d| d.trades == 1 && !d.name.is_empty())).copied().expect("a merchant in Ullathorpe");
+    let s = TestServer::start_at(1, m.x, m.y + 2);
+    let mut bot = s.bot("Comprador");
+    s.advance(100);
+    bot.sync();
+    let (x, y) = bot.pos();
+    assert!((x - m.x).abs() + (y - m.y).abs() <= 4, "close to the merchant");
+    bot.send(&C2S::Interact { tx: m.x, ty: m.y });
+    bot.sync();
+    assert!(bot.console().any(|t| t.contains("comercio") && t.contains("P2")), "{:?}", bot.console().collect::<Vec<_>>());
+}
+
+#[test]
+fn forest_creatures_hunt_a_player() {
+    let s = TestServer::start_at(FOREST, 50, 50);
+    let mut bot = s.bot("Presa");
+    let me = bot.pos();
+    s.advance(100);
+    bot.sync();
+    bot.clear_log();
+    let mut reached = false;
+    for _ in 0..60 {
+        s.advance(1000);
+        bot.sync();
+        reached |= bot.log().iter().any(|m| matches!(m, S2C::Moved { x, y, .. } if (x - me.0).abs() + (y - me.1).abs() == 1));
+        if reached || bot.pos() != me {
+            break;
+        }
+    }
+    assert!(reached, "some creature walks up to the player");
 }

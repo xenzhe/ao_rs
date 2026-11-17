@@ -21,9 +21,12 @@ impl World {
     pub(crate) fn on_interact(&mut self, id: u32, tx: i32, ty: i32) {
         let Some(p) = self.player(id) else { return };
         let (map, px, py, dead, level) = (p.map, p.x, p.y, p.hp <= 0, p.level);
-        // IsWorldActionRequestValid: inside the map and the visible area (clients cannot
-        // click elsewhere, so this is silently ignored).
-        if !(1..=MAP_SIZE).contains(&tx) || !(1..=MAP_SIZE).contains(&ty) || (px - tx).abs() > VISION_X || (py - ty).abs() > VISION_Y {
+        // IsWorldActionRequestValid. A tile outside the map cannot come from a real client
+        // (strike); one outside the visible area is ignored (a stale click after walking).
+        if !(1..=MAP_SIZE).contains(&tx) || !(1..=MAP_SIZE).contains(&ty) {
+            return self.strike(id, "interaccion fuera del mapa");
+        }
+        if (px - tx).abs() > VISION_X || (py - ty).abs() > VISION_Y {
             return;
         }
         if !self.instance(map).populated {

@@ -80,6 +80,8 @@ pub struct Npc {
     pub movement: Movement,
     /// `Hostile` (current).
     pub hostile: bool,
+    /// `Attackable`: combat and magic must not damage NPCs with this off.
+    pub attackable: bool,
     /// `flags.OldMovement` / `flags.OldHostil`: restored by `RestoreOldMovement`.
     pub old_movement: Movement,
     pub old_hostile: bool,

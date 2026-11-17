@@ -123,6 +123,7 @@ impl World {
             kind: d.npc_type,
             movement: d.movement,
             hostile: d.hostile == 1,
+            attackable: d.attackable == 1,
             old_movement: d.movement,
             old_hostile: d.hostile == 1,
             target: None,
@@ -179,8 +180,20 @@ impl World {
     fn tick_respawns(&mut self, map: u16, now: GameTime) {
         let ids = self.instance(map).npc_ids().to_vec();
         for nid in ids {
-            let n = &self.instance(map).npcs[&nid];
+            let Some(n) = self.instance(map).npcs.get(&nid) else { continue };
             if n.alive() {
+                continue;
+            }
+            if !n.attackable || n.kind == NpcType::DummyTarget {
+                // `Attackable=0` NPCs (bankers, priests...) cannot die in AO20 and training
+                // dummies never die (`MuereNpc`); if another system killed one anyway, it
+                // stays where it was instead of respawning at a random tile.
+                tracing::warn!(map, nid, name = %n.name, "NPC no atacable marcado como muerto: se restaura");
+                let n = self.npc_mut(map, nid);
+                n.dead_until = None;
+                n.hp = n.max_hp;
+                let msg = n.spawn_msg(nid);
+                self.broadcast(map, &msg, None);
                 continue;
             }
             match n.respawn_at {
@@ -276,8 +289,10 @@ impl World {
 
     // ------------------------------------------------------------ AI
 
-    /// `NpcAI`: dispatch on `Movement`. Behaviours not ported yet (pets, NPC vs NPC,
-    /// battleground, invasions, guards chasing NPCs) stand still; see docs/P1_CONTRATO.md.
+    /// `NpcAI`: dispatch on `Movement`. Not ported yet (they stand still): `SigueAmo`
+    /// (pets/summons), `NpcAtacaNpc`, `GuardiaPersigueNpc` (6 `GuardiaNpc` in the maps),
+    /// `SupportAndAttack`, the `BG*` battleground behaviours, `Invasion`, cross-map routes,
+    /// `TryGuardAttackHostileNpc`, `NpcDummyUpdate` and `AI_RangeAttack` kiting.
     fn npc_ai(&mut self, map: u16, nid: u32, now: GameTime) {
         let n = &self.instance(map).npcs[&nid];
         let ao = self.ao.clone();
@@ -318,9 +333,11 @@ impl World {
         let pos = (n.x, n.y);
         let mut target = None;
         let front = self.user_in_front(map, nid);
-        if let Some(u) = front.filter(|u| self.npc_enemy(map, nid, *u)) {
+        if was_passive {
+            // Someone hit it: the aggressor is the only target that matters.
+        } else if let Some(u) = front.filter(|u| self.npc_enemy(map, nid, *u)) {
             target = Some(u);
-        } else if !was_passive {
+        } else {
             let mut players: Vec<EntityId> = self.instance(map).players.iter().copied().collect();
             players.sort_unstable();
             let (mut best, mut best_d) = (None, i32::MAX);
@@ -338,7 +355,7 @@ impl World {
             }
             target = best;
         }
-        if was_passive && target.is_none() {
+        if was_passive {
             match aggressor {
                 Some(a) if self.in_vision(map, nid, d, a) => target = Some(a),
                 _ => self.npc_mut(map, nid).attacked_by = None,
@@ -564,10 +581,20 @@ impl World {
         // A local xorshift seeded from the world RNG: deterministic, and the search only
         // needs a shared borrow of the world.
         let mut seed = self.rng.next_u32() | 1;
+        // Tiles taken by users other than the target, gathered once per search.
+        let mut users = vec![false; 101 * 101];
+        for pid in &self.instance(map).players {
+            if Some(*pid) == target {
+                continue;
+            }
+            if let Some(p) = self.player(*pid).filter(|p| walk::in_bounds(p.x, p.y)) {
+                users[(p.y * 101 + p.x) as usize] = true;
+            }
+        }
         let world: &World = self;
         pathfinding::seek_path(
             &q,
-            |x, y, dir| world.npc_walkable(map, d, x, y, dir, target),
+            |x, y, dir| !users[(y * 101 + x) as usize] && world.npc_walkable(map, d, x, y, dir),
             || {
                 seed ^= seed << 13;
                 seed ^= seed >> 17;
@@ -579,17 +606,9 @@ impl World {
 
     /// `IsWalkable` (PathFinding.bas): no NPC, no user except the target, no exit, water
     /// / land per the NPC, no invalid-position trigger, side not blocked.
-    fn npc_walkable(&self, map: u16, d: &NpcData, x: i32, y: i32, dir: Dir, target: Option<EntityId>) -> bool {
-        let inst = self.instance(map);
-        if inst.npc_at(x, y).is_some() {
-            return false;
-        }
-        if let Some(u) = self.player_at(map, x, y) {
-            if Some(u) != target {
-                return false;
-            }
-        }
-        self.npc_tile_ok(map, d, x, y, dir)
+    /// (Users are checked by the caller with a per-search grid.)
+    fn npc_walkable(&self, map: u16, d: &NpcData, x: i32, y: i32, dir: Dir) -> bool {
+        self.instance(map).npc_at(x, y).is_none() && self.npc_tile_ok(map, d, x, y, dir)
     }
 
     /// Static part of `LegalWalkNPC` (bounds, exit, water/land, trigger, blocked side).
@@ -858,9 +877,9 @@ mod tests {
         b.place(1, 40, 40);
         let nid = b.spawn(M, LOBO, 60, 60);
         b.w.npc_mut(M, nid).respawn_secs = 3;
-        b.w.npc_mut(M, nid).hp = 1;
-        // What combat's kill_npc does.
-        b.w.npc_mut(M, nid).dead_until = Some(b.t);
+        // Killed through combat (damage_npc -> kill_npc sets dead_until).
+        b.w.damage_npc(M, nid, 9999, 1);
+        assert!(!b.npc(M, nid).alive());
         b.run(100);
         assert!(b.w.instance(M).npc_at(60, 60).is_none(), "a dead NPC frees its tile");
         frames(&mut rx);
@@ -878,7 +897,7 @@ mod tests {
         let mut b = Bench::new(M, 55, 50);
         b.clear(M, 30, 35, 70, 65);
         let ao = b.w.ao.clone();
-        let (number, _) = ao.npcs.iter().find(|(_, d)| d.respawn == 1).expect("an NPC with ReSpawn=1");
+        let (number, _) = ao.npcs.iter().find(|(_, d)| d.respawn == 1 && d.attackable == 1).expect("an NPC with ReSpawn=1");
         let nid = b.spawn(M, number as u16, 60, 60);
         b.w.npc_mut(M, nid).dead_until = Some(b.t);
         b.run(10_000);
@@ -924,6 +943,19 @@ mod tests {
 
     const DEAD_TEXT: &str = "muerto";
 
+    #[test]
+    fn non_attackable_npcs_cannot_be_moved_by_a_kill() {
+        let mut b = Bench::new(1, 77, 49);
+        let _rx = b.join(1, "Atracador");
+        b.run(100);
+        let banker = b.w.instance(1).npc_at(77, 47).expect("Krix");
+        assert!(!b.npc(1, banker).attackable);
+        b.w.damage_npc(1, banker, 9999, 1);
+        b.run(2000);
+        let n = b.npc(1, banker);
+        assert!(n.alive() && (n.x, n.y) == (77, 47), "the banker stays at his desk");
+    }
+
     /// Cost of `tick_npcs` with a player on Ullathorpe (all its NPCs, static) and one on
     /// the densest creature map (Dungeon Newbie, 61 hostile wanderers chasing).
     #[test]
@@ -931,9 +963,13 @@ mod tests {
         let mut b = Bench::new(1, 50, 50);
         let _a = b.join(1, "Uno");
         assert!(b.w.ensure_map(264));
-        let _b = b.join(2, "Dos");
-        let (x, y) = b.w.free_tile_near(264, 50, 50, 10);
-        b.w.teleport(2, 264, x, y);
+        // 20 players spread over the densest creature map.
+        let mut rxs = Vec::new();
+        for i in 0..20u32 {
+            rxs.push(b.join(2 + i, &format!("Cazador{i}")));
+            let (x, y) = b.w.free_tile_near(264, 25 + (i as i32 % 5) * 12, 25 + (i as i32 / 5) * 12, 10);
+            b.w.teleport(2 + i, 264, x, y);
+        }
         b.run(1000);
         let npcs: usize = b.w.maps.values().map(|i| i.npcs.len()).sum();
         let mut worst = std::time::Duration::ZERO;
@@ -943,13 +979,19 @@ mod tests {
             let t0 = std::time::Instant::now();
             b.run(50);
             worst = worst.max(t0.elapsed());
-            // Keep the hunted player alive so the chase never stops.
-            let p = b.w.player_mut(2);
-            p.hp = p.max_hp;
+            // Keep the hunted players alive (and on the map) so the chase never stops.
+            for i in 0..20u32 {
+                let p = b.w.player_mut(2 + i);
+                p.hp = p.max_hp;
+            }
+            for rx in &mut rxs {
+                while rx.try_recv().is_ok() {}
+            }
         }
         let avg = start.elapsed() / ticks;
         let hunting = b.w.instance(264).npcs.values().filter(|n| n.target.is_some()).count();
-        println!("tick_npcs: {npcs} NPCs en 2 mapas ({hunting} persiguiendo), media {avg:?}/tick, peor {worst:?}");
+        let on264 = b.w.instance(264).players.len();
+        println!("tick: {npcs} NPCs en 2 mapas, {on264} jugadores en el 264 ({hunting} NPCs persiguiendo), media {avg:?}/tick, peor {worst:?}");
         assert!(avg < std::time::Duration::from_millis(5), "average tick {avg:?}");
     }
 }
