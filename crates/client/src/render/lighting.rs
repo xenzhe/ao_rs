@@ -34,6 +34,9 @@ pub fn ambient(hour: f32, dungeon: bool) -> Color {
 
 /// Fills the current render target (the light map) for this frame.
 pub fn build_light_map(game: &Game, fx: &Fx, origin: Vec2, amb: Color, t_ms: f32) {
+    // Rain, snow and fog dim the day and cool its colour a little.
+    let g = fx.weather.gloom();
+    let amb = Color::new(amb.r * (1.0 - g), amb.g * (1.0 - g * 0.9), amb.b * (1.0 - g * 0.6), 1.0);
     clear_background(amb);
     let night = (1.0 - amb.g).clamp(0.0, 1.0);
     gl_use_material(&fx.additive);
@@ -54,6 +57,12 @@ pub fn build_light_map(game: &Game, fx: &Fx, origin: Vec2, amb: Color, t_ms: f32
                 let flick = 1.0 + ((t_ms * 0.007) + l.x as f32).sin() * 0.04;
                 fx.light(p, (tiles * TILE + 24.0) * flick, Color::new(c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, night));
             }
+        }
+    }
+    // Characters with an FX on (meditation, spells) glow softly.
+    for id in fx.char_fx.keys() {
+        if let Some(e) = game.ents.get(id) {
+            fx.light(v(e.world_pos()) - origin - vec2(0.0, 18.0), 95.0, Color::new(0.75, 0.9, 1.0, 0.7 * night.max(0.2)));
         }
     }
     for (p, r, c) in fx.lights() {
