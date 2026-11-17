@@ -1,4 +1,5 @@
 //! Login, logout, map entry/transitions, kicks and cheat strikes.
+use crate::db::CharacterRecord;
 use crate::security::{RateLimiter, SeqGuard, Strikes, WalkLimiter};
 use crate::world::entities::Player;
 use crate::world::World;
@@ -10,9 +11,13 @@ use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 impl World {
+    /// Development login without an account (`dev_login` in config): a throwaway character.
     pub(crate) fn on_login(&mut self, id: u32, name: String, version: u16) {
         if self.player(id).is_some() {
             return self.kick(id, "login duplicado");
+        }
+        if !self.cfg.dev_login {
+            return self.kick(id, "entrada sin cuenta deshabilitada");
         }
         let refuse = if version != PROTOCOL_VERSION {
             Some("Version del cliente desactualizada.")
@@ -30,52 +35,85 @@ impl World {
             return;
         }
 
-        let (map, sx, sy) = self.start;
-        if !self.ensure_map(map) {
-            self.send(id, &S2C::Kicked { reason: "El servidor no encuentra los mapas de AO.".into() });
-            self.close(id);
-            self.sessions.remove(&id);
-            return;
-        }
-        let (x, y) = self.free_tile_near(map, sx, sy, 4);
-        let now = Instant::now();
+        let (map, x, y) = self.start;
         let b = &self.data.balance;
         let hash = name.bytes().fold(7u32, |a, c| a.wrapping_mul(31).wrapping_add(c as u32));
-        let sec = &self.cfg.security;
-        let player = Player {
+        let record = CharacterRecord {
+            id: 0,
+            account_id: 0,
             name: name.clone(),
-            map,
-            x,
-            y,
-            dir: Dir::Down,
+            race: 1,
+            class: 1,
+            gender: 1,
             body: b.player_bodies[(hash % b.player_bodies.len() as u32) as usize],
             head: b.player_heads[((hash / 7) % b.player_heads.len() as u32) as usize],
+            level: 1,
+            exp: 0,
             hp: b.start_hp,
             max_hp: b.start_hp,
             mana: b.start_mana,
             max_mana: b.start_mana,
-            level: 1,
-            exp: 0,
+            map,
+            x,
+            y,
+        };
+        if !self.spawn_player(id, &record, None) {
+            self.sessions.remove(&id);
+        }
+    }
+
+    /// Puts a character in the world (account or dev login). Returns false if its map
+    /// could not be loaded (the connection is then closed).
+    pub(crate) fn spawn_player(&mut self, id: u32, c: &CharacterRecord, char_id: Option<i64>) -> bool {
+        if !self.ensure_map(c.map) {
+            self.send(id, &S2C::Kicked { reason: "El servidor no encuentra los mapas de AO.".into() });
+            self.close(id);
+            return false;
+        }
+        let (x, y) = self.free_tile_near(c.map, c.x, c.y, 4);
+        let now = Instant::now();
+        let sec = &self.cfg.security;
+        let player = Player {
+            char_id,
+            race: c.race,
+            class: c.class,
+            gender: c.gender,
+            name: c.name.clone(),
+            map: c.map,
+            x,
+            y,
+            dir: Dir::Down,
+            body: c.body,
+            head: c.head,
+            hp: c.hp.clamp(1, c.max_hp),
+            max_hp: c.max_hp,
+            mana: c.mana.clamp(0, c.max_mana),
+            max_mana: c.max_mana,
+            level: c.level,
+            exp: c.exp,
             walk: WalkLimiter::new(WALK_MS, sec.walk_tolerance, now),
             seq: SeqGuard::default(),
             cooldowns: HashMap::new(),
             strikes: Strikes::new(Duration::from_secs(sec.strike_decay_secs), now),
             chat: RateLimiter::new(4, Duration::from_secs(3)),
         };
-        info!(id, %name, map, x, y, "entra");
+        let name = c.name.clone();
+        info!(id, %name, map = c.map, x, y, "entra");
         self.send(id, &S2C::Welcome { id });
         self.send(id, &S2C::SpellBook { spells: self.data.spells.clone() });
         self.sessions.get_mut(&id).unwrap().player = Some(player);
-        self.enter_map(id, map, x, y);
+        self.enter_map(id, c.map, x, y);
         self.send_stats(id);
         self.console(id, "Bienvenido a Argentum (prototipo en Rust, mapas de AO20).", Tone::Good);
         self.broadcast_all(&S2C::Console { text: format!("{name} se conecto."), color: Tone::Info }, Some(id));
+        true
     }
 
     pub(crate) fn logout(&mut self, id: u32) {
         let Some(session) = self.sessions.remove(&id) else { return };
         if let Some(p) = session.player {
             info!(id, name = %p.name, "sale");
+            self.save_player(&p);
             if let Some(inst) = self.maps.get_mut(&p.map) {
                 inst.players.remove(&id);
             }

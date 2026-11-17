@@ -9,6 +9,10 @@ pub struct ServerConfig {
     /// AO20 `Recursos` folder; empty = auto-detect (see `ao_formats::recursos_dir`).
     pub recursos: String,
     pub data_dir: String,
+    /// SQLite file (":memory:" = throwaway, for tests).
+    pub database: String,
+    /// Allow the account-less `C2S::Login` (development and tests only).
+    pub dev_login: bool,
     pub security: SecurityConfig,
     pub world: WorldConfig,
 }
@@ -20,6 +24,8 @@ pub struct SecurityConfig {
     pub kick_strikes: u32,
     pub strike_decay_secs: u64,
     pub walk_tolerance: f32,
+    /// Failed account logins on one connection before it is closed.
+    pub max_failed_logins: u32,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -30,13 +36,21 @@ pub struct WorldConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        ServerConfig { bind: "127.0.0.1:7666".into(), recursos: String::new(), data_dir: "data".into(), security: SecurityConfig::default(), world: WorldConfig::default() }
+        ServerConfig {
+            bind: "127.0.0.1:7666".into(),
+            recursos: String::new(),
+            data_dir: "data".into(),
+            database: "data/ao.db".into(),
+            dev_login: true,
+            security: SecurityConfig::default(),
+            world: WorldConfig::default(),
+        }
     }
 }
 
 impl Default for SecurityConfig {
     fn default() -> Self {
-        SecurityConfig { max_msgs_per_sec: 40, kick_strikes: 8, strike_decay_secs: 10, walk_tolerance: 0.08 }
+        SecurityConfig { max_msgs_per_sec: 40, kick_strikes: 8, strike_decay_secs: 10, walk_tolerance: 0.08, max_failed_logins: 3 }
     }
 }
 

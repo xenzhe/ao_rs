@@ -6,6 +6,7 @@
 //! - [`spells`], [`creatures`], [`balance`]: data definitions loaded from `data/*.toml`
 //! - [`progression`]: experience and levels
 pub mod balance;
+pub mod character;
 pub mod creatures;
 pub mod progression;
 pub mod spells;

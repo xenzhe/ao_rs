@@ -9,6 +9,12 @@ recursos = ""
 # Carpeta con spells.toml, creatures.toml y balance.toml.
 data_dir = "data"
 
+# Base de datos SQLite (cuentas y personajes).
+database = "data/ao.db"
+
+# Entrada sin cuenta (solo desarrollo y pruebas). Poner en false en un servidor real.
+dev_login = true
+
 [security]
 # Paquetes por segundo antes de expulsar por flood.
 max_msgs_per_sec = 40
@@ -18,6 +24,8 @@ kick_strikes = 8
 strike_decay_secs = 10
 # Tolerancia del ritmo de paso para el jitter de red (0.08 = 8%).
 walk_tolerance = 0.08
+# Intentos de login fallidos en una conexion antes de cerrarla.
+max_failed_logins = 3
 
 [world]
 # Frecuencia de la simulacion (IA, regeneracion), en milisegundos.

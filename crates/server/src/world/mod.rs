@@ -5,6 +5,7 @@ pub mod instance;
 
 use crate::config::ServerConfig;
 use crate::data::GameData;
+use crate::db::{Account, Db};
 use crate::net::{ConnId, Event, CLOSE};
 use crate::rng::Rng;
 use ao_formats::AoMap;
@@ -23,6 +24,15 @@ pub const NPC_ID_BASE: EntityId = 100_000;
 pub struct Session {
     pub tx: UnboundedSender<Vec<u8>>,
     pub player: Option<Player>,
+    /// Logged account (character selection or playing).
+    pub account: Option<Account>,
+    pub failed_logins: u32,
+}
+
+impl Session {
+    pub fn new(tx: UnboundedSender<Vec<u8>>) -> Session {
+        Session { tx, player: None, account: None, failed_logins: 0 }
+    }
 }
 
 pub struct World {
@@ -35,6 +45,7 @@ pub struct World {
     pub maps: HashMap<u16, MapInstance>,
     pub rng: Rng,
     pub next_npc: EntityId,
+    pub db: Db,
 }
 
 impl World {
@@ -47,7 +58,8 @@ impl World {
                 (v.len() == 3).then(|| (v[0] as u16, v[1], v[2]))
             })
             .unwrap_or((b.start_map, b.start_x, b.start_y));
-        World { cfg, data, recursos, start, sessions: HashMap::new(), maps: HashMap::new(), rng: Rng::new(0xA0_2026), next_npc: NPC_ID_BASE }
+        let db = Db::open(&cfg.database).unwrap_or_else(|e| panic!("no se pudo abrir la base de datos '{}': {e:?}", cfg.database));
+        World { cfg, data, recursos, start, sessions: HashMap::new(), maps: HashMap::new(), rng: Rng::new(0xA0_2026), next_npc: NPC_ID_BASE, db }
     }
 
     // ------------------------------------------------------------ lookups
@@ -163,7 +175,7 @@ impl World {
     pub fn on_event(&mut self, ev: Event) {
         match ev {
             Event::Connected { id, tx } => {
-                self.sessions.insert(id, Session { tx, player: None });
+                self.sessions.insert(id, Session::new(tx));
             }
             Event::Frame { id, msg } => {
                 if self.sessions.contains_key(&id) {
