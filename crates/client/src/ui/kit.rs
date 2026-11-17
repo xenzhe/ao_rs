@@ -156,13 +156,75 @@ pub fn ink_fit(kind: FontKind, s: &str, x: f32, y: f32, size: f32, max_w: f32, c
 
 // ---------------------------------------------------------------- surfaces
 
+thread_local! {
+    static PAPER: std::cell::RefCell<Option<Texture2D>> = const { std::cell::RefCell::new(None) };
+}
+
+fn lattice(x: i32, y: i32, period: i32, seed: u32) -> f32 {
+    let (x, y) = (x.rem_euclid(period), y.rem_euclid(period));
+    let mut h = (x as u32).wrapping_mul(374_761_393) ^ (y as u32).wrapping_mul(668_265_263) ^ seed.wrapping_mul(2_246_822_519);
+    h = (h ^ (h >> 13)).wrapping_mul(1_274_126_177);
+    ((h ^ (h >> 16)) & 0xffff) as f32 / 65535.0
+}
+
+/// Value noise that repeats every `period` lattice cells, so the texture tiles without seams.
+fn periodic(x: f32, y: f32, period: i32, seed: u32) -> f32 {
+    let (xi, yi) = (x.floor() as i32, y.floor() as i32);
+    let (fx, fy) = (x - xi as f32, y - yi as f32);
+    let s = |t: f32| t * t * (3.0 - 2.0 * t);
+    let (a, b, c, d) = (lattice(xi, yi, period, seed), lattice(xi + 1, yi, period, seed), lattice(xi, yi + 1, period, seed), lattice(xi + 1, yi + 1, period, seed));
+    let (u, v) = (s(fx), s(fy));
+    a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
+}
+
+/// A seamless 256 px parchment: warm blotches, a few stains and faint fibres.
+fn paper_texture() -> Texture2D {
+    PAPER.with(|p| {
+        if let Some(t) = p.borrow().as_ref() {
+            return t.clone();
+        }
+        const N: u16 = 256;
+        let base = Color::new(0.85, 0.77, 0.60, 1.0);
+        let mut img = Image::gen_image_color(N, N, base);
+        for y in 0..N as u32 {
+            for x in 0..N as u32 {
+                let (fx, fy) = (x as f32 / 256.0, y as f32 / 256.0);
+                let big = periodic(fx * 4.0, fy * 4.0, 4, 3) * 0.55 + periodic(fx * 8.0, fy * 8.0, 8, 5) * 0.30 + periodic(fx * 16.0, fy * 16.0, 16, 7) * 0.15 - 0.5;
+                let fibre = periodic(fx * 128.0, fy * 24.0, 128, 11) - 0.5;
+                let speck = periodic(fx * 64.0, fy * 64.0, 64, 13);
+                let stain = ((periodic(fx * 2.0, fy * 2.0, 2, 17) - 0.55) * 2.0).max(0.0);
+                let k = 1.0 + big * 0.20 + fibre * 0.035 - if speck > 0.93 { 0.05 } else { 0.0 } - stain * 0.08;
+                img.set_pixel(x, y, Color::new((base.r * k).clamp(0.0, 1.0), (base.g * k * 0.99).clamp(0.0, 1.0), (base.b * k * 0.96).clamp(0.0, 1.0), 1.0));
+            }
+        }
+        let t = Texture2D::from_image(&img);
+        t.set_filter(FilterMode::Linear);
+        *p.borrow_mut() = Some(t.clone());
+        t
+    })
+}
+
 /// A page of parchment with a soft shadow and a thin ink edge (descriptions, quests, news).
 pub fn page(r: Rect, u: f32) {
     for i in 1..=4 {
         let o = i as f32 * 1.5 * u;
         draw_rectangle(r.x + o * 0.4, r.y + o, r.w, r.h, Color::new(0.0, 0.0, 0.0, 0.10));
     }
-    theme::surface(r, Surface::Parchment, u);
+    let tex = paper_texture();
+    let ts = 256.0 * u.max(1.0);
+    let mut y = r.y;
+    while y < r.bottom() {
+        let h = (r.bottom() - y).min(ts);
+        let mut x = r.x;
+        while x < r.right() {
+            let w = (r.right() - x).min(ts);
+            draw_texture_ex(&tex, x, y, WHITE, DrawTextureParams { dest_size: Some(vec2(w, h)), source: Some(Rect::new(0.0, 0.0, w / u.max(1.0), h / u.max(1.0))), ..Default::default() });
+            x += ts;
+        }
+        y += ts;
+    }
+    theme::inner_vignette(r, 20.0 * u, 0.38);
+    let _ = Surface::Parchment;
     draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.5 * u, Color::new(0.26, 0.17, 0.08, 0.85));
     draw_rectangle_lines(r.x + 4.0 * u, r.y + 4.0 * u, r.w - 8.0 * u, r.h - 8.0 * u, 1.0, Color::new(0.35, 0.24, 0.12, 0.32));
 }
@@ -250,7 +312,7 @@ pub fn wheel(area: Rect, off: usize, total: usize, vis: usize, step: usize) -> u
 /// Tab strip with no boxes: Title labels, the active one in bright gold with a lit
 /// underline. Returns the clicked index. `y` is the top; returns the height used via `h`.
 pub fn tabs(x: f32, y: f32, labels: &[String], active_i: usize, u: f32) -> Option<usize> {
-    let size = 16.0 * u;
+    let size = 15.0 * u;
     let mut cx = x;
     let mut hit = None;
     for (i, l) in labels.iter().enumerate() {
@@ -271,7 +333,7 @@ pub fn tabs(x: f32, y: f32, labels: &[String], active_i: usize, u: f32) -> Optio
         if clicked(r) {
             hit = Some(i);
         }
-        cx += w + 28.0 * u;
+        cx += w + 24.0 * u;
     }
     hit
 }
