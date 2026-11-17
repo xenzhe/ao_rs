@@ -16,9 +16,6 @@ pub struct EventPiece {
     pub room: Option<usize>,
     /// `flags.EnTorneo`.
     pub in_tournament: bool,
-    /// Mailbox already delivered this session (deliveries are retried on the next login
-    /// when the inventory was full).
-    pub mailbox_checked: bool,
 }
 
 /// `t_SolicitudReto`.

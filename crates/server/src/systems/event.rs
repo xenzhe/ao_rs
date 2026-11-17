@@ -228,6 +228,15 @@ impl World {
         self.send_inventory_vitals(id);
     }
 
+    /// Saves an account character right away. Auction lots and the mailbox live in the
+    /// database: when an item or gold moves between them and the character, both sides are
+    /// written at once, so a crash cannot leave the same thing in both (or in neither).
+    fn event_save(&self, id: u32) {
+        if let Some(p) = self.player(id) {
+            self.save_player(p);
+        }
+    }
+
     /// Who may run GM-only events. GM roles belong to the GM system (Opus C), which is not
     /// merged: development servers allow anyone; the integrator swaps this for its role check.
     fn event_is_staff(&self, id: u32) -> bool {
@@ -248,8 +257,15 @@ impl World {
             self.resurrect(id);
         }
         let p = self.player_mut(id);
-        p.status.paralyzed_until = None;
-        p.status.immobilized_until = None;
+        let s = &mut p.status;
+        s.paralyzed_until = None;
+        s.immobilized_until = None;
+        s.poisoned = false;
+        s.poisoned_until = None;
+        s.blind_until = None;
+        s.dumb_until = None;
+        s.invisible_until = None;
+        s.eots.clear();
         p.mana = p.max_mana;
         let max = p.max_hp;
         self.heal_player(id, max);
@@ -886,6 +902,7 @@ impl World {
         self.events.next_lot += 1;
         let lot = Lot { id: self.events.next_lot, seller: me.clone(), obj: item.obj, amount, base_price, best: 0, bidder: None, ends_at: self.now().after_secs(minutes as u64 * 60) };
         self.save_lot(&lot);
+        self.event_save(id);
         let obj_name = self.ao.objs.get(item.obj as u32).map(|o| o.name.clone()).unwrap_or_default();
         self.events.lots.push(lot);
         self.announce(format!("{me} está subastando: {obj_name} (Cantidad: {amount}) - con un precio inicial de {base_price} monedas. Puja en la casa de subastas (U)."));
@@ -922,6 +939,7 @@ impl World {
         }
         let (obj, lot) = (l.obj, l.clone());
         self.save_lot(&lot);
+        self.event_save(id);
         if let Some((who, gold)) = previous {
             self.pay(&who, gold, "Te superaron en una subasta: te devolvemos tu oferta.");
         }
@@ -986,6 +1004,7 @@ impl World {
             if let Some(total) = self.player(id).unwrap().inv.gold.checked_add(gold) {
                 self.player_mut(id).inv.gold = total;
                 self.event_send_gold(id);
+                self.event_save(id);
                 return self.console(id, format!("{note} (+{gold} monedas de oro)"), Tone::Good);
             }
         }
@@ -996,6 +1015,7 @@ impl World {
     fn deliver(&mut self, name: &str, obj: u16, amount: u32, note: &str) {
         if let Some(id) = self.id_by_name(name) {
             if self.add_item(id, InvItem { obj, amount }) {
+                self.event_save(id);
                 return self.console(id, note, Tone::Good);
             }
             self.console(id, "No tienes lugar: el subastador te lo guarda hasta que vuelvas a entrar con espacio.", Tone::Warn);
@@ -1024,14 +1044,12 @@ impl World {
                 self.player_mut(id).inv.gold += m.gold;
                 self.event_send_gold(id);
             }
+            self.event_save(id);
             if let Err(e) = self.db.delete_mail(m.id) {
                 warn!(?e, "no se pudo vaciar el buzón");
             }
             let extra = if m.gold > 0 { format!(" (+{} monedas de oro)", m.gold) } else { String::new() };
             self.console(id, format!("El subastador te ha dejado un mensaje: {}{extra}", m.note), Tone::Good);
-        }
-        if let Some(p) = self.sessions.get_mut(&id).and_then(|s| s.player.as_mut()) {
-            p.event.mailbox_checked = true;
         }
     }
 
@@ -1365,6 +1383,26 @@ mod duel_tests {
         assert!(t.w.player(1).unwrap().event.request.is_none(), "cancelled");
         assert_eq!((t.gold(1), t.gold(3), t.gold(4)), (START_GOLD, START_GOLD, START_GOLD));
         assert!([2, 3, 4].iter().all(|p| t.w.player(*p).unwrap().event.accepted.is_none()));
+    }
+
+    #[test]
+    fn open_lots_survive_a_restart_and_close_by_mail() {
+        let mut t = world(1);
+        let row = LotRow { id: 41, seller: "Lejano".into(), obj: RED_POTION, amount: 7, base_price: 900, best: 1200, bidder: Some("Ausente".into()), secs_left: 30 };
+        t.w.db.save_lot(&row).unwrap();
+        t.w.events.lots_loaded = false;
+        t.w.events.lots.clear();
+        t.run_secs(1);
+        assert_eq!(t.w.events.lots.len(), 1, "read back from the database");
+        assert_eq!(t.w.events.next_lot, 41);
+        t.run_secs(31);
+        assert!(t.w.events.lots.is_empty());
+        assert!(t.w.db.load_lots().unwrap().is_empty());
+        let buyer = t.w.db.mailbox("Ausente").unwrap();
+        assert_eq!((buyer.len(), buyer[0].obj, buyer[0].amount), (1, RED_POTION, 7));
+        let seller = t.w.db.mailbox("Lejano").unwrap();
+        assert_eq!(seller[0].gold, 1140, "1200 minus 5 %");
+        assert_eq!(t.w.events.house_gold, 60);
     }
 
     #[test]

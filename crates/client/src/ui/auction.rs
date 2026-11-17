@@ -11,7 +11,7 @@ use crate::ui::widgets::{button, measure, slot, text, text_field, text_fit, text
 use crate::ui::Ui;
 use ao_protocol::p4::event::AuctionLot;
 use macroquad::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 /// AO20 `CostoPreSubasta` and the 5 % commission (shown, enforced by the server).
 const FEE: u32 = 500;
@@ -28,17 +28,36 @@ struct Form {
 
 thread_local! {
     static FORM: RefCell<Form> = RefCell::new(Form { minutes: 5, amount: "1".into(), ..Default::default() });
+    static LAST_DRAW: Cell<f64> = const { Cell::new(-10.0) };
+    static LOTS_AT: Cell<f64> = const { Cell::new(0.0) };
 }
 
 fn demo_lots() -> Vec<AuctionLot> {
     let lot = |id, seller: &str, obj, amount, base, best, bidder: &str, secs| AuctionLot { id, seller: seller.into(), obj, amount, base_price: base, best, bidder: bidder.into(), min_bid: if best == 0 { base } else { best + (best * 5 / 100).max(100) }, secs_left: secs };
     vec![
-        lot(1, "Aldric", 126, 1, 40_000, 52_000, "Morgana", 212),
-        lot(2, "Kira", 38, 150, 3_000, 0, "", 274),
-        lot(3, "Tordek", 1700, 1, 15_000, 18_500, "Valen", 41),
-        lot(4, "Brom", 1987, 1, 120_000, 0, "", 1_650),
-        lot(5, "Valen", 1867, 1, 25_000, 0, "", 905),
+        // Objects with `Subastable=1` in obj.dat.
+        lot(1, "Aldric", 476, 1, 400_000, 520_000, "Morgana", 212),
+        lot(2, "Kira", 388, 40, 30_000, 0, "", 274),
+        lot(3, "Tordek", 193, 250, 15_000, 18_500, "Valen", 41),
+        lot(4, "Brom", 58, 500, 2_000, 0, "", 1_650),
+        lot(5, "Valen", 386, 100, 25_000, 0, "", 905),
     ]
+}
+
+/// `AO_AUCTION_PUBLISH=slot,amount,price,minutes`: publishes for real once the slot holds
+/// something (tests and captures against a real server; pair it with `AO_SAY=/dar ...`).
+fn real_publish_once(game: &mut Game) {
+    thread_local!(static DONE: Cell<bool> = const { Cell::new(false) });
+    let Ok(spec) = std::env::var("AO_AUCTION_PUBLISH") else { return };
+    if DONE.get() {
+        return;
+    }
+    let n: Vec<u32> = spec.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+    let [slot, amount, price, minutes] = n[..] else { return };
+    if game.local.inventory.get(slot as usize - 1).copied().flatten().is_some() && game.local.gold >= FEE {
+        DONE.set(true);
+        game.auction_publish(slot as u8, amount, price, minutes as u8);
+    }
 }
 
 fn obj_name(assets: &Assets, obj: u16) -> String {
@@ -57,11 +76,17 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
             let mut f = f.borrow_mut();
             if f.lot.is_none() {
                 f.lot = Some(1);
-                f.bid = "54600".into();
+                f.bid = "546000".into();
             }
         });
     }
-    let lots = game.local.p4.event.lots.clone();
+    real_publish_once(game);
+    let fresh = std::mem::take(&mut game.local.p4.event.lots_new);
+    let elapsed = super::events::sync_window(game, &LAST_DRAW, &LOTS_AT, fresh);
+    let mut lots = game.local.p4.event.lots.clone();
+    for l in lots.iter_mut() {
+        l.secs_left = l.secs_left.saturating_sub(elapsed);
+    }
     let split = r.x + r.w * 0.58;
     lots_column(ui, game, assets, &lots, Rect::new(r.x, r.y, split - r.x - 10.0 * u, r.h));
     draw_line(split, r.y + 4.0 * u, split, r.bottom() - 4.0 * u, 1.0, Color::new(GOLD.r, GOLD.g, GOLD.b, 0.4));
@@ -147,13 +172,18 @@ fn publish_column(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let u = ui.u;
     text_with(FontKind::Title, "Publicar", r.x, r.y + 18.0 * u, 20.0 * u, GOLD_TEXT);
     text_fit("Elige un objeto de tu inventario:", r.x, r.y + 42.0 * u, 15.0 * u, r.w, MUTED);
+    // 24 slots, up to 42 with a backpack: the grid shrinks to keep the same height.
     let cols = 6usize;
-    let cell = (r.w / cols as f32).floor();
-    let gy = r.y + 50.0 * u;
     let inv = game.local.inventory.clone();
+    let last = inv.iter().rposition(|s| s.is_some()).map_or(0, |i| i + 1);
+    let shown = last.max(24).div_ceil(cols) * cols;
+    let rows = shown / cols;
+    let full = (r.w / cols as f32).floor();
+    let cell = full.min((full * 4.0 / rows as f32).floor());
+    let gy = r.y + 50.0 * u;
     let mut sel = FORM.with(|f| f.borrow().slot);
     let mut hover = None;
-    for i in 0..24usize {
+    for i in 0..shown {
         let rect = Rect::new(r.x + (i % cols) as f32 * cell, gy + (i / cols) as f32 * cell, cell - 3.0 * u, cell - 3.0 * u);
         let item = inv.get(i).copied().flatten();
         let (h, clicked) = slot(rect, sel == Some(i as u8 + 1), u);
@@ -178,7 +208,7 @@ fn publish_column(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     if let Some(o) = hover {
         tooltip(&[obj_name(assets, o)], u);
     }
-    let mut y = gy + 4.0 * cell + 18.0 * u;
+    let mut y = gy + rows as f32 * cell + 18.0 * u;
     let chosen = sel.and_then(|s| inv.get(s as usize - 1).copied().flatten());
     text_fit(&chosen.map_or("Ningún objeto elegido".to_string(), |c| obj_name(assets, c.obj)), r.x, y, 17.0 * u, r.w, if chosen.is_some() { TEXT } else { MUTED });
     y += 10.0 * u;

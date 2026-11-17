@@ -10,17 +10,24 @@ pub struct EventState {
     pub view: EventView,
     /// Open auction lots.
     pub lots: Vec<AuctionLot>,
-    /// Something arrived since the windows were last drawn (they may react, e.g. open).
-    pub dirty: bool,
+    /// A new `State` / `Auctions` arrived and nobody stamped it yet: the windows take the
+    /// time it came (their countdowns run from there between server updates).
+    pub view_new: bool,
+    pub lots_new: bool,
 }
 
 impl EventState {
     pub fn apply(&mut self, msg: &EventS2C) {
         match msg {
-            EventS2C::State(v) => self.view = (**v).clone(),
-            EventS2C::Auctions { lots } => self.lots = lots.clone(),
+            EventS2C::State(v) => {
+                self.view = (**v).clone();
+                self.view_new = true;
+            }
+            EventS2C::Auctions { lots } => {
+                self.lots = lots.clone();
+                self.lots_new = true;
+            }
         }
-        self.dirty = true;
     }
 
     /// Lot by id.

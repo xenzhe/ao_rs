@@ -185,20 +185,24 @@ fn moving_gold_during_the_duel_and_conceding() {
     let (ga, gb) = (gold(&a), gold(&b));
     assert_eq!((ga, gb), (10_000, 10_000));
 
-    // The bet is held by the room: dropping or banking gold now cannot touch it.
+    // The bet is held by the room: dropping gold now moves only what is in hand, and an
+    // impossible amount is refused.
+    b.send(&C2S::DropGold { amount: 5_000 });
     b.send(&C2S::DropGold { amount: 50_000 });
-    b.send(&C2S::BankWithdrawGold { amount: 50_000 });
     step(&s, &mut [&mut a, &mut b]);
-    assert!(gold(&b) <= gb);
+    assert_eq!(gold(&b), gb - 5_000);
     let gb = gold(&b);
 
-    // Walking is held during the countdown (TiempoConteo = 15 s).
+    // Walking is held during the countdown (TiempoConteo = 15 s), and trying hard to walk
+    // is not punished as a cheat (a kick would lose the bet).
     let pos = a.pos();
-    for d in [ao_rules::Dir::Down, ao_rules::Dir::Right] {
-        a.walk_raw(d);
+    for i in 0..30 {
+        a.walk_raw(if i % 2 == 0 { ao_rules::Dir::Down } else { ao_rules::Dir::Right });
+        // At a legit pace (faster would be a speedhack strike, not this system's business).
+        s.advance(400);
     }
     step(&s, &mut [&mut a, &mut b]);
-    a.sync();
+    assert!(!a.closed(), "not kicked for walking during the countdown");
     assert_eq!(a.pos(), pos, "held in place");
 
     // Conceding: the rival takes the pot minus 10 %; both back home.
@@ -357,6 +361,81 @@ fn an_outbid_offline_bidder_gets_the_gold_on_the_next_login_and_unsold_lots_go_b
     }
     assert!(said(&y, "terminó sin ofertas"));
     assert_eq!(y.game.local.inventory.iter().flatten().filter(|i| i.obj == item).map(|i| i.amount).sum::<u32>(), 2 + 1, "2 back + 1 won");
+}
+
+#[test]
+fn seller_and_winner_offline_when_the_lot_closes_get_it_by_mail() {
+    let s = TestServer::start();
+    let item = auction_obj();
+    let mut seller = s.bot("Viajera");
+    let mut buyer = s.bot("Dormido");
+    give_gold(&s, &mut seller, 500);
+    give_gold(&s, &mut buyer, 3_000);
+    seller.say(&format!("/dar {item} 2"));
+    step(&s, &mut [&mut seller, &mut buyer]);
+    let slot = seller.game.local.inventory.iter().position(|i| i.is_some_and(|i| i.obj == item)).unwrap() as u8 + 1;
+    ev(&mut seller, EventC2S::AuctionPublish { slot, amount: 2, base_price: 2_000, minutes: 1 });
+    step(&s, &mut [&mut seller, &mut buyer]);
+    let lot = buyer.game.local.p4.event.lots[0].id;
+    ev(&mut buyer, EventC2S::AuctionBid { lot, amount: 2_000 });
+    step(&s, &mut [&mut seller, &mut buyer]);
+    assert_eq!(gold(&buyer), 1_000);
+    // Both leave before the end.
+    drop(seller);
+    drop(buyer);
+    let mut watcher = s.bot("Testigo");
+    s.advance_secs(120);
+    watcher.sync();
+    assert!(watcher.game.local.p4.event.lots.is_empty());
+    let mut seller = s.bot("Viajera");
+    let mut buyer = s.bot("Dormido");
+    step(&s, &mut [&mut seller, &mut buyer]);
+    assert_eq!(gold(&seller), 1_900, "2000 minus 5 %, waiting in the mailbox");
+    assert_eq!(buyer.game.local.inventory.iter().flatten().filter(|i| i.obj == item).map(|i| i.amount).sum::<u32>(), 2);
+    // Delivered once: a second login brings nothing.
+    drop(seller);
+    let seller = s.bot("Viajera");
+    assert_eq!(gold(&seller), 0);
+}
+
+/// Account characters (saved to the database): disconnecting halfway through a duel is
+/// saved outside the ring, alive, with the bet lost.
+#[test]
+fn an_account_character_leaving_a_duel_is_saved_home_and_alive() {
+    let s = TestServer::with(|st| {
+        st.start = Some((1, 50, 50));
+        let b = &mut st.data.balance;
+        (b.start_map, b.start_x, b.start_y) = (1, 50, 50);
+    });
+    let character = |name: &str| {
+        let mut c = s.connect();
+        assert!(c.create_account(&name.to_lowercase(), "secreta1"));
+        assert!(c.create_character(name, 1, 1, 1, 1));
+        c.play(name);
+        c.wait_until("en el mundo", |b| b.game.me().is_some() && b.game.stats.max_hp.get() > 0);
+        c
+    };
+    let mut a = character("Guardian");
+    let mut b = character("Desertor");
+    give_gold(&s, &mut a, 10_000);
+    give_gold(&s, &mut b, 10_000);
+    let (gb, home) = (gold(&b), b.map());
+    propose(&mut a, &["Desertor"], BET);
+    step(&s, &mut [&mut a, &mut b]);
+    accept(&mut b, "Guardian");
+    step(&s, &mut [&mut a, &mut b]);
+    assert!(ARENAS.contains(&b.map()));
+    drop(b);
+    step(&s, &mut [&mut a]);
+    let mut b = s.connect();
+    assert!(b.account_login("desertor", "secreta1"));
+    b.play("Desertor");
+    b.wait_until("en el mundo", |b| b.game.me().is_some() && b.game.stats.max_hp.get() > 0);
+    b.sync();
+    assert_eq!(b.map(), home, "saved out of the ring");
+    assert!(b.hp() > 0, "saved alive");
+    assert_eq!(gold(&b), gb - BET);
+    assert_eq!(gold(&a), 18_000);
 }
 
 #[test]

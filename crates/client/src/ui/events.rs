@@ -11,7 +11,7 @@ use crate::ui::widgets::{button, measure, text, text_field, text_fit, text_with,
 use crate::ui::Ui;
 use ao_protocol::p4::event::{DuelInvite, DuelView, EventView, TournamentSpec, TournamentView};
 use macroquad::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 #[derive(Default)]
 struct Form {
@@ -21,11 +21,30 @@ struct Form {
     mate: String,
     bet: String,
     potions: String,
-    refreshed: bool,
 }
 
 thread_local! {
     static FORM: RefCell<Form> = RefCell::new(Form { bet: "10000".into(), ..Default::default() });
+    /// Last frame the window was drawn and when the shown `State` arrived.
+    static LAST_DRAW: Cell<f64> = const { Cell::new(-10.0) };
+    static VIEW_AT: Cell<f64> = const { Cell::new(0.0) };
+}
+
+/// Shared by both event windows: asks for fresh state when a window (re)opens and returns
+/// the seconds elapsed since the data it shows arrived.
+pub(crate) fn sync_window(game: &mut Game, last_draw: &'static std::thread::LocalKey<Cell<f64>>, stamp: &'static std::thread::LocalKey<Cell<f64>>, fresh: bool) -> u32 {
+    let now = get_time();
+    if now - last_draw.get() > 0.5 && !demo_active() {
+        game.event_refresh();
+    }
+    last_draw.set(now);
+    if demo_active() {
+        return 0;
+    }
+    if fresh {
+        stamp.set(now);
+    }
+    (now - stamp.get()).max(0.0) as u32
 }
 
 /// `AO_EVENTDEMO=1`: sample state for screenshots (re-applied every frame).
@@ -84,10 +103,14 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let u = ui.u;
     if demo_active() {
         game.local.p4.event.view = demo_view(game);
-    } else if !FORM.with(|f| std::mem::replace(&mut f.borrow_mut().refreshed, true)) {
-        game.event_refresh();
     }
-    let v = game.local.p4.event.view.clone();
+    let fresh = std::mem::take(&mut game.local.p4.event.view_new);
+    let elapsed = sync_window(game, &LAST_DRAW, &VIEW_AT, fresh);
+    let mut v = game.local.p4.event.view.clone();
+    if let Some(d) = v.duel.as_mut() {
+        d.countdown = d.countdown.saturating_sub(elapsed.min(u16::MAX as u32) as u16);
+        d.time_left = d.time_left.saturating_sub(elapsed);
+    }
     let mut y = r.y + 18.0 * u;
 
     header("Retos", r.x, y, r.w, u);
