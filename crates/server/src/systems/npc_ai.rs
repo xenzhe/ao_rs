@@ -1004,4 +1004,56 @@ mod tests {
         println!("tick: {npcs} NPCs en 2 mapas, {on264} jugadores en el 264 ({hunting} NPCs persiguiendo), media {avg:?}/tick, peor {worst:?}");
         assert!(avg < std::time::Duration::from_millis(5), "average tick {avg:?}");
     }
+
+    /// Load measurement for the "one actor per map" decision: 400 players over the 20
+    /// maps with most creatures, each walking (real `Walk` messages, validated) every
+    /// 250 ms, all AI running. Reports the world's time per 50 ms tick (messages included).
+    /// `cargo test -p server --release -- --ignored load_400 --nocapture`
+    #[test]
+    #[ignore]
+    fn load_400_players() {
+        let mut b = Bench::new(1, 50, 50);
+        let mut by_npcs: Vec<(usize, u16)> = (1..=300u16)
+            .filter_map(|m| ao_formats::AoMap::load(&b.w.recursos, m).ok().map(|a| (a.npcs.len(), m)))
+            .collect();
+        by_npcs.sort_by(|a, b| b.cmp(a));
+        let maps: Vec<u16> = by_npcs.iter().take(20).map(|(_, m)| *m).collect();
+        let mut rxs = Vec::new();
+        for i in 0..400u32 {
+            let id = 10 + i;
+            rxs.push(b.join(id, &format!("Carga{i}")));
+            let map = maps[i as usize % maps.len()];
+            assert!(b.w.ensure_map(map));
+            let (x, y) = b.w.free_tile_near(map, 20 + (i as i32 * 7) % 60, 20 + (i as i32 * 13) % 60, 10);
+            b.w.teleport(id, map, x, y);
+        }
+        b.run(1000);
+        let dirs = [ao_rules::Dir::Up, ao_rules::Dir::Right, ao_rules::Dir::Down, ao_rules::Dir::Left];
+        let mut seq = vec![0u32; 400];
+        let (mut total, mut worst) = (std::time::Duration::ZERO, std::time::Duration::ZERO);
+        let ticks = 1200u32; // 60 s
+        for t in 0..ticks {
+            let t0 = std::time::Instant::now();
+            // A fifth of the players step this tick (each one every 250 ms).
+            for i in (t % 5..400).step_by(5) {
+                seq[i as usize] += 1;
+                let dir = dirs[((i + t / 20) % 4) as usize];
+                b.w.handle(10 + i, C2S::Walk { dir, seq: seq[i as usize] });
+            }
+            b.run(50);
+            let dt = t0.elapsed();
+            total += dt;
+            worst = worst.max(dt);
+            for i in 0..400u32 {
+                let p = b.w.player_mut(10 + i);
+                p.hp = p.max_hp;
+            }
+            for rx in &mut rxs {
+                while rx.try_recv().is_ok() {}
+            }
+        }
+        let npcs: usize = b.w.maps.values().map(|i| i.npcs.len()).sum();
+        let online = b.w.player_ids().len();
+        println!("carga: {online} jugadores, {} mapas, {npcs} NPCs; media {:?}/tick de 50 ms, peor {worst:?}", maps.len(), total / ticks);
+    }
 }

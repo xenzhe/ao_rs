@@ -115,7 +115,10 @@ ventana ni GPU) que todos los agentes usan para demostrar que su sistema funcion
 - **Mundo continuo**: mapas vecinos precargados y dibujados a la vez; cruce sin carga.
 - Efectos: los 150 FX y las partículas oficiales, luces del mapa, clima (lluvia, nieve,
   niebla según el mapa), equipo visible en el personaje, sonidos y música.
-- Un actor por mapa en el servidor.
+- ~~Un actor por mapa en el servidor.~~ Medido y aplazado (2026-11-17): con 400 jugadores
+  caminando en 20 mapas y 659 NPC activos, el mundo en un solo hilo gasta 0,68 ms de media
+  por tick de 50 ms (peor 4,7 ms, release). Se retoma si la medición
+  (`cargo test -p server --release --lib -- --ignored load_400 --nocapture`) se acerca a 25 ms.
 
 ### P4 — Contenido y operación (según prioridades del momento)
 - Trabajo y oficios, comandos de GM y penas, eventos (retos, torneos, castillos,
