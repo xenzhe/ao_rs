@@ -19,3 +19,4 @@ rand_core.workspace = true
 
 [dev-dependencies]
 ao-testkit.workspace = true
+client-core.workspace = true
