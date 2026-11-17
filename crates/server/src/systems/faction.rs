@@ -250,7 +250,7 @@ impl World {
         );
     }
 
-    fn faction_save(&self, id: u32) {
+    pub(crate) fn faction_save(&self, id: u32) {
         let Some(p) = self.player(id) else { return };
         let Some(char_id) = p.char_id else { return };
         if let Err(e) = self.db.save_faction(char_id, &p.faction.rec) {

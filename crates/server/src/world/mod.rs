@@ -48,6 +48,8 @@ use tracing::{info, warn};
 pub const NPC_ID_BASE: EntityId = 100_000;
 /// Regeneration period.
 pub const REGEN_MS: u64 = 1000;
+/// Every online character is saved this often (a crash loses at most this much).
+pub const AUTOSAVE_MS: u64 = 5 * 60_000;
 
 pub struct Session {
     pub tx: UnboundedSender<Vec<u8>>,
@@ -86,6 +88,7 @@ pub struct World {
     pub clock: Clock,
     pub next_tick: GameTime,
     pub next_regen: GameTime,
+    pub next_autosave: GameTime,
     pub probe: Option<Arc<Probe>>,
     /// Connection addresses (only kept when probing), alive until `Disconnected`.
     addrs: HashMap<ConnId, SocketAddr>,
@@ -125,6 +128,7 @@ impl World {
             clock,
             next_tick: GameTime::ZERO,
             next_regen: GameTime(REGEN_MS),
+            next_autosave: GameTime::ZERO,
             probe,
             addrs: HashMap::new(),
             map_npcs: npcs,
@@ -311,6 +315,12 @@ impl World {
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);
             self.regen();
+        }
+        if now >= self.next_autosave {
+            if self.next_autosave != GameTime::ZERO {
+                self.autosave_all();
+            }
+            self.next_autosave = now.after_ms(AUTOSAVE_MS);
         }
     }
 

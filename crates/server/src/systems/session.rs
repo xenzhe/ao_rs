@@ -198,6 +198,22 @@ impl World {
         true
     }
 
+    /// Periodic autosave of every online account character (and the pieces each system
+    /// keeps outside the character row), so a crash loses at most one interval.
+    pub(crate) fn autosave_all(&mut self) {
+        let ids = self.player_ids();
+        for id in &ids {
+            if let Some(p) = self.player(*id) {
+                self.save_player(p);
+            }
+            self.quest_save(*id);
+            self.faction_save(*id);
+        }
+        if !ids.is_empty() {
+            tracing::debug!(players = ids.len(), "autoguardado");
+        }
+    }
+
     pub(crate) fn logout(&mut self, id: u32) {
         if self.player(id).is_some() {
             self.social_on_leave(id);
