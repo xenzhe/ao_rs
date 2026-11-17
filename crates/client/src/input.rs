@@ -21,7 +21,12 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
     }
     if !ui.mouse_captured {
         if is_mouse_button_pressed(MouseButton::Right) {
-            game.casting = false;
+            if game.casting {
+                game.casting = false;
+            } else if let Some((tx, ty)) = tile_under_mouse(game, lay) {
+                // Right click on a nearby player: propose a trade.
+                game.trade_with_tile(tx, ty);
+            }
         }
         if is_mouse_button_pressed(MouseButton::Left) {
             world_click(game, lay);

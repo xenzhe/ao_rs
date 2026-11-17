@@ -490,11 +490,6 @@ impl Game {
         false
     }
 
-    /// The player standing on tile `(tx, ty)`, if any.
-    pub fn player_at(&self, tx: i32, ty: i32) -> Option<u32> {
-        self.ents.iter().find(|(id, e)| **id != self.my_id && e.kind == EntityKind::Player && e.x == tx && e.y == ty).map(|(id, _)| *id)
-    }
-
     /// Hook for a click on the world: proposes a trade to the player standing on tile
     /// `(tx, ty)`. Returns whether there was a player there to ask.
     pub fn trade_with_tile(&mut self, tx: i32, ty: i32) -> bool {

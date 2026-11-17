@@ -122,11 +122,13 @@ pub struct Ui {
     pub keyboard_captured: bool,
     /// Rects of the open windows this frame (for hit tests of the next frame).
     hits: Vec<(WindowId, Rect)>,
+    /// Server-driven windows currently opened for a server session (bank, shop, trade).
+    pub server_windows: std::collections::HashSet<WindowId>,
 }
 
 impl Ui {
     pub fn new(theme: Theme) -> Ui {
-        Ui { theme, u: 1.0, open: HashMap::new(), next_z: 1, moving: None, focus: None, drag: None, mouse_captured: false, keyboard_captured: false, hits: Vec::new() }
+        Ui { theme, u: 1.0, open: HashMap::new(), next_z: 1, moving: None, focus: None, drag: None, mouse_captured: false, keyboard_captured: false, hits: Vec::new(), server_windows: Default::default() }
     }
 
     pub fn is_open(&self, w: WindowId) -> bool {
@@ -217,7 +219,8 @@ impl Ui {
         Some(Rect::new(r.x + 12.0 * u, title.bottom() + 8.0 * u, r.w - 24.0 * u, r.h - title.h - 20.0 * u))
     }
 
-    fn topmost_at(&self, p: Vec2) -> Option<WindowId> {
+    /// The open window on top at screen point `p` (for drops and hover across windows).
+    pub fn topmost_at(&self, p: Vec2) -> Option<WindowId> {
         self.open.iter().filter(|(w, pl)| Rect::new(pl.pos.x, pl.pos.y, w.default_size().x * self.u, w.default_size().y * self.u).contains(p)).max_by_key(|(_, pl)| pl.z).map(|(w, _)| *w)
     }
 

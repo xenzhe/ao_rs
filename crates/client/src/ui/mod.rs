@@ -53,19 +53,38 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
             WindowId::Options => options::draw(ui, game, assets, r),
         }
     }
+    // Floating "X invites you to trade" and orphan prompts.
+    trade::draw_overlay(ui, game);
     if let Some(d) = ui.drag.clone() {
         inventory::draw_drag(ui, assets, &d);
     }
 }
 
-/// Windows the server opens and closes (banker, merchant, player trade).
-fn auto_windows(ui: &mut Ui, game: &Game) {
+/// Windows the server opens and closes (banker, merchant, player trade). A window the
+/// player closed with its X while the server still has the session open ends it there.
+fn auto_windows(ui: &mut Ui, game: &mut Game) {
     let l = &game.local;
-    for (w, on) in [(WindowId::Bank, l.bank.is_some()), (WindowId::Shop, l.social.trade.shop.is_some()), (WindowId::Trade, l.social.trade.player.is_some())] {
+    let states = [(WindowId::Bank, l.bank.is_some()), (WindowId::Shop, l.social.trade.shop.is_some()), (WindowId::Trade, l.social.trade.player.is_some())];
+    for (w, on) in states {
+        let was = ui.server_windows.contains(&w);
         if on && !ui.is_open(w) {
-            ui.open(w);
-        } else if !on && ui.is_open(w) {
-            ui.close(w);
+            if was {
+                // Opened before and now closed by the player: end it on the server.
+                match w {
+                    WindowId::Bank => game.bank_close(),
+                    WindowId::Shop => game.shop_close(),
+                    _ => game.trade_cancel(),
+                }
+                ui.server_windows.remove(&w);
+            } else {
+                ui.open(w);
+                ui.server_windows.insert(w);
+            }
+        } else if !on {
+            ui.server_windows.remove(&w);
+            if ui.is_open(w) {
+                ui.close(w);
+            }
         }
     }
 }
