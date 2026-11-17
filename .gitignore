@@ -9,3 +9,6 @@
 *.db-wal
 *.db-shm
 !docs/capturas/*.png
+config/last_account.txt
+config/options.ini
+config/spellkeys.ini

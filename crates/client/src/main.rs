@@ -72,6 +72,12 @@ async fn main() {
                 ui.begin_frame(lay.u);
                 ui::account::create(&mut ui, &mut game, &mut assets);
             }
+            // Kicked before entering the world (bad password, old client): the login flow
+            // takes it back to the login screen with the reason.
+            Screen::Kicked(_) if !game.entered_world() => {
+                ui.begin_frame(lay.u);
+                ui::login::draw(&mut ui, &mut game, &mut assets);
+            }
             Screen::Kicked(reason) => {
                 ui::hud::kicked(&reason.clone(), lay.u);
                 if dev.shot.is_some() {
