@@ -2,6 +2,8 @@
 //! - `AO_AUTO=1` / `AO_SHOT=file.png`: log in automatically (`AO_NAME`, default "Tester")
 //! - `AO_SHOT_AT=secs`: capture time after entering the map (default 4)
 //! - `AO_WALK=up|down|left|right`: keep walking in that direction
+//! - `AO_SAY=/ir 1 50 12;hola`: chat lines sent once on entering (`;`-separated), before
+//!   walking (dev commands like `/ir` need the server's `dev_login`)
 //! - `AO_FXDEMO=1`: play the spell effects locally (never sent to the server) and capture
 //! - `AO_HOUR=h`: start at that hour of the day
 //! - `AO_OPEN=inventory,spells,...`: windows open from the start (names: lowercase
@@ -22,6 +24,7 @@ pub struct DevTools {
     demo_step: u8,
     entered_at: Option<f64>,
     opened: bool,
+    said: bool,
 }
 
 impl DevTools {
@@ -43,6 +46,7 @@ impl DevTools {
             demo_step: 0,
             entered_at: None,
             opened: false,
+            said: false,
         }
     }
 
@@ -64,12 +68,18 @@ impl DevTools {
                 }
             }
         }
+        let t = now - *self.entered_at.get_or_insert(now);
+        if !self.said && t > 0.3 {
+            self.said = true;
+            for line in std::env::var("AO_SAY").unwrap_or_default().split(';').map(str::trim).filter(|l| !l.is_empty()) {
+                game.send_chat(line.to_string());
+            }
+        }
         if self.shot.is_none() {
             return;
         }
-        let t = now - *self.entered_at.get_or_insert(now);
         if let Some(d) = self.walk {
-            if t > 0.5 {
+            if t > 1.0 {
                 game.try_step(d, now);
             }
         }
