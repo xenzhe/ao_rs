@@ -257,6 +257,12 @@ impl World {
                 self.send(id, &n.spawn_msg(*nid));
             }
         }
+        // Looping FX already playing on the map (meditation), like MakeUserChar sends them.
+        for pid in &inst.players {
+            if let Some(fx) = self.player(*pid).map(|o| o.status.meditate_fx).filter(|f| *f != 0 && *pid != id) {
+                self.send(id, &S2C::Fx { id: *pid, fx, loops: 255 });
+            }
+        }
         let me = self.player(id).unwrap().spawn_msg(id);
         self.broadcast(map, &me, Some(id));
         self.send_ground_items(id);

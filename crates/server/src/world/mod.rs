@@ -90,6 +90,8 @@ pub struct World {
     pub guilds: guild::Guilds,
     pub parties: party::Parties,
     pub trades: trade::Trades,
+    /// World weather (systems/weather.rs).
+    pub weather: crate::systems::weather::Weather,
 }
 
 impl World {
@@ -119,6 +121,7 @@ impl World {
             guilds: Default::default(),
             parties: Default::default(),
             trades: Default::default(),
+            weather: Default::default(),
         }
     }
 
@@ -285,6 +288,7 @@ impl World {
     /// One world tick at game time `now`: creatures, and regeneration when due.
     pub fn tick(&mut self, now: GameTime) {
         self.tick_npcs(now);
+        self.tick_weather(now);
         self.tick_magic(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);

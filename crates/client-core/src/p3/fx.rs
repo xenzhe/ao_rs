@@ -477,14 +477,11 @@ pub struct Weather {
     pub fog: bool,
 }
 
-/// Length of a local weather cycle in seconds (no server weather message yet).
-pub const WEATHER_CYCLE_S: f64 = 600.0;
-
 /// The official client only shows rain/snow when the server says it rains (`bRain`,
-/// `bNieve`) AND the map allows it (`MapDat.LLUVIA/NIEVE`); fog follows the map flag.
-/// Without a server weather message, it rains during the first quarter of each cycle
-/// and snows on snowy maps half of the time. `AO_WEATHER=rain|snow|fog|clear` forces it.
-pub fn weather_for(rain_map: bool, snow_map: bool, fog_map: bool, now_s: f64, forced: Option<&str>) -> Weather {
+/// `bNieve`, from `S2C::Weather`) AND the map allows it (`MapDat.LLUVIA/NIEVE`); fog when
+/// the server is cloudy (`Nieblando`) or the map always has it. `AO_WEATHER=rain|snow|
+/// fog|storm|clear` forces it (screenshots).
+pub fn weather_for(rain_map: bool, snow_map: bool, fog_map: bool, server: (u8, bool), forced: Option<&str>) -> Weather {
     match forced {
         Some("rain") => return Weather { rain: true, ..Default::default() },
         Some("snow") => return Weather { snow: true, ..Default::default() },
@@ -493,8 +490,8 @@ pub fn weather_for(rain_map: bool, snow_map: bool, fog_map: bool, now_s: f64, fo
         Some("clear") => return Weather::default(),
         _ => {}
     }
-    let phase = (now_s / WEATHER_CYCLE_S).fract();
-    Weather { rain: rain_map && phase < 0.25, snow: snow_map && phase < 0.5, fog: fog_map }
+    let (fog, precipitation) = server;
+    Weather { rain: rain_map && precipitation, snow: snow_map && precipitation, fog: fog_map || fog > 0 }
 }
 
 /// Is the tile under a roof (`HayTecho`)? Rain and snow are hidden there.
@@ -819,11 +816,13 @@ mod tests {
 
     #[test]
     fn weather_rules() {
-        assert!(weather_for(false, false, false, 0.0, Some("rain")).rain);
-        assert_eq!(weather_for(true, false, false, 10.0, None), Weather { rain: true, ..Default::default() });
-        assert_eq!(weather_for(true, false, false, WEATHER_CYCLE_S * 0.5, None), Weather::default());
-        assert!(!weather_for(false, false, false, 10.0, None).rain, "the map must allow rain");
-        assert!(weather_for(false, false, true, 10.0, None).fog);
+        assert!(weather_for(false, false, false, (0, false), Some("rain")).rain);
+        assert_eq!(weather_for(true, false, false, (0, true), None), Weather { rain: true, ..Default::default() });
+        assert_eq!(weather_for(true, false, false, (0, false), None), Weather::default(), "server not raining");
+        assert!(!weather_for(false, false, false, (0, true), None).rain, "the map must allow rain");
+        assert!(weather_for(false, true, false, (20, true), None).snow);
+        assert!(weather_for(false, false, true, (0, false), None).fog, "foggy map");
+        assert!(weather_for(false, false, false, (30, false), None).fog, "cloudy server");
     }
 
     #[test]

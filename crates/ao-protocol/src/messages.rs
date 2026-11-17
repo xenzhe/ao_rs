@@ -158,6 +158,12 @@ pub enum S2C {
     // Chat / console
     Console { text: String, color: Tone },
 
+    /// World weather (ModClimas): clouds/fog intensity (0 = clear) and whether it rains
+    /// (snows on snowy maps). Sent to everyone on change and to each player on entering.
+    Weather { fog: u8, precipitation: bool },
+    /// Thunder flash and sound when the precipitation starts.
+    Thunder,
+
     // P2 (docs/P2_CONTRATO.md)
     Trade(crate::social::TradeS2C),
     Guild(crate::social::GuildS2C),

@@ -20,6 +20,7 @@ mod party;
 mod quest;
 mod social;
 mod trade;
+pub(crate) mod weather;
 
 use crate::world::World;
 use ao_protocol::C2S;

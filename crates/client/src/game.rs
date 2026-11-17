@@ -103,9 +103,20 @@ pub fn poll(game: &mut Game, assets: &mut Assets, fx: &mut Fx) {
     }
     characters::expire_fx(assets, &mut fx.char_fx, now_ms);
 
+    // Thunder when the server starts the precipitation (PlayWave 404 in TimerMeteorologia).
+    thread_local! {
+        static THUNDERS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    }
+    if THUNDERS.get() != game.local.thunders {
+        THUNDERS.set(game.local.thunders);
+        if let Some(a) = &mut fx.audio {
+            a.play(404, 1.0, Channel::Effects);
+        }
+    }
+
     // Weather of this map and whether the player is under a roof.
     if let Some(m) = &game.map {
-        let w = weather_for(m.rain, m.snow, m.fog, get_time(), env("AO_WEATHER").as_deref());
+        let w = weather_for(m.rain, m.snow, m.fog, game.local.weather, env("AO_WEATHER").as_deref());
         let indoor = under_roof(game, me_tile.0, me_tile.1);
         fx.weather.set(w, indoor);
         if w.fog && !fx.grh_tex.contains_key(&FOG_GRH) {

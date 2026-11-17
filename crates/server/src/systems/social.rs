@@ -3,6 +3,7 @@ use crate::world::World;
 
 impl World {
     pub(crate) fn social_on_enter(&mut self, id: u32) {
+        self.weather_on_enter(id);
         self.faction_on_enter(id);
         self.guild_on_enter(id);
         self.party_on_enter(id);

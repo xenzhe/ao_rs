@@ -37,6 +37,10 @@ pub struct Local {
     pub ground: HashMap<(i32, i32), (u16, u32)>,
     /// P2: trade, guild, party, faction, quests, chat channels.
     pub social: crate::social::Social,
+    /// Server weather: (cloud/fog intensity, precipitation).
+    pub weather: (u8, bool),
+    /// Bumped on every thunder (the frontend plays it when it changes).
+    pub thunders: u32,
 }
 
 #[derive(Debug, Default)]
@@ -101,6 +105,8 @@ impl Local {
                 }
             }
             S2C::BankClosed => self.bank = None,
+            S2C::Weather { fog, precipitation } => self.weather = (*fog, *precipitation),
+            S2C::Thunder => self.thunders += 1,
             _ => return self.social.apply(msg),
         }
         true
