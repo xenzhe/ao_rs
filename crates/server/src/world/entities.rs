@@ -8,6 +8,11 @@ use std::time::Instant;
 pub type EntityId = u32;
 
 pub struct Player {
+    /// Database id when the character belongs to an account (None for dev logins).
+    pub char_id: Option<i64>,
+    pub race: u8,
+    pub class: u8,
+    pub gender: u8,
     pub name: String,
     pub map: u16,
     pub x: i32,

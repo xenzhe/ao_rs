@@ -11,6 +11,7 @@
 //! maps and rules from `ao-rules`.
 pub mod config;
 pub mod data;
+pub mod db;
 pub mod net;
 pub mod rng;
 pub mod security;
@@ -33,7 +34,8 @@ pub struct Settings {
 impl Settings {
     /// Repository defaults: used by tests and when no config file exists.
     pub fn defaults() -> Settings {
-        let config = ServerConfig::default();
+        let mut config = ServerConfig::default();
+        config.database = ":memory:".into();
         let recursos = config.recursos_path();
         Settings { config, data: GameData::defaults(), recursos }
     }
