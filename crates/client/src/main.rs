@@ -60,23 +60,24 @@ async fn main() {
         game.now = now;
         game::poll(&mut game, &mut assets, &mut renderer.fx);
         match &game.screen {
+            // Account screens: scenes of the world (ui/scene.rs) under the account UI.
             Screen::Login => {
                 ui.begin_frame(lay.u);
-                ui::login::draw(&mut ui, &mut game, &mut assets);
+                ui::login::draw(&mut ui, &mut game, &mut assets, &mut renderer, dt);
             }
             Screen::Characters => {
                 ui.begin_frame(lay.u);
-                ui::account::characters(&mut ui, &mut game, &mut assets);
+                ui::account::characters(&mut ui, &mut game, &mut assets, &mut renderer, dt);
             }
             Screen::Create => {
                 ui.begin_frame(lay.u);
-                ui::account::create(&mut ui, &mut game, &mut assets);
+                ui::account::create(&mut ui, &mut game, &mut assets, &mut renderer, dt);
             }
             // Kicked before entering the world (bad password, old client): the login flow
             // takes it back to the login screen with the reason.
             Screen::Kicked(_) if !game.entered_world() => {
                 ui.begin_frame(lay.u);
-                ui::login::draw(&mut ui, &mut game, &mut assets);
+                ui::login::draw(&mut ui, &mut game, &mut assets, &mut renderer, dt);
             }
             Screen::Kicked(reason) => {
                 ui::hud::kicked(&reason.clone(), lay.u);
