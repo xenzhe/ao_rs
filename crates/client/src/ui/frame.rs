@@ -98,7 +98,7 @@ impl WindowId {
             WindowId::Spells => vec2(720.0, 560.0),
             WindowId::Character => vec2(780.0, 580.0),
             WindowId::Guild => vec2(560.0, 480.0),
-            WindowId::Party => vec2(300.0, 320.0),
+            WindowId::Party => vec2(380.0, 430.0),
             WindowId::Quests => vec2(560.0, 440.0),
             WindowId::WorldMap => vec2(720.0, 560.0),
             WindowId::Options => vec2(420.0, 400.0),

@@ -681,6 +681,63 @@ pub fn hero(assets: &mut crate::assets::Assets, body_id: u16, head_id: u16, equi
     }
 }
 
+thread_local! {
+    /// Bounding box of the non-transparent pixels of a sprite, by (file, sx, sy).
+    static BOUNDS: std::cell::RefCell<std::collections::HashMap<(u32, i32, i32), Rect>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Source rectangle (in the texture) around the drawn pixels of `g`.
+fn opaque_bounds(tex: &Texture2D, g: &ao_formats::graphics::Grh) -> Rect {
+    let key = (g.file, g.sx as i32, g.sy as i32);
+    if let Some(r) = BOUNDS.with(|b| b.borrow().get(&key).copied()) {
+        return r;
+    }
+    let img = tex.get_texture_data();
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for y in 0..g.h as i32 {
+        for x in 0..g.w as i32 {
+            let (px, py) = (g.sx as i32 + x, g.sy as i32 + y);
+            if px < img.width as i32 && py < img.height as i32 && img.get_image_data()[(py as usize) * img.width as usize + px as usize][3] > 16 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+            }
+        }
+    }
+    let r = if x1 < x0 { Rect::new(g.sx, g.sy, g.w, g.h) } else { Rect::new(g.sx + x0 as f32, g.sy + y0 as f32, (x1 - x0 + 1) as f32, (y1 - y0 + 1) as f32) };
+    BOUNDS.with(|b| b.borrow_mut().insert(key, r));
+    r
+}
+
+/// A round medallion with the character's head (or its initial when unknown) inside.
+pub fn medallion(assets: &mut crate::assets::Assets, head_id: Option<u16>, name: &str, cx: f32, cy: f32, rad: f32, ring: Color, u: f32) {
+    draw_circle(cx + 1.5 * u, cy + 2.0 * u, rad, Color::new(0.0, 0.0, 0.0, 0.35));
+    draw_circle(cx, cy, rad, Color::new(0.06, 0.045, 0.03, 1.0));
+    for i in 0..5 {
+        draw_circle(cx, cy - rad * 0.15, rad * (0.95 - i as f32 * 0.16), Color::new(0.9, 0.62, 0.3, 0.05));
+    }
+    let heading = 3usize;
+    let g = head_id.and_then(|h| assets.db.heads.get(&h).map(|a| a[heading])).and_then(|idx| assets.db.frame(idx, 0.0).cloned());
+    match g {
+        Some(g) => {
+            // Head sprites are tall cells (27x64) with the face in a corner of them: crop to
+            // the pixels that are drawn (measured once per sprite) and fill the disc.
+            if let Some(tex) = assets.texture(g.file) {
+                let b = opaque_bounds(&tex, &g);
+                let s = (rad * 1.5) / b.w.max(b.h);
+                draw_texture_ex(&tex, (cx - b.w * s / 2.0).round(), (cy - b.h * s / 2.0 + rad * 0.05).round(), WHITE, DrawTextureParams { source: Some(b), dest_size: Some(vec2(b.w * s, b.h * s)), ..Default::default() });
+            }
+        }
+        None => {
+            let ch: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_else(|| "?".into());
+            text_mid(FontKind::Title, &ch, cx, cy + rad * 0.32, rad * 0.95, GOLD_DIM);
+        }
+    }
+    draw_circle_lines(cx, cy, rad, 2.0 * u, ring);
+    draw_circle_lines(cx, cy, rad - 3.0 * u, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
+}
+
 // ---------------------------------------------------------------- small composites
 
 /// Draws a N2 section heading (small caps + rule) and returns the y under it.
