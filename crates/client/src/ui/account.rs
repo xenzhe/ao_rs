@@ -199,6 +199,7 @@ impl AccountUi {
         if let (Some(p), None) = (had, &self.flow.pending) {
             self.answered(&p, game);
         }
+        self.scene.hold_fx = self.flow.pending == Some(Pending::Play) || game.screen == Screen::Game;
         if game.screen == Screen::Game && self.auto.play.is_some() {
             eprintln!("AUTO: entered the world as {:?} on map {:?}", game.me().map(|e| e.name.clone()), game.map.as_ref().map(|m| m.number));
             std::process::exit(0);
@@ -727,6 +728,8 @@ fn stage_camp(st: &mut AccountUi, game: &Game, assets: &Assets, renderer: &mut R
                     e.dir = Dir::Up;
                 }
                 st.scene.burst(renderer, tile_feet(HERO.0, HERO.1) - vec2(0.0, 16.0));
+                // The forging aura goes with it (the hero actor leaves this frame).
+                st.scene.play_fx(renderer, assets, id, RITUAL_FX, 2);
             }
         }
     }
@@ -795,6 +798,7 @@ pub fn characters(ui: &mut Ui, game: &mut Game, assets: &mut Assets, renderer: &
         } else {
             ui.focus = None;
         }
+        forge_flash(st);
         st.scene.draw_black();
         st.end(game, "characters");
     });
@@ -901,7 +905,10 @@ fn characters_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
     // ---- header
     text_centered_with(FontKind::Title, "La hoguera", sw / 2.0, 46.0 * u, 28.0 * u, GOLD_BRIGHT);
     theme::divider(sw / 2.0, 62.0 * u, 260.0 * u, u);
-    text_centered_with(FontKind::NarrativeItalic, &format!("{n} de {MAX_CHARACTERS} viajeros esperan junto al fuego"), sw / 2.0, 86.0 * u, 16.0 * u, TEXT_DIM);
+    // With a back row the names reach the header: the count line steps aside.
+    if n <= 5 {
+        text_centered_with(FontKind::NarrativeItalic, &format!("{n} de {MAX_CHARACTERS} viajeros esperan junto al fuego"), sw / 2.0, 86.0 * u, 16.0 * u, TEXT_DIM);
+    }
     if !st.user.is_empty() {
         text_with(FontKind::Body, "CUENTA", 28.0 * u, 36.0 * u, 13.0 * u, TEXT_FAINT);
         text_with(FontKind::Title, &st.user, 28.0 * u, 58.0 * u, 18.0 * u, TEXT);
@@ -950,7 +957,7 @@ fn characters_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
     }
     text_centered_with(FontKind::Body, "Clic o flechas para elegir   ·   Intro o doble clic para jugar   ·   Supr para borrar", sw / 2.0, sh - 14.0 * u, 13.0 * u, TEXT_FAINT);
     if let Some((msg, ok)) = st.flow.notice.clone() {
-        text_centered_with(FontKind::Body, &msg, sw / 2.0, base - 140.0 * u - 22.0 * u, 17.0 * u, if ok { GOOD } else { BAD });
+        text_centered_with(FontKind::Body, &humane(&msg), sw / 2.0, base - 140.0 * u - 22.0 * u, 17.0 * u, if ok { GOOD } else { BAD });
     }
 
     // ---- input: clicks in the world and keyboard
@@ -1072,6 +1079,7 @@ pub fn create(ui: &mut Ui, game: &mut Game, assets: &mut Assets, renderer: &mut 
         } else {
             ui.focus = None;
         }
+        forge_flash(st);
         st.scene.draw_black();
         st.end(game, "create");
     });
@@ -1300,7 +1308,10 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
         tip = vec!["Nombre al azar".into()];
     }
     let check = client_core::p3::account::check_character_name(&st.form.name);
+    // The server's refusal of the name (taken...) goes here, under the field.
+    let name_refused = st.flow.notice.as_ref().filter(|n| !n.1 && n.0.to_lowercase().contains("nombre")).map(|n| humane(&n.0));
     let (msg, mc) = match (&check, st.form.name.is_empty()) {
+        _ if name_refused.is_some() => (name_refused.clone().unwrap_or_default(), BAD),
         (_, true) => ("Entre 3 y 16 letras, números o guion bajo.".to_string(), TEXT_FAINT),
         (Ok(()), _) => ("Un buen nombre.".to_string(), GOOD),
         (Err(e), _) => (e.to_string(), BAD),
@@ -1431,11 +1442,11 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
     let br = Rect::new(px0, panel.bottom() - 62.0 * u, pw0, 44.0 * u);
     let label = if name_ok { format!("Dar vida a {}", st.form.name) } else { "Dale un nombre para empezar".to_string() };
     let go = button_kind(br, &label, Kind::Primary, name_ok && !busy, u) || (enter && name_ok && !busy);
-    if let Some((msg, ok)) = st.flow.notice.clone() {
+    if let Some((msg, ok)) = st.flow.notice.clone().filter(|n| !n.0.to_lowercase().contains("nombre")) {
         let c = if ok { GOOD } else { BAD };
         let shake = ((get_time() - st.notice_at) as f32 / 0.35).min(1.0);
         let dx = (t * 60.0).sin() * 4.0 * u * (1.0 - shake);
-        text_centered_with(FontKind::Body, &msg, br.x + br.w / 2.0 + dx, br.y - 8.0 * u, 15.0 * u, c);
+        text_centered_with(FontKind::Body, &humane(&msg), br.x + br.w / 2.0 + dx, br.y - 8.0 * u, 15.0 * u, c);
     }
     if go {
         // The ritual: light and the meditation aura, then the request (purely visual: the
@@ -1449,17 +1460,10 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
         st.select_name = Some(name.clone());
         st.flow.create_character(game, &name, race, class, gender, head);
     }
-    if let Some(t0) = st.forging {
-        let k = (get_time() - t0) as f32;
-        let flash = (1.0 - k / 0.6).clamp(0.0, 1.0);
-        if flash > 0.0 {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(1.0, 0.92, 0.75, flash * flash * 0.5));
-        }
-        if !st.flow.busy() && st.flow.notice.as_ref().is_some_and(|n| !n.1) {
-            // Refused (name taken...): the ritual stops.
-            st.forging = None;
-            st.scene.stop_fx(renderer, HERO_ID);
-        }
+    if st.forging.is_some() && !st.flow.busy() && st.flow.notice.as_ref().is_some_and(|n| !n.1) {
+        // Refused (name taken...): the ritual stops.
+        st.forging = None;
+        st.scene.stop_fx(renderer, HERO_ID);
     }
 
     if st.flow.busy() {
@@ -1476,6 +1480,17 @@ fn class_label(id: u8, name: &str) -> &str {
         7 => "Paladín",
         11 => "Ladrón",
         _ => name,
+    }
+}
+
+/// The white-gold flash of the forging ritual (drawn by both camp screens, since the
+/// server answers within a frame or two and the selector takes over).
+fn forge_flash(st: &AccountUi) {
+    let Some(t0) = st.forging else { return };
+    let k = (get_time() - t0) as f32;
+    let flash = (1.0 - k / 0.9).clamp(0.0, 1.0);
+    if flash > 0.0 {
+        draw_rectangle(0.0, 0.0, screen_width(), screen_height(), Color::new(1.0, 0.92, 0.75, flash * flash * 0.55));
     }
 }
 

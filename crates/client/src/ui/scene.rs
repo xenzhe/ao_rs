@@ -125,6 +125,8 @@ pub struct Scene {
     /// Draw time statistics (ms), for the report.
     perf: (f64, u32),
     born: f64,
+    /// Set by the screens while a Play request is out (see `sync_fx`).
+    pub hold_fx: bool,
     rng: u32,
 }
 
@@ -177,6 +179,7 @@ impl Scene {
             scout,
             perf: (0.0, 0),
             born: get_time(),
+            hold_fx: false,
             rng: 0x2545_F491,
         }
     }
@@ -190,6 +193,7 @@ impl Scene {
         if self.loaded.is_some() {
             return;
         }
+        self.recursos = assets.root.clone();
         match AoMap::load(&self.recursos, SCENE_MAP) {
             Ok(m) => {
                 assets.preload_map(&m);
@@ -528,6 +532,10 @@ impl Scene {
     /// replaces `fx.map_groups` when it enters a map, so this checks a fingerprint.
     fn sync_fx(&mut self, fx: &mut Fx, assets: &mut Assets) {
         fx.ensure_official(&assets.root);
+        // Entering the world: the game's map owns the particles and the music now.
+        if self.hold_fx {
+            return;
+        }
         let print = (fx.map_groups.len(), fx.map_groups.first().map(|g| g.at).unwrap_or(Vec2::NAN));
         if self.fx_print.is_some_and(|p| p.0 == print.0 && (p.1 == print.1 || p.1.is_nan() && print.1.is_nan())) {
             return;
