@@ -191,7 +191,8 @@ fn merchant_answers_that_trade_comes_in_p2() {
     assert!((x - m.x).abs() + (y - m.y).abs() <= 4, "close to the merchant");
     bot.send(&C2S::Interact { tx: m.x, ty: m.y });
     bot.sync();
-    assert!(bot.console().any(|t| t.contains("comercio") && t.contains("P2")), "{:?}", bot.console().collect::<Vec<_>>());
+    // P2: the merchant window opens (systems/trade.rs).
+    assert!(bot.game.local.social.trade.shop.is_some(), "{:?}", bot.console().collect::<Vec<_>>());
 }
 
 #[test]
