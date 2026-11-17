@@ -14,6 +14,12 @@ async fn main() {
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stdout()))
         .init();
 
+    // `server backup|backups|restore|stats ...` (same as the `ao-ops` binary).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = server::ops::cli(&args) {
+        std::process::exit(code);
+    }
+
     let cfg_path = std::env::args().nth(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("config/server.toml"));
     let mut config = match ServerConfig::load(&cfg_path) {
         Ok(c) => c,
@@ -38,5 +44,6 @@ async fn main() {
         Ok(l) => l,
         Err(e) => return error!("no se pudo escuchar en {}: {e}", config.bind),
     };
-    server::run(listener, Settings::new(config, data, recursos)).await;
+    // Same world loop plus statistics, periodic backups and graceful shutdown (docs/OPERACION.md).
+    server::ops::run(listener, Settings::new(config, data, recursos)).await;
 }

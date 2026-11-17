@@ -12,3 +12,6 @@
 config/last_account.txt
 config/options.ini
 config/spellkeys.ini
+dist/
+data/stats.json
+data/backups/
