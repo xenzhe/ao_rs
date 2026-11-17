@@ -161,6 +161,14 @@ impl World {
                 }
                 true
             }
+            Some("/ir") => {
+                let n: Vec<i32> = parts.filter_map(|s| s.parse().ok()).collect();
+                match n[..] {
+                    [map, x, y] if map > 0 && (1..=100).contains(&x) && (1..=100).contains(&y) => self.teleport(id, map as u16, x, y),
+                    _ => self.console(id, "Uso: /ir <mapa> <x> <y>.", Tone::Warn),
+                }
+                true
+            }
             _ => false,
         }
     }
