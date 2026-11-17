@@ -10,3 +10,11 @@ width = 1280
 height = 800
 # Escalado entero del mundo (nitido pero puede dejar bordes). Se cambia con F2.
 pixel_perfect = false
+
+# Volumen (0.0 a 1.0).
+[audio]
+master = 0.8
+music = 0.45
+effects = 0.9
+steps = 0.5
+ambient = 0.5

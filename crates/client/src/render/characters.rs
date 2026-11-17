@@ -112,7 +112,14 @@ fn draw_with(assets: &mut Assets, e: &Ent, origin: Vec2, t_ms: f32, frame: &Char
     let Some(tint) = tint_for(flags, me) else { return };
     let tl = v(e.tile_tl()) - origin;
     let heading = e.dir.heading();
-    let Some(body) = assets.db.bodies.get(&e.body).cloned() else { return };
+    // The public AO20 client lacks the orc bodies the server gives (581/582, DarCuerpo);
+    // its own HeadAndBodyData.json uses 249/248 for them.
+    let body_id = match e.body {
+        581 if !assets.db.bodies.contains_key(&581) => 249,
+        582 if !assets.db.bodies.contains_key(&582) => 248,
+        b => b,
+    };
+    let Some(body) = assets.db.bodies.get(&body_id).cloned() else { return };
     let dead = flags & status::DEAD != 0;
     let frozen = flags &(status::PARALYZED | status::IMMOBILIZED) != 0;
     if !dead {

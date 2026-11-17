@@ -197,6 +197,11 @@ fn draw_names(game: &Game, lay: &Layout, origin: Vec2) {
         if !lay.view.contains(p) {
             continue;
         }
+        // Invisible or hidden: others see no name and no bar (the body is not drawn either).
+        let hidden = e.status & (ao_protocol::status::INVISIBLE | ao_protocol::status::HIDDEN) != 0;
+        if hidden && *id != game.my_id {
+            continue;
+        }
         let size = (14.0 * lay.scale.max(1.0)).min(22.0 * lay.u);
         if e.kind == EntityKind::Player {
             let d = crate::ui::widgets::measure(&e.name, size);
