@@ -22,6 +22,7 @@ pub mod party;
 pub mod quest;
 pub mod trade;
 // P4 (docs/P4_CONTRATO.md)
+pub mod craft;
 pub mod work;
 
 use serde::{Deserialize, Serialize};

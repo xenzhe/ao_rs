@@ -93,6 +93,7 @@ fn world_click(game: &mut Game, lay: &Layout) {
     match who {
         Some((_, ao_protocol::EntityKind::Creature)) => game.send(&ao_protocol::C2S::Interact { tx, ty }),
         Some((name, _)) => game.say(format!("Ves a {name}."), Tone::Info),
-        None => {}
+        // Map objects with an action (anvil, forge...) are the server's to answer.
+        None => game.send(&ao_protocol::C2S::Interact { tx, ty }),
     }
 }

@@ -33,6 +33,10 @@ impl World {
             self.populate_map(map);
         }
         let Some(nid) = self.instance(map).npc_at(tx, ty) else {
+            // Map objects with an action: the anvil opens the blacksmith (craft system).
+            if self.craft_click_tile(id, tx, ty) {
+                return;
+            }
             self.console(id, "No hay nada con que interactuar ahi.", Tone::Info);
             return;
         };

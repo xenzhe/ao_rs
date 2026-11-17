@@ -486,6 +486,10 @@ impl World {
         if self.dead(id) {
             return self.console(id, "Estas muerto!!", Tone::Info);
         }
+        // Craft tools (pot, saw, sewing box, hammer) open their trade (UseInvItem).
+        if self.craft_use_tool(id, slot) {
+            return;
+        }
         let ao = self.ao.clone();
         let Some(o) = ao.objs.get(item.obj as u32) else { return };
         let p = self.player(id).unwrap();

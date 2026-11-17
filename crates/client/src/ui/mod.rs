@@ -44,6 +44,7 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
         ui.close(WindowId::Gm);
     }
     auto_windows(ui, game);
+    craft::auto_window(ui, game);
     hud::draw(ui, game, assets, lay, hour, pixel_perfect);
     console::draw(ui, game, lay);
     for w in ui.open_windows() {
