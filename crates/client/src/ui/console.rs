@@ -7,8 +7,9 @@
 //! quest window when a quest NPC answers. See `party::frame_hooks` and `quests::auto_open`.
 use crate::game::{tone_color, Game};
 use crate::render::layout::Layout;
-use crate::ui::theme::{GOLD, GOLD_TEXT, MUTED, TEXT};
-use crate::ui::widgets::{button, measure, panel, text};
+use crate::ui::fx_ui::ease;
+use crate::ui::theme::{FontKind, GOLD, GOLD_DIM, GOLD_BRIGHT, GOLD_TEXT, MUTED, TEXT, TEXT_DIM};
+use crate::ui::widgets::{measure, measure_with, text, text_with};
 use crate::ui::{party, quests, Ui};
 use ao_rules::MAX_CHAT;
 use client_core::p3::social::{parse_chat, ConsoleTab, Feed, FeedLine, InputHistory, LineKind};
@@ -101,7 +102,14 @@ pub fn draw(ui: &mut Ui, game: &mut Game, lay: &Layout) {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
         st.feed.update(game);
-        draw_console(ui, game, lay, &mut st, u);
+        // `AO_NOHUD` (measuring the HUD's cost): no console either.
+        if std::env::var_os("AO_NOHUD").is_none() && !crate::ui::hud::skip("console") {
+            let t0 = crate::ui::hud::timing().then(get_time);
+            draw_console(ui, game, lay, &mut st, u);
+            if let Some(t0) = t0 {
+                crate::ui::hud::add_cost(get_time() - t0);
+            }
+        }
     });
 }
 
@@ -136,37 +144,108 @@ fn demo(game: &mut Game) {
     }
 }
 
+/// Vertical gradient rectangle (one mesh).
+fn vgrad(r: Rect, top: Color, bottom: Color) {
+    let v = vec![
+        Vertex::new(r.x, r.y, 0.0, 0.0, 0.0, top),
+        Vertex::new(r.right(), r.y, 0.0, 0.0, 0.0, top),
+        Vertex::new(r.right(), r.bottom(), 0.0, 0.0, 0.0, bottom),
+        Vertex::new(r.x, r.bottom(), 0.0, 0.0, 0.0, bottom),
+    ];
+    draw_mesh(&Mesh { vertices: v, indices: vec![0, 1, 2, 0, 2, 3], texture: None });
+}
+
+/// Horizontal gradient rectangle (one mesh).
+fn hgrad(r: Rect, left: Color, right: Color) {
+    quad4(r, left, right, right, left);
+}
+
+/// Rectangle with a colour per corner (top-left, top-right, bottom-right, bottom-left).
+fn quad4(r: Rect, tl: Color, tr: Color, br: Color, bl: Color) {
+    let v = vec![
+        Vertex::new(r.x, r.y, 0.0, 0.0, 0.0, tl),
+        Vertex::new(r.right(), r.y, 0.0, 0.0, 0.0, tr),
+        Vertex::new(r.right(), r.bottom(), 0.0, 0.0, 0.0, br),
+        Vertex::new(r.x, r.bottom(), 0.0, 0.0, 0.0, bl),
+    ];
+    draw_mesh(&Mesh { vertices: v, indices: vec![0, 1, 2, 0, 2, 3], texture: None });
+}
+
+fn with_alpha(c: Color, a: f32) -> Color {
+    Color::new(c.r, c.g, c.b, c.a * a)
+}
+
+/// Splits "[Canal] Nombre: texto" / "Nombre: texto" into (speaker part, message), when the
+/// speaker part is short enough to be a name.
+fn speaker(row: &str) -> Option<(&str, &str)> {
+    let i = row.find(": ")?;
+    (i <= 40 && !row[..i].contains("  ")).then(|| row.split_at(i + 2))
+}
+
 fn draw_console(ui: &mut Ui, game: &mut Game, lay: &Layout, st: &mut State, u: f32) {
     let small = lay.console;
     let typing = game.chat.is_some();
     let mouse: Vec2 = mouse_position().into();
-    let tall = Rect::new(small.x, small.y, small.w, 292.0 * u);
+    let tall = Rect::new(small.x, small.y, small.w, (300.0 * u).min(lay.bottom.y - small.y - 120.0 * u).max(small.h));
+    let tab_h = 22.0 * u;
+    let strip = Rect::new(small.x, small.y, small.w, tab_h + 4.0 * u);
     // `mouse_captured` here still only says "over a window or dragging" (set by the frame).
+    // The console lies over the world: unused, it only takes the mouse on its tab strip, so
+    // the tiles under its lines can still be clicked.
     let free = !ui.mouse_captured;
-    st.expanded = typing || std::env::var_os("AO_CONSOLE_OPEN").is_some() || (free && (small.contains(mouse) || (st.expanded && tall.contains(mouse))));
+    st.expanded = typing || std::env::var_os("AO_CONSOLE_OPEN").is_some() || (free && (strip.contains(mouse) || (st.expanded && tall.contains(mouse))));
     let r = if st.expanded { tall } else { small };
-    panel(r, u);
-    if r.contains(mouse) {
+    let open = ease((-7, -7), st.expanded, 0.12);
+    // Backdrop: a soft shade for legibility that fades to the right and below (no hard
+    // edge on the world); expanded, a dark glass pane with gold hairlines.
+    let shade = |a: f32| Color::new(0.02, 0.015, 0.01, a);
+    let k = 1.0 - open;
+    quad4(Rect::new(r.x, r.y, r.w, r.h), shade(0.5 + 0.35 * open), shade(0.1 * k + 0.85 * open), shade(0.85 * open), shade(0.35 * k + 0.85 * open));
+    if k > 0.01 {
+        let fade = Rect::new(r.x, r.bottom(), r.w, 18.0 * u);
+        quad4(fade, shade(0.35 * k), shade(0.0), shade(0.0), shade(0.0));
+    }
+    if open > 0.01 {
+        vgrad(Rect::new(r.x, r.y, r.w, r.h * 0.4), Color::new(1.0, 0.85, 0.6, 0.035 * open), Color::new(1.0, 0.85, 0.6, 0.0));
+        draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, with_alpha(GOLD_DIM, 0.9 * open));
+    }
+    hgrad(Rect::new(r.x, r.y + tab_h + 2.0 * u, r.w * 0.6, 1.0), with_alpha(GOLD, 0.65), with_alpha(GOLD, 0.0));
+    if st.expanded && r.contains(mouse) || strip.contains(mouse) {
         ui.mouse_captured = true;
     }
 
-    // ---- tabs
-    let tab_h = 19.0 * u;
-    let mut x = r.x + 8.0 * u;
-    let ty = r.y + 5.0 * u;
+    // ---- tabs (text with a channel-coloured underline; unread counts as a small pill)
+    let mut x = r.x + 10.0 * u;
+    let ty = r.y + 2.0 * u;
+    let tsize = 15.0 * u;
     for t in ConsoleTab::ALL {
         let unread = if t == st.tab || t == ConsoleTab::All { 0 } else { st.feed.total[t.index()].saturating_sub(st.seen[t.index()]) };
-        let label = if unread > 0 { format!("{} ({})", t.label(), unread.min(99)) } else { t.label().to_string() };
-        let w = measure(&label, 17.0 * u).width + 18.0 * u;
-        let br = Rect::new(x, ty, w, tab_h);
+        let label = t.label();
+        let lw = measure_with(FontKind::Title, label, tsize).width;
+        let pill = if unread > 0 { Some(unread.min(99).to_string()) } else { None };
+        let pw = pill.as_ref().map(|p| measure(p, 12.0 * u).width + 9.0 * u).unwrap_or(0.0);
+        let br = Rect::new(x - 5.0 * u, ty, lw + pw + 10.0 * u + if pill.is_some() { 4.0 * u } else { 0.0 }, tab_h);
         let active = t == st.tab;
-        if button(br, &label, active, u) {
+        let hov = br.contains(mouse);
+        let h = ease(crate::ui::fx_ui::key_of(br), hov || active, 0.08);
+        let base = if active { GOLD_BRIGHT } else { with_alpha(TEXT_DIM, 0.75 + 0.25 * open) };
+        let c = Color::new(base.r + (GOLD_TEXT.r - base.r) * h * 0.4, base.g + (GOLD_TEXT.g - base.g) * h * 0.4, base.b + (GOLD_TEXT.b - base.b) * h * 0.4, base.a);
+        text_with(FontKind::Title, label, x, ty + 16.0 * u, tsize, c);
+        let ch = tab_color(t);
+        let uw = if active { lw } else { lw * h };
+        if uw > 0.5 {
+            draw_rectangle(x + (lw - uw) / 2.0, br.bottom() - 2.0 * u, uw, 2.0 * u, ch);
+        }
+        if let Some(p) = pill {
+            let pr = Rect::new(x + lw + 4.0 * u, ty + 5.0 * u, pw, 13.0 * u);
+            draw_rectangle(pr.x, pr.y, pr.w, pr.h, with_alpha(ch, 0.85));
+            text(&p, pr.x + 4.5 * u, pr.bottom() - 2.5 * u, 12.0 * u, Color::new(0.05, 0.04, 0.03, 1.0));
+        }
+        if hov && is_mouse_button_pressed(MouseButton::Left) {
             st.tab = t;
             st.scroll = 0;
         }
-        // A colour stripe under the tab says which channel it is.
-        draw_rectangle(br.x + 3.0 * u, br.bottom() - 3.0 * u, br.w - 6.0 * u, 2.0 * u, tab_color(t));
-        x += w + 4.0 * u;
+        x += br.w + 8.0 * u;
     }
     st.seen[st.tab.index()] = st.feed.total[st.tab.index()];
     if st.tab == ConsoleTab::All {
@@ -175,10 +254,10 @@ fn draw_console(ui: &mut Ui, game: &mut Game, lay: &Layout, st: &mut State, u: f
 
     // ---- lines
     let size = 15.0 * u;
-    let row_h = 16.0 * u;
-    let input_h = if typing { 26.0 * u } else { 0.0 };
+    let row_h = 17.0 * u;
+    let input_h = if typing { 28.0 * u } else { 0.0 };
     let foot = if st.expanded && !typing { 16.0 * u } else { 0.0 };
-    let area = Rect::new(r.x + 10.0 * u, ty + tab_h + 4.0 * u, r.w - 20.0 * u - 14.0 * u, r.bottom() - (ty + tab_h + 4.0 * u) - 3.0 * u - input_h - foot);
+    let area = Rect::new(r.x + 10.0 * u, ty + tab_h + 6.0 * u, r.w - 20.0 * u - 8.0 * u, r.bottom() - (ty + tab_h + 6.0 * u) - 5.0 * u - input_h - foot);
     let rows = ((area.h / row_h).floor() as usize).max(1);
     if r.contains(mouse) {
         let wheel = mouse_wheel().1;
@@ -196,7 +275,8 @@ fn draw_console(ui: &mut Ui, game: &mut Game, lay: &Layout, st: &mut State, u: f
     }
     // Rows from the newest backwards: enough to fill the area at the current scroll.
     let need = rows + st.scroll;
-    let mut visual: Vec<(usize, String)> = Vec::new(); // (index into the tab, text), newest first
+    // (index into the tab, text, first row of its line), newest first.
+    let mut visual: Vec<(usize, String, bool)> = Vec::new();
     let tab = st.tab;
     let lines: Vec<&FeedLine> = st.feed.tab(tab).collect();
     let total_lines = lines.len();
@@ -207,8 +287,8 @@ fn draw_console(ui: &mut Ui, game: &mut Game, lay: &Layout, st: &mut State, u: f
         }
         let key = (l.text.clone(), width_key, size as i32);
         let wrapped = st.wrap_cache.entry(key).or_insert_with(|| wrap(&l.text, size, area.w)).clone();
-        for row in wrapped.into_iter().rev() {
-            visual.push((back, row));
+        for (i, row) in wrapped.into_iter().enumerate().rev() {
+            visual.push((back, row, i == 0));
         }
     }
     if st.wrap_cache.len() > 800 {
@@ -219,33 +299,55 @@ fn draw_console(ui: &mut Ui, game: &mut Game, lay: &Layout, st: &mut State, u: f
         st.scroll = st.scroll.min(max_scroll);
     }
     let shown: Vec<_> = visual.iter().skip(st.scroll).take(rows).collect();
-    for (i, (back, row)) in shown.iter().rev().enumerate() {
-        let y = area.y + area.h - (shown.len() - 1 - i) as f32 * row_h - 3.0 * u;
+    let n = shown.len();
+    for (i, (back, row, first)) in shown.iter().rev().enumerate() {
+        let y = area.y + area.h - (n - 1 - i) as f32 * row_h - 3.0 * u;
         let l = lines[total_lines - 1 - back];
-        text(row, area.x, y, size, line_color(l));
+        // Collapsed, older rows fade so the newest reads first.
+        let age = (n - 1 - i) as f32 / rows.max(1) as f32;
+        let a = 1.0 - (1.0 - open) * age * 0.55;
+        let c = line_color(l);
+        match (l.kind, *first, speaker(row)) {
+            // System notices: quieter than what people say.
+            (LineKind::System, _, _) => {
+                let dim = Color::new(c.r * 0.82 + 0.1, c.g * 0.82 + 0.1, c.b * 0.82 + 0.1, 0.88 * a);
+                text(row, area.x, y, size, dim);
+            }
+            (_, true, Some((who, msg))) => {
+                let name_c = if l.kind == LineKind::Map { Color::new(0.62, 0.80, 1.0, a) } else { with_alpha(c, a) };
+                text(who, area.x, y, size, name_c);
+                let w = measure(who, size).width;
+                let msg_c = if l.kind == LineKind::Map { with_alpha(TEXT, a) } else { Color::new((c.r + TEXT.r) / 2.0, (c.g + TEXT.g) / 2.0, (c.b + TEXT.b) / 2.0, a) };
+                text(msg, area.x + w, y, size, msg_c);
+            }
+            _ => {
+                let msg_c = if l.kind == LineKind::Map { with_alpha(TEXT, a) } else { Color::new((c.r + TEXT.r) / 2.0, (c.g + TEXT.g) / 2.0, (c.b + TEXT.b) / 2.0, a) };
+                text(row, area.x, y, size, msg_c);
+            }
+        }
     }
     if lines.is_empty() {
-        text("Sin mensajes en este canal.", area.x, area.y + 14.0 * u, size, MUTED);
+        text_with(FontKind::NarrativeItalic, "Sin mensajes en este canal.", area.x, area.y + 16.0 * u, size, MUTED);
     }
     // Scroll bar and the "back to the newest" hint.
     if st.scroll > 0 {
-        let tr = Rect::new(r.right() - 14.0 * u, area.y, 6.0 * u, area.h);
-        draw_rectangle(tr.x, tr.y, tr.w, tr.h, Color::new(0.0, 0.0, 0.0, 0.4));
+        let tr = Rect::new(r.right() - 10.0 * u, area.y, 3.0 * u, area.h);
+        draw_rectangle(tr.x, tr.y, tr.w, tr.h, Color::new(0.0, 0.0, 0.0, 0.5));
         let f = (st.scroll as f32 / (st.scroll + rows) as f32).clamp(0.0, 1.0);
-        draw_rectangle(tr.x, tr.y + (tr.h - 20.0 * u) * (1.0 - f), tr.w, 20.0 * u, GOLD);
-        let hint = "Rueda: más reciente";
-        let d = measure(hint, 14.0 * u);
-        text(hint, r.right() - d.width - 24.0 * u, r.y + 20.0 * u, 14.0 * u, MUTED);
+        draw_rectangle(tr.x, tr.y + (tr.h - 24.0 * u) * (1.0 - f), tr.w, 24.0 * u, GOLD);
+        let hint = "Rueda abajo: lo más reciente";
+        let d = measure(hint, 13.0 * u);
+        text(hint, r.right() - d.width - 18.0 * u, r.y + tab_h + 18.0 * u, 13.0 * u, MUTED);
     }
 
     if typing {
-        let ir = Rect::new(r.x + 8.0 * u, r.bottom() - input_h - 4.0 * u, r.w - 16.0 * u, input_h);
+        let ir = Rect::new(r.x + 8.0 * u, r.bottom() - input_h - 6.0 * u, r.w - 16.0 * u, input_h);
         chat_input(ui, game, st, ir, u);
     } else {
         chat_start(ui, game);
         if st.expanded {
-            let hint = "Enter: escribir   /s nombre texto   /g grupo   /c clan   /gl global   /y gritar";
-            text(hint, r.x + 10.0 * u, r.bottom() - 7.0 * u, 14.0 * u, MUTED);
+            let hint = "Enter escribir   /s susurro   /g grupo   /c clan   /gl global   /y gritar";
+            text(hint, r.x + 10.0 * u, r.bottom() - 7.0 * u, 13.0 * u, with_alpha(MUTED, open));
         }
     }
 }
@@ -286,18 +388,39 @@ fn chat_input(ui: &mut Ui, game: &mut Game, st: &mut State, ir: Rect, u: f32) {
     let preview = parse_chat(game.chat.as_deref().unwrap_or(""), reply.as_deref());
     let dest = preview.as_ref().map(|c| c.label()).unwrap_or_else(|| "Mapa".into());
     let line = game.chat.clone().unwrap_or_default();
-    draw_rectangle(ir.x, ir.y, ir.w, ir.h, Color::new(0.0, 0.0, 0.0, 0.65));
+    // Recessed field with a channel badge on the left (in the channel's colour).
+    crate::ui::theme::surface(ir, crate::ui::theme::Surface::Recess, u);
     draw_rectangle_lines(ir.x, ir.y, ir.w, ir.h, 1.0, GOLD_TEXT);
-    let label = format!("[{dest}]");
-    let lw = measure(&label, 15.0 * u).width;
-    text(&label, ir.x + 8.0 * u, ir.y + ir.h / 2.0 + 5.0 * u, 15.0 * u, GOLD_TEXT);
+    let badge_c = preview.as_ref().map(|c| {
+        let kind = match c.label().as_str() {
+            l if l.starts_with("Susurro") => LineKind::Whisper,
+            "Grupo" => LineKind::Party,
+            "Clan" => LineKind::Guild,
+            "Global" => LineKind::Global,
+            "Grito" => LineKind::Yell,
+            _ => LineKind::Map,
+        };
+        line_color(&FeedLine { kind, text: String::new(), tone: ao_protocol::Tone::Chat })
+    });
+    let badge_c = badge_c.filter(|c| *c != WHITE).unwrap_or(GOLD_TEXT);
+    let lw = measure_with(FontKind::Title, &dest, 14.0 * u).width + 16.0 * u;
+    let badge = Rect::new(ir.x + 3.0 * u, ir.y + 3.0 * u, lw, ir.h - 6.0 * u);
+    draw_rectangle(badge.x, badge.y, badge.w, badge.h, with_alpha(badge_c, 0.22));
+    draw_rectangle(badge.x, badge.y, 2.0 * u, badge.h, badge_c);
+    text_with(FontKind::Title, &dest, badge.x + 9.0 * u, ir.y + ir.h / 2.0 + 5.0 * u, 14.0 * u, badge_c);
     let cursor = if (get_time() * 2.0) as i32 % 2 == 0 { "|" } else { "" };
     let mut shown = format!("{line}{cursor}");
     // Show the end of a long line.
     while measure(&shown, 17.0 * u).width > ir.w - lw - 28.0 * u && shown.chars().count() > 1 {
         shown.remove(0);
     }
-    text(&shown, ir.x + lw + 18.0 * u, ir.y + ir.h / 2.0 + 6.0 * u, 17.0 * u, WHITE);
+    text(&shown, badge.right() + 10.0 * u, ir.y + ir.h / 2.0 + 6.0 * u, 17.0 * u, WHITE);
+    let chars = line.chars().count();
+    if chars > MAX_CHAT * 3 / 4 {
+        let s = format!("{chars}/{MAX_CHAT}");
+        let w = measure(&s, 12.0 * u).width;
+        text(&s, ir.right() - w - 6.0 * u, ir.y - 4.0 * u, 12.0 * u, if chars >= MAX_CHAT { crate::ui::theme::BAD } else { MUTED });
+    }
 
     if is_key_pressed(KeyCode::Enter) {
         let text = game.chat.take().unwrap_or_default();
