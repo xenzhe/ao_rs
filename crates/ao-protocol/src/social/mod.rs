@@ -11,4 +11,4 @@ pub use guild::{GuildC2S, GuildS2C};
 pub use party::{PartyC2S, PartyS2C};
 pub use faction::{FactionC2S, FactionS2C};
 pub use quest::{QuestC2S, QuestS2C};
-pub use channel::{ChannelC2S, ChannelS2C};
+pub use channel::{ChannelC2S, ChannelKind, ChannelS2C};
