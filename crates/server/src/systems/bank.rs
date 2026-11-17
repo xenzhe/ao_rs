@@ -115,6 +115,9 @@ impl World {
         if p.combat.dead {
             return self.console(id, "!!Estas muerto!!", Tone::Info);
         }
+        if p.trade.shop.is_some() || p.trade.with.is_some() {
+            return self.console(id, "Ya estas comerciando.", Tone::Info);
+        }
         if p.bank.open_with.is_some() {
             return self.console(id, "Ya estas comerciando.", Tone::Info);
         }

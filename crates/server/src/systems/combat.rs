@@ -209,6 +209,7 @@ impl World {
         // UserDie order: drop/unequip first (armor off = naked body), so the look kept for
         // the resurrection is the naked one, then the ghost.
         self.close_bank(id);
+        self.close_trades(id);
         self.drop_inventory_on_death(id);
         let p = self.player_mut(id);
         p.hp = 0;

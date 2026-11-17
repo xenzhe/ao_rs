@@ -231,6 +231,7 @@ impl World {
     /// Places the player on a map: the client loads it and receives everyone there.
     pub(crate) fn enter_map(&mut self, id: u32, map: u16, x: i32, y: i32) {
         self.close_bank(id);
+        self.close_trades(id);
         let old = {
             let p = self.player_mut(id);
             let old = p.map;
