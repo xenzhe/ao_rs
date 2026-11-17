@@ -21,7 +21,7 @@ fn stats_from(s: &CharacterState) -> CharStats {
     for (i, v) in s.skills.iter().take(24).enumerate() {
         skills[i] = *v;
     }
-    CharStats { attributes: s.attributes, skills, skill_points: s.skill_points, sta: s.sta, max_sta: s.max_sta, food: s.food, water: s.water }
+    CharStats { attributes: s.attributes, skills, skill_points: s.skill_points, sta: s.sta, max_sta: s.max_sta, food: s.food, water: s.water, ..CharStats::default() }
 }
 
 fn inventory_from(s: &CharacterState) -> Inventory {
