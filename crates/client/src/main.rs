@@ -59,6 +59,7 @@ async fn main() {
 
         game.now = now;
         game::poll(&mut game, &mut assets, &mut renderer.fx);
+        ui.in_game = game.screen == Screen::Game;
         match &game.screen {
             // Account screens: scenes of the world (ui/scene.rs) under the account UI.
             Screen::Login => {

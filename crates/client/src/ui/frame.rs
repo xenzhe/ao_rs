@@ -144,11 +144,13 @@ pub struct Ui {
     hits: Vec<(WindowId, Rect)>,
     /// Server-driven windows currently opened for a server session (bank, shop, trade).
     pub server_windows: std::collections::HashSet<WindowId>,
+    /// In the world (not the account screens): window hotkeys only work here.
+    pub in_game: bool,
 }
 
 impl Ui {
     pub fn new(theme: Theme) -> Ui {
-        Ui { theme, u: 1.0, open: HashMap::new(), next_z: 1, moving: None, focus: None, drag: None, mouse_captured: false, keyboard_captured: false, hits: Vec::new(), server_windows: Default::default() }
+        Ui { theme, u: 1.0, open: HashMap::new(), next_z: 1, moving: None, focus: None, drag: None, mouse_captured: false, keyboard_captured: false, hits: Vec::new(), server_windows: Default::default(), in_game: false }
     }
 
     pub fn is_open(&self, w: WindowId) -> bool {
@@ -190,7 +192,7 @@ impl Ui {
         self.mouse_captured = self.drag.is_some() || self.moving.is_some() || self.hits.iter().any(|(_, r)| r.contains(mouse_position().into()));
         self.keyboard_captured = self.focus.is_some();
         self.hits.clear();
-        if !self.keyboard_captured {
+        if !self.keyboard_captured && self.in_game {
             for w in WindowId::ALL {
                 if w.hotkey().is_some_and(is_key_pressed) {
                     self.toggle(w);
