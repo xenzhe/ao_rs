@@ -32,7 +32,7 @@ pub fn wanted_size(w: WindowId) -> Option<Vec2> {
         WindowId::Inventory => Some(vec2(680.0, 520.0)),
         WindowId::Bank => Some(vec2(780.0, 520.0)),
         WindowId::Shop => Some(vec2(780.0, 520.0)),
-        WindowId::Trade => Some(vec2(800.0, 540.0)),
+        WindowId::Trade => Some(vec2(800.0, 580.0)),
         _ => None,
     }
 }
@@ -982,10 +982,11 @@ pub(crate) fn draw_grid(ui: &Ui, assets: &mut Assets, g: &Grid, o: Vec2, v: &Gri
         let it = v.slots[i];
         let hover = hover_i == Some(i);
         let (mut dim, mut glow) = (false, false);
-        if let Some(item) = it {
-            let name = assets.objs.get(item.obj as u32).map(|ob| (category(ob.obj_type), ob.name.to_lowercase()));
-            let ok_cat = v.filter.is_none_or(|f| name.as_ref().is_some_and(|(c, _)| *c == f));
-            let ok_q = v.query.is_empty() || name.as_ref().is_some_and(|(_, n)| n.contains(v.query));
+        if let (Some(item), true) = (it, v.filter.is_some() || !v.query.is_empty()) {
+            // Only while filtering or searching: nothing is allocated otherwise.
+            let obj = assets.objs.get(item.obj as u32);
+            let ok_cat = v.filter.is_none_or(|f| obj.is_some_and(|ob| category(ob.obj_type) == f));
+            let ok_q = v.query.is_empty() || obj.is_some_and(|ob| ob.name.to_lowercase().contains(v.query));
             dim = !(ok_cat && ok_q);
             glow = !v.query.is_empty() && ok_q && ok_cat;
         }
@@ -1538,10 +1539,11 @@ pub fn draw_drag(ui: &mut Ui, assets: &mut Assets, d: &crate::ui::Drag) {
         return;
     }
     let m = mouse();
-    let s = 50.0 * u;
-    let r = Rect::new(m.x - s / 2.0, m.y - s / 2.0 - 4.0 * u, s, s);
+    let s = 54.0 * u;
+    // Held by its lower right corner, so the slot under the mouse stays in view.
+    let r = Rect::new(m.x - s * 0.72, m.y - s * 0.78, s, s);
     // A soft shadow below it says it is lifted.
-    draw_circle(m.x + 6.0 * u, m.y + 24.0 * u, s * 0.42, Color::new(0.0, 0.0, 0.0, 0.28));
+    draw_circle(r.x + s * 0.62, r.y + s * 1.12, s * 0.42, Color::new(0.0, 0.0, 0.0, 0.28));
     let cat = obj_category(assets, d.what).map(cat_color).unwrap_or(GOLD_TEXT);
     draw_rectangle(r.x, r.y, r.w, r.h, Color::new(0.06, 0.045, 0.03, 0.88));
     draw_rectangle(r.x, r.y, r.w, r.h * 0.6, alpha(cat, 0.13));
@@ -1590,8 +1592,8 @@ fn draw_figure(c: Vec2, h: f32, u: f32) {
         let p = c + vec2(a.cos(), a.sin()) * h * 0.42;
         draw_circle(p.x, p.y, 1.4 * u, alpha(GOLD, 0.35));
     }
-    let body = Color::new(0.16, 0.115, 0.075, 0.96);
-    let edge = alpha(GOLD, 0.32);
+    let body = Color::new(0.21, 0.15, 0.095, 0.96);
+    let edge = alpha(GOLD, 0.42);
     let head = vec2(c.x, c.y - h * 0.30);
     draw_circle(head.x, head.y, h * 0.075, body);
     draw_circle_lines(head.x, head.y, h * 0.075, 1.0, edge);
@@ -1883,42 +1885,37 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
         assets.objs.iter().filter(|(_, o)| o.obj_type == ty && o.grh > 0 && !o.name.is_empty() && free(o) && f(o)).nth(nth).map(|(i, _)| i as u16)
     };
     use ao_formats::dat::obj::ObjType as T;
+    let free_w = |o: &ao_formats::dat::obj::ObjData| o.weapon_anim > 0 && o.min_level <= 1 && o.value > 0;
+    let free_a = |o: &ao_formats::dat::obj::ObjData| o.min_level <= 1 && o.value > 0 && o.max_def > 0;
+    // The first twelve are enough for the other windows (the chat limits how fast `/dar` goes).
     let gifts: Vec<(u16, u32)> = [
-        (pick(T::Weapon, 0, &|o| o.weapon_anim > 0 && o.min_level <= 1 && o.value > 0 && o.two_handed == 0), 1),
-        (pick(T::Potions, 0, &|o| o.value > 0), 12),
-        (pick(T::Armor, 0, &|o| o.min_level <= 1 && o.value > 0 && o.max_def > 0), 1),
+        (pick(T::Weapon, 0, &|o| free_w(o) && o.two_handed == 0), 1),
+        (pick(T::Potions, 0, &|o| o.value > 0), 42),
+        (pick(T::Armor, 0, &free_a), 1),
         (pick(T::UseOnce, 0, &|o| o.min_hunger > 0), 8),
         (pick(T::Shield, 0, &|o| o.min_level <= 1 && o.value > 0), 1),
-        (pick(T::Weapon, 6, &|o| o.weapon_anim > 0 && o.min_level > 5 && o.value > 1500), 1),
         (pick(T::Helmet, 0, &|o| o.min_level <= 1 && o.value > 0), 1),
         (pick(T::Drinks, 0, &|_| true), 5),
-        (pick(T::Potions, 3, &|o| o.value > 0), 6),
-        (pick(T::RingAccessory, 0, &|o| o.value > 0), 1),
         (pick(T::Arrows, 0, &|o| o.value > 0), 60),
         (pick(T::Minerals, 0, &|_| true), 14),
         (pick(T::Wood, 0, &|_| true), 20),
-        (pick(T::Backpack, 0, &|_| true), 1),
+        (pick(T::RingAccessory, 0, &|o| o.value > 0), 1),
         (pick(T::Amulets, 0, &|o| o.value > 0), 1),
         (pick(T::WorkingTools, 0, &|_| true), 1),
+        (pick(T::Weapon, 6, &|o| free_w(o) && o.min_level > 5 && o.value > 1500), 1),
         (pick(T::Armor, 5, &|o| o.value > 2000), 1),
-        (pick(T::Parchment, 0, &|_| true), 2),
-        (pick(T::Potions, 0, &|o| o.value > 0), 30),
-        (pick(T::Weapon, 1, &|o| o.weapon_anim > 0 && o.min_level <= 1 && o.value > 0), 1),
-        (pick(T::Weapon, 2, &|o| o.weapon_anim > 0 && o.min_level <= 1 && o.value > 0), 1),
-        (pick(T::Armor, 1, &|o| o.min_level <= 1 && o.value > 0 && o.max_def > 0), 1),
-        (pick(T::Shield, 1, &|o| o.min_level <= 1 && o.value > 0), 1),
-        (pick(T::UseOnce, 1, &|o| o.min_hunger > 0), 4),
-        (pick(T::Minerals, 1, &|_| true), 7),
+        (pick(T::Weapon, 1, &free_w), 1),
+        (pick(T::Armor, 1, &free_a), 1),
+        (pick(T::Potions, 3, &|o| o.value > 0), 6),
         (pick(T::Potions, 1, &|o| o.value > 0), 9),
-        (pick(T::Potions, 2, &|o| o.value > 0), 3),
+        (pick(T::Weapon, 4, &|o| o.weapon_anim > 0 && o.value > 5000), 1),
         (pick(T::BlacksmithMaterial, 0, &|_| true), 6),
-        (pick(T::Keys, 0, &|_| true), 1),
-        (pick(T::Helmet, 1, &|o| o.min_level <= 1 && o.value > 0), 1),
         (Some(12), 10_000),
     ]
     .into_iter()
     .filter_map(|(o, n)| o.map(|o| (o, n)))
     .collect();
+    let gifts: Vec<(u16, u32)> = if mode == "inv" { gifts } else { gifts.into_iter().take(7).chain(std::iter::once((12u16, 10_000u32))).collect() };
     let slot_of = |g: &Game, ty: T| g.local.inventory.iter().position(|i| i.is_some_and(|i| assets.objs.get(i.obj as u32).is_some_and(|o| o.obj_type == ty))).map(|p| p as u8 + 1);
     if mode == "trade_peer" {
         // The other player: gives itself two objects, accepts the invitation, offers.
@@ -1948,17 +1945,39 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
         return;
     }
     let n = gifts.len() as u32;
+    // A deal done for the toast, at the second given: `AO_DEMO_BUY=14` buys one of the first
+    // stock row, `AO_DEMO_SELL1=14` sells one potion.
+    thread_local! {
+        static DEALT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    let when = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok());
+    if !DEALT.with(|d| d.get()) && game.local.social.trade.shop.is_some() {
+        if when("AO_DEMO_BUY").is_some_and(|b| t > b) {
+            DEALT.with(|d| d.set(true));            if let Some((slot, it)) = game.local.social.trade.shop.as_ref().and_then(|s| s.items.iter().next().map(|(k, v)| (*k, *v))) {
+                watch_buy(game, it.obj);
+                game.shop_buy(slot, 1);
+            }
+        }
+        if when("AO_DEMO_SELL1").is_some_and(|b| t > b) {
+            DEALT.with(|d| d.set(true));
+            if let Some(sl) = slot_of(game, T::Potions) {
+                let obj = game.local.slot(sl).map_or(0, |i| i.obj);
+                watch_sell(game, obj);
+                game.shop_sell(sl, 1);
+            }
+        }
+    }
     if step > n && mode != "inv" && [WindowId::Bank, WindowId::Shop, WindowId::Trade].iter().any(|w| ui.is_open(*w)) {
         ui.close(WindowId::Inventory);
     }
     match step {
-        s if s < n && gap > 0.12 && t > 1.0 + std::env::var("AO_DEMO_DELAY").ok().and_then(|d| d.parse::<f64>().ok()).unwrap_or(0.0) => {
+        s if s < n && gap > 0.62 && t > 1.0 + std::env::var("AO_DEMO_DELAY").ok().and_then(|d| d.parse::<f64>().ok()).unwrap_or(0.0) => {
             let (o, c) = gifts[s as usize];
             say(game, format!("/dar {o} {c}"));
             advance();
         }
         s if s == n && gap > 1.0 => {
-            for ty in [T::Weapon, T::Armor, T::Shield, T::Helmet, T::RingAccessory, T::Arrows, T::Amulets, T::Backpack] {
+            for ty in [T::Weapon, T::Armor, T::Shield, T::Helmet, T::RingAccessory, T::Arrows, T::Amulets] {
                 if let Some(sl) = slot_of(game, ty) {
                     game.inv_equip(sl);
                 }
@@ -2010,6 +2029,9 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
             if mode == "bank" {
                 set_selected_other(WindowId::Bank, 1);
                 st(|s| s.sel_inv = loose);
+                if let Ok(g) = std::env::var("AO_DEMO_GOLD") {
+                    aux(|a| a.gold_text = g);
+                }
             }
             advance();
         }
@@ -2044,6 +2066,9 @@ fn demo_tick(ui: &mut Ui, game: &mut Game, assets: &Assets) {
                 }
             }
             // Mouse on a worn object (inv), a vault slot (bank), a stock row (shop).
+            if let Some(c) = std::env::var("AO_DEMO_HOVER").ok().and_then(|s| s.parse::<u8>().ok()).and_then(|s| cell_center(WindowId::Inventory, s)) {
+                set_demo_mouse(Some(c));
+            }
             if let Ok(v) = std::env::var("AO_DEMO_MOUSE") {
                 let p: Vec<f32> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
                 if p.len() == 2 {

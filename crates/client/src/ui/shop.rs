@@ -121,17 +121,15 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
         let name = item_name(assets, it.obj);
         text_fit(&name, ic.right() + 10.0 * u, rr.y + 21.0 * u, 18.0 * u, rr.w - ic.w - price_w - 30.0 * u, TEXT);
         let sub = obj.as_ref().map_or(String::new(), stat_line);
-        text_fit(&format!("{sub} · quedan {}", it.amount), ic.right() + 10.0 * u, rr.y + 39.0 * u, 14.0 * u, rr.w - ic.w - price_w - 30.0 * u, TEXT_DIM);
+        text_fit(&sub, ic.right() + 10.0 * u, rr.y + 39.0 * u, 14.0 * u, rr.w - ic.w - price_w - 30.0 * u, TEXT_DIM);
         // Price: big, in gold; red with what is missing when the purse does not reach.
         let ps = fmt_gold(it.price as u64);
         let pd = widgets::measure_with(FontKind::Title, &ps, 21.0 * u);
         let py = if afford { rr.y + 31.0 * u } else { rr.y + 25.0 * u };
         text_with(FontKind::Title, &ps, rr.right() - 10.0 * u - pd.width, py, 21.0 * u, if afford { GOLD_TEXT } else { BAD });
         glyph(Glyph::Coin, vec2(rr.right() - 10.0 * u - pd.width - 12.0 * u, py - 7.0 * u), 7.5 * u, if afford { GOLD } else { Color::new(0.55, 0.25, 0.2, 1.0) });
-        if !afford {
-            let miss = format!("te faltan {}", fmt_gold((it.price - gold) as u64));
-            text(&miss, rr.right() - 10.0 * u - measure(&miss, 13.0 * u).width, rr.y + 41.0 * u, 13.0 * u, BAD);
-        }
+        let (sub2, col2) = if afford { (format!("quedan {}", it.amount), TEXT_FAINT) } else { (format!("te faltan {}", fmt_gold((it.price - gold) as u64)), BAD) };
+        text(&sub2, rr.right() - 10.0 * u - measure(&sub2, 13.0 * u).width, rr.y + 43.0 * u, 13.0 * u, col2);
         if hover {
             hit = Some(Hit { from: WindowId::Shop, slot: *slot, obj: it.obj, amount: it.amount });
             if ui.drag.is_none() {

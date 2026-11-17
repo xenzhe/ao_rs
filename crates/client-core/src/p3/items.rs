@@ -413,7 +413,7 @@ pub fn rich_tooltip(o: &ObjData, amount: u32, equipped: bool, v: &Viewer) -> Vec
     out.push(kind);
     let desc = o.text.trim();
     // obj.dat's text is often just the numbers again ("Daño 1/3"): only prose is used.
-    let flavour = if !matches!(o.obj_type, SignBoards | Doors | Mail) && !desc.is_empty() && desc.chars().count() <= 140 && !desc.chars().any(|c| c.is_ascii_digit()) { desc.to_string() } else { role_phrase(o.obj_type).to_string() };
+    let flavour = if !matches!(o.obj_type, SignBoards | Doors | Mail) && !desc.is_empty() && desc.chars().count() <= 140 && !desc.chars().any(|c| c.is_ascii_digit()) && desc.to_lowercase() != o.name.to_lowercase() { desc.to_string() } else { role_phrase(o.obj_type).to_string() };
     out.push(format!("~{flavour}"));
     if amount > 1 {
         out.push(format!("Cantidad: {amount}"));

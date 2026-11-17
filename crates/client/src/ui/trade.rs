@@ -223,8 +223,9 @@ fn offer_table(ui: &Ui, game: &Game, assets: &mut Assets, area: Rect, offer: &Of
         draw_rectangle_lines(area.x - 2.0 * u, area.y - 2.0 * u, area.w + 4.0 * u, area.h + 4.0 * u, 2.0 * u, Color::new(GOLD_BRIGHT.r, GOLD_BRIGHT.g, GOLD_BRIGHT.b, 0.9 * lit));
     }
     let (cols, gap) = (3usize, 8.0 * u);
-    let cell = ((area.w - 16.0 * u - 2.0 * gap) / cols as f32).floor();
     let label_h = 17.0 * u;
+    // Two rows of cells with their names must fit the table: the height decides the size.
+    let cell = (((area.w - 16.0 * u - 2.0 * gap) / cols as f32).min((area.h - 16.0 * u - 2.0 * (label_h + 6.0 * u)) / 2.0)).floor();
     let gx = area.x + (area.w - (cols as f32 * cell + (cols as f32 - 1.0) * gap)) / 2.0;
     for i in 0..MAX_OFFER_ITEMS {
         let (c, row) = (i % cols, i / cols);
@@ -312,7 +313,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     }
 
     // ---- the two offers ----
-    let (th, gold_h) = (168.0 * u, 40.0 * u);
+    let (th, gold_h) = (172.0 * u, 36.0 * u);
     let mine_r = Rect::new(x0 + 4.0 * u, top + 6.0 * u, tw - 8.0 * u, th);
     let theirs_r = Rect::new(x1 + 4.0 * u, top + 6.0 * u, tw - 8.0 * u, th);
     let (retract, tp) = offer_table(ui, game, assets, mine_r, &t.mine, true, act, flash(fl_me));
@@ -324,7 +325,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     let (_, tp) = offer_table(ui, game, assets, theirs_r, &t.theirs, false, act, flash(fl_they));
     tip = tip.or(tp);
     // Gold on each table.
-    let gy = mine_r.bottom() + 12.0 * u;
+    let gy = mine_r.bottom() + 10.0 * u;
     for (x, gold, mine) in [(x0, t.mine.gold, true), (x1, t.theirs.gold, false)] {
         glyph(Glyph::Coin, vec2(x + 14.0 * u, gy + 16.0 * u), 12.0 * u, if gold > 0 { GOLD_BRIGHT } else { Color::new(0.5, 0.42, 0.3, 0.7) });
         text_with(FontKind::Title, &fmt_gold(gold as u64), x + 36.0 * u, gy + 25.0 * u, 24.0 * u, if gold > 0 { GOLD_BRIGHT } else { TEXT_FAINT });
@@ -341,7 +342,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     }
 
     // ---- under my table: my bag; under theirs: what changed ----
-    let by = gy + gold_h + 6.0 * u;
+    let by = gy + gold_h + 2.0 * u;
     text("Tu bolsa: arrastra a la mesa o doble clic", x0 + 2.0 * u, by + 10.0 * u, 14.0 * u, TEXT_FAINT);
     let grid = Grid::fit(7, 6, tw - 12.0 * u, r.bottom() - (by + 22.0 * u) - 6.0 * u, 3.0 * u, 40.0 * u);
     let io = vec2(x0 + 6.0 * u + (tw - 12.0 * u - grid.size().x) / 2.0, by + 20.0 * u);
@@ -355,7 +356,7 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
     if let Some(ev) = track(ui, w, act, hit.map(|h: Hit| h)) {
         handle(game, assets, w, ev);
     }
-    log_panel(assets, Rect::new(x1 + 4.0 * u, by + 20.0 * u, tw - 8.0 * u, r.bottom() - (by + 20.0 * u) - 6.0 * u), &who, u);
+    log_panel(assets, Rect::new(x1 + 4.0 * u, by + 20.0 * u, tw - 8.0 * u, r.bottom() - (by + 20.0 * u) - 6.0 * u), &who, &t, u);
     text("Cambios en la mesa", x1 + 2.0 * u, by + 10.0 * u, 14.0 * u, TEXT_FAINT);
 
     // ---- the middle: the double confirmation ----
@@ -375,15 +376,36 @@ pub fn draw(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
 }
 
 /// The log of changes, newest first, fading with age.
-fn log_panel(assets: &Assets, area: Rect, who: &str, u: f32) {
+fn log_panel(assets: &Assets, area: Rect, who: &str, t: &PlayerTrade, u: f32) {
     tray(area, 0.0, u);
+    // What the deal comes to, at the bottom: what you give and what you get.
+    let sum = |o: &Offer| {
+        let n = o.items.len();
+        let items = match n {
+            0 => String::new(),
+            1 => "1 objeto".to_string(),
+            n => format!("{n} objetos"),
+        };
+        match (n, o.gold) {
+            (0, 0) => "nada".to_string(),
+            (_, 0) => items,
+            (0, g) => format!("{} oro", fmt_gold(g as u64)),
+            (_, g) => format!("{items} y {} oro", fmt_gold(g as u64)),
+        }
+    };
+    let fy = area.bottom() - 52.0 * u;
+    draw_line(area.x + 10.0 * u, fy, area.right() - 10.0 * u, fy, 1.0, Color::new(GOLD.r, GOLD.g, GOLD.b, 0.3));
+    text("Das", area.x + 14.0 * u, fy + 20.0 * u, 15.0 * u, TEXT_FAINT);
+    text_fit(&sum(&t.mine), area.x + 70.0 * u, fy + 20.0 * u, 16.0 * u, area.w - 84.0 * u, TEXT);
+    text("Recibes", area.x + 14.0 * u, fy + 42.0 * u, 15.0 * u, TEXT_FAINT);
+    text_fit(&sum(&t.theirs), area.x + 70.0 * u, fy + 42.0 * u, 16.0 * u, area.w - 84.0 * u, GOLD_TEXT);
     let log = aux(|a| a.trade_log.clone());
     if log.is_empty() {
         text_with(FontKind::NarrativeItalic, "Aquí verás cada cambio de la mesa.", area.x + 12.0 * u, area.y + 26.0 * u, 15.0 * u, TEXT_FAINT);
         return;
     }
     let now = get_time();
-    let rows = ((area.h - 12.0 * u) / (24.0 * u)).floor() as usize;
+    let rows = ((area.h - 64.0 * u) / (24.0 * u)).floor() as usize;
     for (i, (at, c, theirs)) in log.iter().rev().take(rows).enumerate() {
         let y = area.y + 8.0 * u + i as f32 * 24.0 * u;
         let fresh = ((1.0 - (now - at) as f32 / 8.0).clamp(0.0, 1.0)) * 0.5;
