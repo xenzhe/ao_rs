@@ -220,8 +220,13 @@ impl World {
     fn quest_accept(&mut self, id: u32, qid: u16) {
         let Some((nid, number, npos)) = self.quest_target(id) else { return };
         let data = self.quest_data();
+        let offered = data.offered_by(number);
+        // An NPC with nothing to offer showed no list: a stale packet, not a cheat.
+        if offered.is_empty() {
+            return;
+        }
         // The quest has to be one of the NPC's: a real client only sends what it was shown.
-        if !data.offered_by(number).contains(&(qid as u32)) {
+        if !offered.contains(&(qid as u32)) {
             return self.strike(id, "acepta una mision que el NPC no ofrece");
         }
         let q = data.quest(qid as u32).expect("offered quests exist");
@@ -386,6 +391,30 @@ impl World {
         }
         for q in done {
             self.console(killer, format!("Ya has matado todas las criaturas que la misión {q} requería."), Tone::Good);
+        }
+        self.quest_drop_objects(killer, npc_number);
+    }
+
+    /// `NpcDropQuestObj` (Modulo_InventANDobj.bas): quest objects that creatures carry
+    /// (`DropQuestN=quest-obj-amount-probability` in npcs.dat) go straight to the killer's
+    /// bag, 1 in `probability`, and only while his quest in progress still lacks that object
+    /// (`FaltanItemsQuest`).
+    fn quest_drop_objects(&mut self, killer: u32, npc_number: u16) {
+        let ao = self.ao.clone();
+        let Some(def) = ao.npcs.get(npc_number as u32) else { return };
+        let data = self.quest_data();
+        for d in &def.quest_drops {
+            if d.quest <= 0 || d.obj <= 0 {
+                continue;
+            }
+            let Some(p) = self.player(killer) else { return };
+            if !p.quest.is_active(d.quest as u16) {
+                continue;
+            }
+            let lacks = data.quest(d.quest as u32).is_some_and(|q| q.required_objs.iter().find(|o| o.obj == d.obj).is_some_and(|o| (count_obj(&p.inv, d.obj) as i64) < o.amount as i64));
+            if lacks && self.rng.range(1, d.probability.max(1)) == 1 && d.amount > 0 && ao.objs.get(d.obj as u32).is_some() {
+                self.add_item(killer, InvItem { obj: u16c(d.obj), amount: d.amount as u32 });
+            }
         }
     }
 
@@ -890,6 +919,31 @@ mod tests {
         let m = r.msgs();
         assert_eq!(completed(&m), Some(5), "{}", texts(&m));
         assert_eq!(r.count(34) + r.count(5066), 0, "its two objects were handed in");
+    }
+
+    /// Quest 142 (Kleric, NPC 112): the creature Morvanna carries the quest object 2502 (1 in
+    /// 50) and only while the quest in progress lacks it; nobody without the quest gets it.
+    #[test]
+    fn creatures_drop_the_quest_object_only_to_who_needs_it() {
+        let mut r = rig(112);
+        r.level(26);
+        r.w.player_mut(ME).class = 2;
+        // Without the quest: kills drop nothing.
+        r.kill(513, 400);
+        assert_eq!(r.count(2502), 0);
+        r.talk();
+        let m = r.accept(142);
+        assert!(texts(&m).contains("Has aceptado"), "{}", texts(&m));
+        let mut kills = 0;
+        while r.count(2502) == 0 && kills < 5000 {
+            r.kill(513, 1);
+            kills += 1;
+        }
+        assert_eq!(r.count(2502), 1, "dropped after {kills} kills");
+        // It needs only one: more kills count but drop nothing.
+        r.kill(513, 600);
+        assert_eq!(r.count(2502), 1);
+        assert_eq!(r.piece().slots[0].as_ref().unwrap().killed, vec![125], "the counter stops at the goal");
     }
 
     #[test]

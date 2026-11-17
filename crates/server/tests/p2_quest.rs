@@ -16,7 +16,6 @@ use server::db::{CharacterState, Db, NewCharacter};
 use server::world::quest::{ActiveQuest, QuestSave};
 
 const PASS: &str = "secreta1";
-const MAGE: u8 = 1;
 const WARRIOR: u8 = 3;
 const WORKER: u8 = 9;
 
@@ -29,13 +28,17 @@ struct Seed {
     at: (u16, i32, i32),
     /// (slot, obj, amount)
     items: Vec<(u8, u16, u32)>,
-    /// Quests already in progress (slot, quest id).
-    active: Vec<(u8, u16)>,
+    /// Stamina: fighting costs it, and a long hunt needs plenty.
+    sta: i32,
+    /// A weapon in the hand (obj.dat id): bare fists do 1 or 2 damage.
+    weapon: Option<u16>,
+    /// Quests already in progress (slot, quest id, kill counters).
+    active: Vec<(u8, u16, Vec<u16>)>,
 }
 
 impl Seed {
     fn new(name: &'static str, class: u8, level: u32, at: (u16, i32, i32)) -> Seed {
-        Seed { user: name, name, class, level, hp: 300, at, items: Vec::new(), active: Vec::new() }
+        Seed { user: name, name, class, level, hp: 300, at, items: Vec::new(), sta: 300, weapon: None, active: Vec::new() }
     }
 }
 
@@ -52,9 +55,13 @@ fn server_with(tag: &str, seeds: &[Seed]) -> TestServer {
             let c = db.create_character(acc.id, &NewCharacter { name: s.name, race: 1, class: s.class, gender: 1, body: 1, head: 1, hp: s.hp, mana: 0, map: s.at.0, x: s.at.1, y: s.at.2 }).unwrap();
             let mut rec = c.clone();
             rec.level = s.level;
-            let state = CharacterState { inventory: s.items.iter().map(|(slot, obj, n)| (*slot, *obj, *n, false)).collect(), sta: 300, max_sta: 300, ..CharacterState::default() };
+            let mut inventory: Vec<(u8, u16, u32, bool)> = s.items.iter().map(|(slot, obj, n)| (*slot, *obj, *n, false)).collect();
+            if let Some(w) = s.weapon {
+                inventory.push((24, w, 1, true));
+            }
+            let state = CharacterState { inventory, sta: s.sta, max_sta: s.sta, ..CharacterState::default() };
             db.save_full(&rec, &state).unwrap();
-            let active = s.active.iter().map(|(slot, quest)| (*slot, ActiveQuest { quest: *quest, killed: vec![], targeted: vec![] })).collect();
+            let active = s.active.iter().map(|(slot, quest, killed)| (*slot, ActiveQuest { quest: *quest, killed: killed.clone(), targeted: vec![] })).collect();
             db.save_quests(c.id, &QuestSave { active, done: vec![] }).unwrap();
         }
     }
@@ -288,7 +295,7 @@ fn hunting_the_creatures_a_quest_asks_for_counts_kills_and_saves_them() {
     const RAT_MAP: (u16, i32, i32) = (176, 31, 38);
     let mut seed = Seed::new("cazador", WARRIOR, 1, RAT_MAP);
     seed.hp = 2000;
-    seed.active = vec![(1, 407)];
+    seed.active = vec![(1, 407, vec![])];
     let s = server_with("hunt", &[seed]);
     let mut b = play(&s, "cazador", "cazador");
     assert_eq!(quest!(&b).active, vec![407], "the saved quest came back");
@@ -324,6 +331,72 @@ fn hunting_the_creatures_a_quest_asks_for_counts_kills_and_saves_them() {
     b.send(&C2S::Quest(QuestC2S::Details { slot: 1 }));
     b.sync();
     assert_eq!(quest!(&b).quest_in(1).unwrap().killed, killed, "the counters came back");
+}
+
+/// The whole quest over the wire: quest 407 is one snake short of done; the bot kills a real
+/// snake of map 37, walks back to Makrom and is paid exactly once (300 experience, 70 gold).
+#[test]
+fn the_last_kill_and_the_hand_in_pay_once() {
+    const MAKROM: (u16, i32, i32) = (37, 73, 86);
+    // Level 33: the silver sword asks for it (quest 407 has no top level).
+    let mut seed = Seed::new("heroe", WARRIOR, 33, MAKROM);
+    seed.hp = 5000;
+    seed.sta = 5000;
+    seed.weapon = Some(126); // Espada de Plata, 13 to 19
+    seed.active = vec![(1, 407, vec![14, 10, 5, 5])];
+    let s = server_with("last_kill", &[seed]);
+    let mut b = play(&s, "heroe", "heroe");
+    assert!(b.game.local.inventory[23].is_some_and(|i| i.equipped), "sword in hand: {:?} {:?}", b.game.local.inventory[23], b.console().collect::<Vec<_>>());
+
+    // Handing in with a snake missing pays nothing.
+    talk(&mut b, "Makrom");
+    assert!(completed(&b).is_empty() && b.game.local.gold == 0);
+
+    for _ in 0..6000 {
+        if console_has(&b, "15/15 Serpiente") {
+            break;
+        }
+        assert!(b.hp() > 0, "el heroe no muere: {:?}", b.console().collect::<Vec<_>>());
+        let adjacent = nearest(&b, 1, "Serpiente").or_else(|| nearest(&b, 1, ""));
+        if let Some((_, x, y)) = adjacent {
+            face(&mut b, (x, y));
+            let seq = b.game.next_seq();
+            b.send(&C2S::Melee { seq });
+        } else if let Some((_, x, y)) = nearest(&b, 80, "Serpiente") {
+            step_towards(&mut b, (x, y));
+        }
+        s.advance(ATTACK_INTERVAL_MS.max(WALK_MS));
+        b.sync();
+    }
+    assert!(console_has(&b, "15/15 Serpiente"), "no llego a matar la serpiente: {:?}", b.console().collect::<Vec<_>>());
+    assert!(console_has(&b, "Ya has matado todas las criaturas que la misión Una nueva aventura requería"));
+
+    // Back to Makrom (fighting whatever is in the way) and hand it in.
+    let (_, nx, ny) = npc_named(&b, "Makrom");
+    for _ in 0..6000 {
+        if tile_distance(b.pos(), (nx, ny)) <= 3 {
+            break;
+        }
+        assert!(b.hp() > 0, "el heroe no muere de vuelta");
+        if let Some((_, x, y)) = nearest(&b, 1, "") {
+            face(&mut b, (x, y));
+            let seq = b.game.next_seq();
+            b.send(&C2S::Melee { seq });
+        } else {
+            step_towards(&mut b, (nx, ny));
+        }
+        s.advance(ATTACK_INTERVAL_MS.max(WALK_MS));
+        b.sync();
+    }
+    let (_, nx, ny) = npc_named(&b, "Makrom");
+    assert!(tile_distance(b.pos(), (nx, ny)) <= 4, "de vuelta junto a Makrom");
+    talk(&mut b, "Makrom");
+    assert_eq!(completed(&b), vec![407], "{:?}", b.console().collect::<Vec<_>>());
+    assert_eq!(b.game.local.gold, 70);
+    assert!(quest!(&b).active.is_empty() && quest!(&b).done == vec![407]);
+    // Again: nothing more.
+    talk(&mut b, "Makrom");
+    assert_eq!((completed(&b).len(), b.game.local.gold), (1, 70));
 }
 
 /// A client that makes up requests: nothing happens, and enough of them is a kick.
@@ -410,6 +483,3 @@ fn face(bot: &mut Bot, to: (i32, i32)) {
     let me = bot.pos();
     bot.send(&C2S::Turn { dir: Dir::towards(to.0 - me.0, to.1 - me.1) });
 }
-
-#[allow(dead_code)]
-const _UNUSED: u8 = MAGE;
