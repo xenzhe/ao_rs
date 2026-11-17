@@ -47,7 +47,12 @@ Nada más fuera de su lista: si necesita otra cosa, la anota en el informe final
 | `on_level_up(id, levels)` | Progresión (S1) | Combate (A) en `give_exp` |
 | `init_new_character(race, class, gender) -> Option<CharacterState>` | Progresión (S1) | Cuentas, al crear un personaje (lo conecta el integrador) |
 | `open_bank(id, banker)` | Bóveda (S2) | NPCs (D) al interactuar con un banquero |
+| `npc_attacks_player(map, npc, player)` | Combate (A) | NPCs (D) cuando su IA decide golpear |
+| `resurrect(id)` | Combate (A) | NPCs (D) al hablar con un sacerdote; Magia (B) con hechizos de resucitar |
+| `npc_cast_spell(map, npc, player, spell)` | Magia (B) | NPCs (D) para criaturas con hechizos |
 | `send_look(id)`, `send_stats(id)` | Sesión (integrador) | Cualquiera tras cambiar equipo/vida/muerte |
+
+`regen.rs` (regeneración de vida/maná/energía, hambre y sed) pasa a ser de Progresión (S1).
 
 Si un sistema necesita llamar a otro y el gancho no existe: crear la llamada a una función
 con nombre claro en SU archivo y anotarlo en el informe; el integrador la conecta.

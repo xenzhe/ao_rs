@@ -5,6 +5,11 @@ use ao_rules::spells::SpellTarget;
 use ao_rules::{tile_distance, walk};
 
 impl World {
+    /// Hook (contract): the NPC system wants creature `nid` to cast Hechizos.dat `spell`
+    /// on player `pid`; magic applies it with the official rules.
+    #[allow(dead_code)]
+    pub(crate) fn npc_cast_spell(&mut self, _map: u16, _nid: u32, _pid: u32, _spell: u16) {}
+
     pub(crate) fn on_cast(&mut self, id: u32, spell_id: u16, tx: i32, ty: i32, seq: u32) {
         let Some(spell) = self.data.spell(spell_id).cloned() else {
             return self.strike(id, "hechizo inexistente");

@@ -4,6 +4,20 @@ use ao_protocol::{Tone, S2C};
 use ao_rules::progression::add_exp;
 
 impl World {
+    /// Hook (contract): the NPC system decided this creature attacks this player; combat
+    /// rolls hit/evasion/damage with the official formulas and applies it.
+    #[allow(dead_code)]
+    pub(crate) fn npc_attacks_player(&mut self, map: u16, nid: u32, pid: u32) {
+        let Some(n) = self.instance(map).npcs.get(&nid) else { return };
+        let name = n.name.clone();
+        let dmg = self.rng.range(5, 10);
+        self.damage_player(pid, dmg, &name);
+    }
+
+    /// Hook (contract): a priest (NPC system) or a spell brings a dead player back.
+    #[allow(dead_code)]
+    pub(crate) fn resurrect(&mut self, _id: u32) {}
+
     pub(crate) fn damage_npc(&mut self, map: u16, nid: u32, amount: i32, attacker: u32) {
         let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
         n.hp -= amount;
