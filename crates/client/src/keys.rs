@@ -62,10 +62,11 @@ pub fn name(k: KeyCode) -> String {
 /// Short label for a key cap.
 pub fn label(s: &str) -> String {
     match s {
-        "Up" => "↑".into(),
-        "Down" => "↓".into(),
-        "Left" => "←".into(),
-        "Right" => "→".into(),
+        // The UI fonts have no arrow glyphs.
+        "Up" => "Arriba".into(),
+        "Down" => "Abajo".into(),
+        "Left" => "Izq.".into(),
+        "Right" => "Der.".into(),
         "LeftControl" | "RightControl" => "Ctrl".into(),
         "LeftShift" | "RightShift" => "Shift".into(),
         "LeftAlt" => "Alt".into(),
