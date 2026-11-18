@@ -42,4 +42,6 @@ pub enum ClientEvent {
     FloatText { at: Pt, amount: i32 },
     /// A spell flew from `from` to `to`.
     Effect { effect: SpellEffect, from: Pt, to: Pt },
+    /// A positional sound (`wav` of the official sounds) at a tile.
+    Sound { wav: u16, at: (i32, i32) },
 }

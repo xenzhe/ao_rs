@@ -41,16 +41,24 @@ fn step_towards(bot: &mut Bot, to: (i32, i32)) -> bool {
 }
 
 /// Walks until within `within` tiles of `to` (or onto it with 0), or the map changes.
-fn go(s: &TestServer, bot: &mut Bot, to: (i32, i32), within: i32) {
+/// Returns false if it never got there.
+fn try_go(s: &TestServer, bot: &mut Bot, to: (i32, i32), within: i32) -> bool {
     let map0 = bot.map();
     for _ in 0..2000 {
         let (x, y) = bot.pos();
         if bot.map() != map0 || (x - to.0).abs() + (y - to.1).abs() <= within {
-            return;
+            return true;
         }
         step_towards(bot, to);
         s.advance(WALK_MS);
         bot.sync();
+    }
+    false
+}
+
+fn go(s: &TestServer, bot: &mut Bot, to: (i32, i32), within: i32) {
+    if try_go(s, bot, to, within) {
+        return;
     }
     let me = bot.pos();
     let map = bot.game.map.as_ref().expect("map");
@@ -84,6 +92,9 @@ fn warrior_and_mage_hunt_level_up_and_store_the_loot() {
     });
     let mut war = character(&s, "Guerrero", WARRIOR);
     let mut mag = character(&s, "Maga", MAGE);
+    // The Ratas Gigantes of map 2 (npcs.dat 584: 500 HP, 15-30 hits) are not newbie prey.
+    war.say("/quitarnpc 584");
+    war.wait_until("sin ratas gigantes", |b| b.console().any(|t| t.contains("NPC quitados")));
     assert!(mag.game.spells.iter().any(|sp| sp.id == DART), "a mage starts with Dardo Magico");
     let (war_lvl, mag_lvl) = (war.level(), mag.level());
 
@@ -108,10 +119,14 @@ fn warrior_and_mage_hunt_level_up_and_store_the_loot() {
         } else if let Some((_, x, y)) = nearest_creature(&war, 30) {
             step_towards(&mut war, (x, y));
         }
+        // Respawns can bring a Rata Gigante back: out again.
+        if war.creatures().any(|(_, e)| e.name == "Rata Gigante") {
+            war.say("/quitarnpc 584");
+        }
         s.advance(ATTACK_INTERVAL_MS.max(WALK_MS));
         war.sync();
         mag.sync();
-        assert!(war.hp() > 0 && mag.hp() > 0, "nadie muere cazando");
+        assert!(war.hp() > 0 && mag.hp() > 0, "nadie muere cazando: {:?}", war.console().chain(mag.console()).filter(|t| t.contains("pegado") || t.contains("matado")).collect::<Vec<_>>());
         kills = war.console().chain(mag.console()).filter(|t| t.starts_with("Has matado a")).count();
     }
     assert!(war.level() > war_lvl, "el guerrero sube de nivel");
@@ -124,7 +139,10 @@ fn warrior_and_mage_hunt_level_up_and_store_the_loot() {
     assert!(!loot.is_empty(), "las criaturas sueltan su botin oficial");
     let gold0 = war.game.local.gold;
     for (tile, (obj, _)) in &loot {
-        go(&s, &mut war, *tile, 0);
+        // A drop can lie where nobody stands (under a creature that stays): skip it.
+        if !try_go(&s, &mut war, *tile, 0) {
+            continue;
+        }
         s.advance(300);
         war.send(&C2S::PickUp);
         war.wait_until("recoge", |b| !b.game.local.ground.contains_key(tile) || b.game.local.count_of(*obj) > 0);

@@ -24,6 +24,7 @@ pub(crate) mod weather;
 // P4 (docs/P4_CONTRATO.md)
 mod work;
 mod craft;
+mod doors;
 mod gm;
 mod gm_tsao;
 mod event;

@@ -24,6 +24,9 @@ pub struct MapInstance {
     order: Vec<EntityId>,
     /// `MapData(x, y).NpcIndex`: which NPC stands on each tile (0 = none).
     grid: Vec<EntityId>,
+    /// Doors whose object differs from the map file (opened or closed by players): tile
+    /// -> obj.dat index. Their blocks are already applied to `map.blocked`.
+    pub doors: HashMap<(i32, i32), u16>,
 }
 
 fn cell(x: i32, y: i32) -> Option<usize> {
@@ -41,6 +44,7 @@ impl MapInstance {
             next_ai: GameTime::ZERO,
             order: Vec::new(),
             grid: vec![0; (SIDE * SIDE) as usize],
+            doors: HashMap::new(),
         }
     }
 

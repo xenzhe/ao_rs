@@ -417,7 +417,8 @@ mod tests {
     fn ullathorpe_header() {
         let root = recursos_dir();
         let Ok(m) = AoMap::load(&root, 1) else { return };
-        assert_eq!(m.name, "Ciudad de Ullathorpe");
+        // Public repo: "Ciudad de Ullathorpe"; official client: "Ullathorpe".
+        assert!(m.name.ends_with("Ullathorpe"), "{}", m.name);
         assert!(m.safe);
         assert!(!m.exits.is_empty());
         assert!(m.layers[0].iter().all(|g| *g > 0), "layer 1 covers every tile");

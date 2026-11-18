@@ -12,7 +12,7 @@ use ao_testkit::{Bot, TestServer};
 const OBJ_A: u16 = 38;
 const GOLD_OBJ: u16 = 12;
 /// Krix, the banker of Ullathorpe.
-const BANKER: (i32, i32) = (77, 47);
+const BANKER: (i32, i32) = (75, 47);
 
 /// Runs the client action `$plan` of `$bot`: false if the client refused it, otherwise the
 /// message is sent (counted by the bot) and the call returns true. No waiting.

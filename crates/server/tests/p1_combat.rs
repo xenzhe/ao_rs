@@ -202,22 +202,23 @@ fn stamina_runs_out() {
 
 #[test]
 fn warrior_kills_a_creature_and_gets_its_official_experience() {
-    // An official Gallina (npcs.dat 501: hostile, 10 HP, GiveEXP=5) of map 12; the warrior
-    // appears on a free tile next to it and the hen comes for him.
-    let map = ao_formats::AoMap::load(&recursos_dir(), 12).expect("map 12");
-    // A lone hen: no other NPC of the map within 12 tiles to join the fight.
-    let hen = map
-        .npcs
-        .iter()
-        .filter(|n| n.npc == 501)
-        .find(|h| map.npcs.iter().all(|o| (o.x, o.y) == (h.x, h.y) || tile_distance((o.x, o.y), (h.x, h.y)) > 12))
-        .expect("a lone Gallina on map 12");
+    // An official Gallina (npcs.dat 501: hostile, 10 HP, GiveEXP=5) alone on one of the
+    // first maps; the warrior appears on a free tile next to it and the hen comes for him.
+    let root = recursos_dir();
+    let (num, map, hen) = (1..=80u16)
+        .filter_map(|n| ao_formats::AoMap::load(&root, n).ok().map(|m| (n, m)))
+        .find_map(|(n, map)| {
+            // A lone hen: no other NPC of the map within 12 tiles to join the fight.
+            let hen = map.npcs.iter().filter(|h| h.npc == 501).find(|h| map.npcs.iter().all(|o| (o.x, o.y) == (h.x, h.y) || tile_distance((o.x, o.y), (h.x, h.y)) > 12)).cloned()?;
+            Some((n, map, hen))
+        })
+        .expect("a lone Gallina on the first maps");
     let spot = Dir::ALL
         .iter()
         .map(|d| (hen.x + d.delta().0, hen.y + d.delta().1))
         .find(|&(x, y)| ao_rules::walk::standable(&map, x, y))
         .expect("free tile next to the hen");
-    let at = (12, spot.0, spot.1);
+    let at = (num, spot.0, spot.1);
     let s = TestServer::with(|st| {
         st.start = Some(at);
         let b = &mut st.data.balance;

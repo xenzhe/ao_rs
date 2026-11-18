@@ -223,6 +223,24 @@ impl World {
                 }
                 true
             }
+            Some("/quitarnpc") => {
+                // Removes every NPC of that npcs.dat number from the current map (tests).
+                let Some(num) = parts.next().and_then(|s| s.parse::<u16>().ok()) else {
+                    self.console(id, "Uso: /quitarnpc <numero de npcs.dat>.", Tone::Warn);
+                    return true;
+                };
+                let map = self.player(id).map(|p| p.map).unwrap_or(0);
+                if !self.instance(map).populated {
+                    self.populate_map(map);
+                }
+                let ids: Vec<u32> = self.instance(map).npcs.iter().filter(|(_, n)| n.def == num).map(|(i, _)| *i).collect();
+                for nid in &ids {
+                    self.maps.get_mut(&map).unwrap().remove_npc(*nid);
+                    self.broadcast(map, &S2C::Despawn { id: *nid }, None);
+                }
+                self.console(id, format!("{} NPC quitados.", ids.len()), Tone::Good);
+                true
+            }
             _ => self.dev_test_command(id, line),
         }
     }

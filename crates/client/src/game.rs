@@ -68,6 +68,12 @@ pub fn poll(game: &mut Game, assets: &mut Assets, fx: &mut Fx) {
                 fx.float_text(v(at), text, c);
             }
             ClientEvent::Effect { effect, from, to } => fx.cast(effect, v(from), v(to)),
+            ClientEvent::Sound { wav, at } => {
+                let me = game.me().map(|m| (m.x, m.y)).unwrap_or(at);
+                if let Some(a) = &mut fx.audio {
+                    a.play(wav, volume_at(me, Some(at)), Channel::Effects);
+                }
+            }
         }
     }
 

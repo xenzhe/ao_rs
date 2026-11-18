@@ -78,6 +78,16 @@ impl TestServer {
         Self::with(|s| s.start = Some((map, x, y)))
     }
 
+    /// Like `start_at`, on the public repo maps (tests written against their NPC layout).
+    pub fn public_at(map: u16, x: i32, y: i32) -> TestServer {
+        Self::with(|s| {
+            s.start = Some((map, x, y));
+            if let Some(p) = ao_formats::paths::public_recursos_dir() {
+                s.recursos = p;
+            }
+        })
+    }
+
     /// Defaults, then `tweak` (config, data, start, seed...). The clock is always virtual.
     pub fn with(tweak: impl FnOnce(&mut Settings)) -> TestServer {
         let mut settings = Settings::defaults();

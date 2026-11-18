@@ -13,6 +13,10 @@ fn field() -> TestServer {
     TestServer::with(|st| {
         st.start = Some((2, 50, 50));
         st.data.balance.creatures_per_map = 0;
+        // Written against the public repo's map 2 (open field around 50,50).
+        if let Some(p) = ao_formats::paths::public_recursos_dir() {
+            st.recursos = p;
+        }
     })
 }
 

@@ -114,6 +114,11 @@ pub struct Game {
     pub net: Option<Net>,
     pub my_id: u32,
     pub map: Option<AoMap>,
+    /// Fixed objects of the map (doors, signs...): the map file plus what the server
+    /// changed (`S2C::MapObject`). Tile -> obj.dat index.
+    pub map_objects: HashMap<(i32, i32), u16>,
+    /// obj.dat, loaded the first time a door changes (its `Subtipo` says what it blocks).
+    objs: Option<std::sync::Arc<ao_formats::dat::Table<ao_formats::dat::obj::ObjData>>>,
     pub ents: HashMap<u32, Ent>,
     pub stats: Stats,
     pub spells: Vec<SpellDef>,
@@ -147,6 +152,8 @@ impl Game {
             net: None,
             my_id: 0,
             map: None,
+            map_objects: HashMap::new(),
+            objs: None,
             ents: HashMap::new(),
             stats: Stats { hp: Guarded::new(0), max_hp: Guarded::new(1), mana: Guarded::new(0), max_mana: Guarded::new(1), level: 1, exp: 0, next_exp: 1 },
             spells: Vec::new(),
@@ -234,10 +241,29 @@ impl Game {
     fn load_map(&mut self, number: u16) {
         match AoMap::load(&self.recursos, number) {
             Ok(m) => {
+                self.map_objects = ao_formats::dat::craft::map_objects(&self.recursos, number).into_iter().map(|o| ((o.x, o.y), o.obj)).collect();
                 self.map = Some(m);
                 self.events.push(ClientEvent::MapEntered { map: number });
             }
             Err(e) => self.say(format!("No se pudo cargar el mapa {number}: {e:?}"), Tone::Warn),
+        }
+    }
+
+    /// A door opened or closed: redraw it and apply its blocks for walk prediction.
+    fn on_map_object(&mut self, x: i32, y: i32, obj: u16) {
+        if self.map_objects.get(&(x, y)) == Some(&obj) {
+            return;
+        }
+        let recursos = self.recursos.clone();
+        let objs = self.objs.get_or_insert_with(|| std::sync::Arc::new(ao_formats::dat::obj::load(&recursos).map(|l| l.data).unwrap_or_default())).clone();
+        self.map_objects.insert((x, y), obj);
+        if let (Some(d), Some(map)) = (objs.get(obj as u32), self.map.as_mut()) {
+            if d.obj_type == ao_formats::dat::obj::ObjType::Doors {
+                ao_rules::doors::apply_door_blocks(&mut map.blocked, x, y, d.subtype, d.locked == 1);
+                // SND_PUERTA, or SND_PUERTA_DUCTO for the duct grates.
+                let wav = if matches!(d.grh, 11444 | 11445 | 59877 | 59878) { 380 } else { 5 };
+                self.events.push(ClientEvent::Sound { wav, at: (x, y) });
+            }
         }
     }
 
@@ -248,6 +274,7 @@ impl Game {
     pub fn handle(&mut self, msg: S2C) {
         match msg {
             S2C::Welcome { id } => self.my_id = id,
+            S2C::MapObject { x, y, obj } => self.on_map_object(x, y, obj),
             S2C::SpellBook { spells } => {
                 self.spells = spells;
                 self.selected = self.selected.min(self.spells.len().saturating_sub(1));

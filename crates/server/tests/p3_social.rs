@@ -186,7 +186,7 @@ fn guild_window_actions_found_apply_accept_news_kick() {
 
 #[test]
 fn quest_offer_is_accepted_and_abandoned_from_the_window_actions() {
-    let s = TestServer::start_at(1, 54, 58);
+    let s = TestServer::public_at(1, 54, 58);
     let mut b = s.bot("Novato");
     s.advance(100);
     b.sync();

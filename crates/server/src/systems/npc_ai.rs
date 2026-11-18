@@ -952,34 +952,34 @@ mod tests {
 
     #[test]
     fn dead_player_only_talks_to_priests() {
-        // Juan XXI <Sacerdote> (78, 66) and Krix <Finanzas Goliath> (77, 47) in Ullathorpe.
-        let mut b = Bench::new(1, 77, 49);
+        // Juan XXI <Sacerdote> (78, 67) and Krix <Finanzas Goliath> (75, 47) in Ullathorpe.
+        let mut b = Bench::new(1, 75, 49);
         let mut rx = b.join(1, "Fantasma");
         b.run(100);
         b.w.player_mut(1).hp = 0;
         frames(&mut rx);
-        b.w.on_interact(1, 77, 47);
+        b.w.on_interact(1, 75, 47);
         let m = frames(&mut rx);
         assert!(console_has(&m, DEAD_TEXT), "the banker refuses the dead: {m:?}");
         assert!(!m.iter().any(|m| matches!(m, S2C::NpcSay { .. } | S2C::BankOpen { .. })));
 
-        b.place(1, 78, 68);
-        b.w.on_interact(1, 78, 66);
+        b.place(1, 78, 69);
+        b.w.on_interact(1, 78, 67);
         let m = frames(&mut rx);
         assert!(console_has(&m, "resucitado"), "the priest resurrects: {m:?}");
         assert!(m.iter().any(|m| matches!(m, S2C::NpcSay { .. })), "and the dead can read the priest");
 
         // Alive and hurt: the priest heals.
         b.w.player_mut(1).hp = 1;
-        b.w.on_interact(1, 78, 66);
+        b.w.on_interact(1, 78, 67);
         frames(&mut rx);
         let p = b.w.player(1).unwrap();
         assert_eq!(p.hp, p.max_hp);
 
         // Too far (Manhattan 6 > 5).
         b.w.player_mut(1).hp = 1;
-        b.place(1, 78, 72);
-        b.w.on_interact(1, 78, 66);
+        b.place(1, 78, 73);
+        b.w.on_interact(1, 78, 67);
         assert!(console_has(&frames(&mut rx), "lejos"));
         assert_eq!(b.w.player(1).unwrap().hp, 1);
     }
@@ -988,15 +988,15 @@ mod tests {
 
     #[test]
     fn non_attackable_npcs_cannot_be_moved_by_a_kill() {
-        let mut b = Bench::new(1, 77, 49);
+        let mut b = Bench::new(1, 75, 49);
         let _rx = b.join(1, "Atracador");
         b.run(100);
-        let banker = b.w.instance(1).npc_at(77, 47).expect("Krix");
+        let banker = b.w.instance(1).npc_at(75, 47).expect("Krix");
         assert!(!b.npc(1, banker).attackable);
         b.w.damage_npc(1, banker, 9999, 1);
         b.run(2000);
         let n = b.npc(1, banker);
-        assert!(n.alive() && (n.x, n.y) == (77, 47), "the banker stays at his desk");
+        assert!(n.alive() && (n.x, n.y) == (75, 47), "the banker stays at his desk");
     }
 
     /// Cost of `tick_npcs` with a player on Ullathorpe (all its NPCs, static) and one on

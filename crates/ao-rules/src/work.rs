@@ -437,8 +437,10 @@ mod tests {
         assert!(t.roll_range(1).is_some());
         let map = std::fs::read(ao_formats::csm::map_path(&root, 1)).unwrap();
         let objs = parse_map_objects(&map).unwrap();
-        // Ullathorpe: the forge at (32, 62) and choppable trees (59) at (82..86, 19).
+        // Ullathorpe: the forge at (32, 62). Trees: obj 59 in the town on the public repo
+        // maps; 5, 14, 18 and 50 (palms) in the woods on the official client's.
         assert!(objs.iter().any(|o| (o.x, o.y, o.obj) == (32, 62, 383)));
-        assert!(objs.iter().any(|o| (o.x, o.y, o.obj) == (82, 19, 59)));
+        let trees = (1..=40u16).filter_map(|m| std::fs::read(ao_formats::csm::map_path(&root, m)).ok()).filter_map(|d| parse_map_objects(&d).ok()).flatten().filter(|o| matches!(o.obj, 5 | 14 | 18 | 50 | 59)).count();
+        assert!(trees > 20, "choppable trees on the first maps: {trees}");
     }
 }

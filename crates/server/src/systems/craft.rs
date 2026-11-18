@@ -197,7 +197,7 @@ impl World {
         l
     }
 
-    fn craft_map_objects(&mut self, map: u16) -> Arc<Vec<MapObject>> {
+    pub(crate) fn craft_map_objects(&mut self, map: u16) -> Arc<Vec<MapObject>> {
         let recursos = self.recursos.clone();
         self.crafts.map_objects.entry(map).or_insert_with(|| Arc::new(ao_formats::dat::craft::map_objects(&recursos, map))).clone()
     }

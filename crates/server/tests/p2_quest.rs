@@ -65,7 +65,13 @@ fn server_with(tag: &str, seeds: &[Seed]) -> TestServer {
             db.save_quests(c.id, &QuestSave { active, done: vec![] }).unwrap();
         }
     }
-    TestServer::with(|st| st.config.database = path.to_string_lossy().into_owned())
+    // Written against the public repo maps (Makrom 407 with six quests in Ullathorpe).
+    TestServer::with(|st| {
+        st.config.database = path.to_string_lossy().into_owned();
+        if let Some(p) = ao_formats::paths::public_recursos_dir() {
+            st.recursos = p;
+        }
+    })
 }
 
 fn play(s: &TestServer, user: &str, name: &str) -> Bot {
@@ -143,7 +149,7 @@ fn obj_count(b: &Bot, obj: u16) -> u32 {
 /// with it goes through the server's checks.
 #[test]
 fn makrom_offers_six_quests_and_a_novice_can_take_only_the_first() {
-    let s = TestServer::start_at(1, 54, 58);
+    let s = TestServer::public_at(1, 54, 58);
     let mut b = novice(&s, "Novato");
     talk(&mut b, "Makrom");
     b.wait_until("la lista de misiones", |b| quest!(b).offer.is_some());
@@ -402,7 +408,7 @@ fn the_last_kill_and_the_hand_in_pay_once() {
 /// A client that makes up requests: nothing happens, and enough of them is a kick.
 #[test]
 fn cheating_with_quest_messages_is_refused_and_punished() {
-    let s = TestServer::start_at(1, 54, 58);
+    let s = TestServer::public_at(1, 54, 58);
     let mut b = novice(&s, "Tramposo");
     // Never spoke to an NPC: a late packet, silently ignored.
     for q in [407, 2, 0, 9999] {
@@ -430,7 +436,7 @@ fn cheating_with_quest_messages_is_refused_and_punished() {
 /// and a dead character cannot do any of it.
 #[test]
 fn quests_need_you_near_the_npc() {
-    let s = TestServer::start_at(1, 54, 58);
+    let s = TestServer::public_at(1, 54, 58);
     let mut b = novice(&s, "Lejano");
     talk(&mut b, "Makrom");
     b.send(&C2S::Quest(QuestC2S::Accept { quest: 407 }));

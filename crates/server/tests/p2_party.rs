@@ -263,7 +263,8 @@ fn a_member_turning_criminal_leaves_the_party() {
 fn experience_is_shared_with_members_nearby() {
     // An official Gallina (npcs.dat 501: hostile, 10 HP, GiveEXP=5) of map 12, as in
     // p1_combat; a warrior kills it while a party mate stands next to him.
-    let map = ao_formats::AoMap::load(&recursos_dir(), 12).expect("map 12");
+    let root = ao_formats::paths::public_recursos_dir().unwrap_or_else(recursos_dir);
+    let map = ao_formats::AoMap::load(&root, 12).expect("map 12");
     let hen = map
         .npcs
         .iter()
@@ -280,6 +281,7 @@ fn experience_is_shared_with_members_nearby() {
     // official ExpMult=1 two members get 0 per hit (as in AO20). `ExpMult` 10 shows it.
     let s = TestServer::with(|st| {
         st.config.world.exp_mult = 10;
+        st.recursos = root.clone();
         st.start = Some(at);
         let b = &mut st.data.balance;
         (b.start_map, b.start_x, b.start_y) = at;

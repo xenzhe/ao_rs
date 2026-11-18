@@ -117,9 +117,10 @@ fn go(s: &TestServer, bot: &mut Bot, map: u16, at: (i32, i32)) {
 fn woodcutting_with_traps() {
     let s = server();
     let mut bot = worker(&s, "Lenador");
-    // Choppable trees of Ullathorpe (obj 59, VidaUtil 600).
-    let (tree, stand) = spot(1, &[59]);
-    go(&s, &mut bot, 1, stand);
+    // A choppable tree: obj 59 in Ullathorpe on the public repo maps, obj 18 (VidaUtil
+    // 400) in the woods of map 12 on the official client's.
+    let (map, (tree, stand)) = [(1u16, 59u16), (12, 18)].into_iter().find_map(|(m, o)| std::panic::catch_unwind(|| spot(m, &[o])).ok().map(|r| (m, r))).expect("a choppable tree");
+    go(&s, &mut bot, map, stand);
 
     // Without a tool: refused with the official message.
     send(&s, &mut bot, WorkC2S::Start { kind: WorkKind::Chop, x: tree.0, y: tree.1 });
@@ -135,10 +136,10 @@ fn woodcutting_with_traps() {
     // The real tree, but from two tiles away.
     let back = (stand.0 * 2 - tree.0, stand.1 * 2 - tree.1);
     assert!(walkable(bot.game.map.as_ref().unwrap(), back.0, back.1), "a tile behind {stand:?}");
-    go(&s, &mut bot, 1, back);
+    go(&s, &mut bot, map, back);
     send(&s, &mut bot, WorkC2S::Start { kind: WorkKind::Chop, x: tree.0, y: tree.1 });
     assert!(!working(&bot) && said(&bot, "Esta demasiado lejos"));
-    go(&s, &mut bot, 1, stand);
+    go(&s, &mut bot, map, stand);
     bot.game.console.clear();
 
     // Legit: the work starts and runs once every 4 s, costing 5 stamina per attempt.

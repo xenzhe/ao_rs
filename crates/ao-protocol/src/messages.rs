@@ -155,6 +155,9 @@ pub enum S2C {
     InventorySlot { slot: u8, obj: u16, amount: u32, equipped: bool },
     GroundItem { x: i32, y: i32, obj: u16, amount: u32 },
     GroundItemRemoved { x: i32, y: i32 },
+    /// A fixed map object (door) now is `obj` instead of what the map file says; the
+    /// client redraws it and applies its blocks (`ao_rules::doors`).
+    MapObject { x: i32, y: i32, obj: u16 },
 
     // Bank
     BankOpen { slots: Vec<(u8, u16, u32)>, gold: u32 },

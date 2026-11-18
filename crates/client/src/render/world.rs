@@ -98,7 +98,22 @@ pub fn draw_world(game: &Game, assets: &mut Assets, fades: &mut WorldFades, cw: 
             by_row.entry(e.y).or_default().push(e);
         }
     }
+    // Fixed map objects (doors, signs...) and items on the floor (`ObjGrh` of the
+    // official render), drawn with their row before the characters.
+    let obj_grh = |assets: &Assets, obj: u16| assets.objs.get(obj as u32).map(|o| o.grh).filter(|g| *g > 0).map(|g| g as u32);
     for y in by0..=by1 {
+        for x in bx0..=bx1 {
+            if !own(x, y) {
+                continue;
+            }
+            let fixed = game.map_objects.get(&(x, y)).copied();
+            let dropped = game.local.ground.get(&(x, y)).map(|(o, _)| *o);
+            for obj in [fixed, dropped].into_iter().flatten() {
+                if let Some(g) = obj_grh(assets, obj) {
+                    assets.draw(g, px(x), py(y), true, t_ms, WHITE);
+                }
+            }
+        }
         if let Some(row) = by_row.get_mut(&y) {
             row.sort_by_key(|e| e.x);
             for e in row.iter() {

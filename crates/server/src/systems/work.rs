@@ -548,13 +548,23 @@ mod tests {
             p.stats.skills[rules::SKILL_WOODCUTTING] = 100;
             p.stats.sta = 10_000;
         }
-        // Below the tree (82, 19) of Ullathorpe.
-        w.teleport(1, 1, 82, 20);
+        // A choppable tree (obj 18, VidaUtil=400; obj 5 trees have no VidaUtil: scenery) of
+        // map 12 with a free tile below it.
+        let m12 = ao_formats::AoMap::load(&w.recursos, 12).unwrap();
+        let trees = ao_formats::dat::craft::map_objects(&w.recursos, 12);
+        let (tx, ty) = trees
+            .iter()
+            .filter(|o| o.obj == 18)
+            .map(|o| (o.x, o.y))
+            .find(|&(x, y)| m12.blocked(x, y + 1) == 0 && m12.exit(x, y + 1).is_none() && m12.npcs.iter().all(|n| (n.x, n.y) != (x, y + 1)))
+            .expect("a tree with a free tile below");
+        w.teleport(1, 12, tx, ty + 1);
+        assert_eq!(w.player(1).map(|p| (p.x, p.y)), Some((tx, ty + 1)));
         let mut t = 0;
         let mut got = 0;
         for _ in 0..40 {
             if w.player(1).unwrap().work.active.is_none() {
-                w.on_work(1, WorkC2S::Start { kind: WorkKind::Chop, x: 82, y: 19 });
+                w.on_work(1, WorkC2S::Start { kind: WorkKind::Chop, x: tx, y: ty });
                 assert!(w.player(1).unwrap().work.active.is_some());
             }
             t += 4000;
@@ -573,18 +583,18 @@ mod tests {
         }
         let wood_slot = (1..=24).find(|s| w.player(1).unwrap().inv.get(*s).is_some_and(|i| i.obj == rules::WOOD)).unwrap();
         *w.player_mut(1).inv.cell_mut(wood_slot).unwrap() = Some(InvItem { obj: 999, amount: 1 });
-        let before = w.maps[&1].ground.tiles.values().filter(|i| i.obj == rules::WOOD).count();
+        let before = w.maps[&12].ground.tiles.values().filter(|i| i.obj == rules::WOOD).count();
         for _ in 0..60 {
             if w.player(1).unwrap().work.active.is_none() {
-                w.on_work(1, WorkC2S::Start { kind: WorkKind::Chop, x: 82, y: 19 });
+                w.on_work(1, WorkC2S::Start { kind: WorkKind::Chop, x: tx, y: ty });
             }
             t += 4000;
             w.tick_work(GameTime(t));
-            if w.maps[&1].ground.tiles.values().filter(|i| i.obj == rules::WOOD).count() > before {
+            if w.maps[&12].ground.tiles.values().filter(|i| i.obj == rules::WOOD).count() > before {
                 break;
             }
         }
-        assert!(w.maps[&1].ground.tiles.values().any(|i| i.obj == rules::WOOD), "wood on the floor");
+        assert!(w.maps[&12].ground.tiles.values().any(|i| i.obj == rules::WOOD), "wood on the floor");
         // Skill raise by use, from 0 (cap at level 20 is 50).
         w.player_mut(1).stats.skills[rules::SKILL_WOODCUTTING] = 0;
         for _ in 0..200 {
