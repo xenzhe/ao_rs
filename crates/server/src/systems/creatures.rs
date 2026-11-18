@@ -30,6 +30,8 @@ pub struct NpcStatus {
     pub paralyzed_until: Option<GameTime>,
     /// Immobilised: fights but cannot step.
     pub immobilized_until: Option<GameTime>,
+    /// `TargetNPC` of a guard hunting a hostile creature (systems/npc_guard.rs).
+    pub target_npc: Option<u32>,
     /// `Contadores.StunEndTime` (`StunNPc`): neither moves nor attacks.
     pub stunned_until: Option<GameTime>,
     /// Effects over time on the creature (systems/eot.rs).

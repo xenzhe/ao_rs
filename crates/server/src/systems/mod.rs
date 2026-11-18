@@ -12,6 +12,7 @@ mod magic;
 pub(crate) mod eot;
 mod eot_extra;
 mod magic_extra;
+mod npc_guard;
 mod movement;
 mod npc_ai;
 mod npc_tactics;

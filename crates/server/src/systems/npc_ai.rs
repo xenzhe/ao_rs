@@ -341,7 +341,12 @@ impl World {
                 return if d.attack_range > 1 { self.range_attack(map, nid, d, now) } else { self.attack_target(map, nid, d, now) };
             }
         }
+        // TryGuardAttackHostileNpc (systems/npc_guard.rs).
+        if is_guard(kind) && self.guard_attacks_hostile_npc(map, nid, now) {
+            return;
+        }
         match movement {
+            Movement::GuardChasesNpc => self.guard_chases_npc(map, nid, now),
             Movement::Wander => {
                 if hostile && d.attack_range > 1 {
                     // AI_RangeAttack: shoots from afar and keeps its PreferedRange.
