@@ -24,12 +24,14 @@ use ao_protocol::{Tone, S2C};
 use ao_rules::combat as rules;
 
 /// Paralysis state of a creature.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct NpcStatus {
     /// Paralysed: no AI at all.
     pub paralyzed_until: Option<GameTime>,
     /// Immobilised: fights but cannot step.
     pub immobilized_until: Option<GameTime>,
+    /// Effects over time on the creature (systems/eot.rs).
+    pub eots: Vec<crate::world::spellbook::ActiveEot>,
 }
 
 /// Who a weapon hits (dragon slayer: dragons and players differ).
@@ -110,6 +112,7 @@ impl World {
                 }
             }
         }
+        self.tick_npc_eots(map, now);
     }
 
     // ------------------------------------------------------------ creature against creature

@@ -234,6 +234,8 @@ impl World {
     /// Writes an account character back to the database (logout, and later autosave).
     pub(crate) fn save_player(&self, p: &Player) {
         let Some(char_id) = p.char_id else { return };
+        // A transformed player is saved with its own look, not the creature's.
+        let (body, head) = p.status.transform.map_or((p.body, p.head), |t| (t.body, t.head));
         let record = CharacterRecord {
             id: char_id,
             account_id: 0,
@@ -241,8 +243,8 @@ impl World {
             race: p.race,
             class: p.class,
             gender: p.gender,
-            body: p.body,
-            head: p.head,
+            body,
+            head,
             level: p.level,
             exp: p.exp,
             hp: p.hp,

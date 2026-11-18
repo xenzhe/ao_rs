@@ -10,6 +10,7 @@ pub mod character;
 pub mod combat;
 pub mod creatures;
 pub mod doors;
+pub mod eot;
 pub mod items;
 pub mod level_table;
 pub mod magic;

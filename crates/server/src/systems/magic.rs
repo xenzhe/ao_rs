@@ -10,15 +10,13 @@
 //! - `can_move(id)` must be checked by movement before a step;
 //! - `stop_meditating(id)` should be called by melee/ranged attacks (also detected here).
 use crate::clock::GameTime;
-use crate::world::spellbook::{ActiveEot, MAX_SPELL_SLOTS};
+use super::eot::Who;
+use crate::world::spellbook::MAX_SPELL_SLOTS;
 use crate::world::World;
 use ao_formats::dat::spells::{Spell, SpellEffects as Fx, SpellRequirements as Req, SpellTarget, SpellType, TargetEffect};
 use ao_protocol::{status, Tone, S2C};
 use ao_rules::magic::{self as rules, MagicItem};
 use ao_rules::spells::{SpellDef, SpellEffect, SpellTarget as DefTarget};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
 
 /// TEMPORARY (development login only): spells given to throwaway characters with an
 /// empty book so the client can try magic before character creation hands them out.
@@ -49,70 +47,6 @@ enum Target {
 /// `RandomNumber` with the bounds in any order (EffectsOverTime.dat has min > max).
 fn roll(w: &mut World, a: i32, b: i32) -> i32 {
     w.rng.range(a.min(b), a.max(b))
-}
-
-// ---------------------------------------------------------------- EffectsOverTime.dat
-
-/// The part of an `[EOTn]` section magic runs (types 1 eModifyHealth, 9 eModifyMana).
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct EotDef {
-    pub kind: i32,
-    pub power_min: i32,
-    pub power_max: i32,
-    pub ticks: u32,
-    pub tick_ms: u64,
-    pub tick_fx: u16,
-    pub override_: bool,
-}
-
-/// Minimal reader of `Dat/EffectsOverTime.dat` (`EffectsOverTime.bas::LoadEffectsOverTime`).
-/// TODO(integrator): move to `ao-formats` with the other Dat readers.
-pub fn parse_eots(text: &str) -> HashMap<u16, EotDef> {
-    let mut out = HashMap::new();
-    let mut cur: Option<(u16, EotDef)> = None;
-    for line in text.lines() {
-        let line = line.split('\'').next().unwrap_or("").trim();
-        if let Some(rest) = line.strip_prefix('[') {
-            if let Some((id, def)) = cur.take() {
-                out.insert(id, def);
-            }
-            let name = rest.split(']').next().unwrap_or("");
-            cur = name.strip_prefix("EOT").and_then(|n| n.parse().ok()).map(|id| (id, EotDef::default()));
-            continue;
-        }
-        let (Some((_, def)), Some((k, v))) = (cur.as_mut(), line.split_once('=')) else { continue };
-        let v = v.trim();
-        let n = v.parse::<f64>().unwrap_or(0.0);
-        match k.trim().to_ascii_lowercase().as_str() {
-            "type" => def.kind = n as i32,
-            "tickpowermin" => def.power_min = n as i32,
-            "tickpowermax" => def.power_max = n as i32,
-            "ticks" => def.ticks = n.max(0.0) as u32,
-            "ticktime" => def.tick_ms = n.max(0.0) as u64,
-            "tickfx" => def.tick_fx = n.max(0.0) as u16,
-            "override" => def.override_ = n != 0.0,
-            _ => {}
-        }
-    }
-    if let Some((id, def)) = cur {
-        out.insert(id, def);
-    }
-    out
-}
-
-type EotTable = Arc<HashMap<u16, EotDef>>;
-
-fn eot_table(recursos: &Path) -> EotTable {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, EotTable>>> = OnceLock::new();
-    let mut cache = CACHE.get_or_init(Default::default).lock().unwrap();
-    cache
-        .entry(recursos.to_path_buf())
-        .or_insert_with(|| {
-            // Windows-1252 file: only ASCII keys matter, so a lossy read is enough.
-            let bytes = std::fs::read(recursos.join("Dat").join("EffectsOverTime.dat")).unwrap_or_default();
-            Arc::new(parse_eots(&String::from_utf8_lossy(&bytes)))
-        })
-        .clone()
 }
 
 // ---------------------------------------------------------------- client spell book
@@ -297,7 +231,10 @@ impl World {
             }
             self.expire_status(id, now);
             self.tick_poison(id, now);
-            self.tick_eots(id, now);
+            self.tick_eots(Who::User(id), now);
+            if self.player(id).is_none_or(|p| p.combat.dead || p.hp <= 0) {
+                continue;
+            }
             self.tick_meditation(id, now);
             if self.player(id).is_some() {
                 self.refresh_status(id);
@@ -339,57 +276,6 @@ impl World {
         self.player_mut(id).status.poison_next = now.after_ms(rules::POISON_PERIOD_MS);
         self.console(id, "Estás envenenado, si no te curas morirás.", Tone::Combat);
         self.damage_player(id, dmg, "El veneno");
-    }
-
-    fn tick_eots(&mut self, id: u32, now: GameTime) {
-        if self.player(id).is_none_or(|p| p.status.eots.is_empty()) {
-            return;
-        }
-        let table = eot_table(&self.recursos.clone());
-        let mut i = 0;
-        while let Some(e) = self.player(id).and_then(|p| p.status.eots.get(i).cloned()) {
-            let Some(def) = table.get(&e.eot).cloned() else {
-                self.player_mut(id).status.eots.remove(i);
-                continue;
-            };
-            if e.ticks_left == 0 {
-                self.player_mut(id).status.eots.remove(i);
-                continue;
-            }
-            if now < e.next_tick {
-                i += 1;
-                continue;
-            }
-            {
-                let eot = &mut self.player_mut(id).status.eots[i];
-                eot.ticks_left -= 1;
-                eot.next_tick = now.after_ms(def.tick_ms.max(1));
-            }
-            let amount = roll(self, def.power_min, def.power_max);
-            let map = self.player(id).unwrap().map;
-            if def.tick_fx > 0 {
-                self.broadcast(map, &S2C::Fx { id, fx: def.tick_fx, loops: 0 }, None);
-            }
-            match def.kind {
-                1 if amount >= 0 => {
-                    self.heal_player(id, amount);
-                }
-                1 => {
-                    let src = self.player(e.source).map_or_else(|| "Un efecto".to_string(), |p| p.name.clone());
-                    self.damage_player(id, -amount, &src);
-                    if self.player(id).is_none_or(|p| p.status.eots.len() <= i) {
-                        return;
-                    }
-                }
-                9 => {
-                    let p = self.player_mut(id);
-                    p.mana = (p.mana + amount).clamp(0, p.max_mana);
-                    self.send_stats(id);
-                }
-                _ => {}
-            }
-            i += 1;
-        }
     }
 
     // ------------------------------------------------------------ meditation
@@ -593,10 +479,25 @@ impl World {
         if !self.class_may_use_spell(id, spell_id) {
             return refuse(self, "Tu clase no puede lanzar ese hechizo.".into());
         }
-        let p = self.player(id).unwrap();
-        if s.require_transform > 0 {
-            return refuse(self, "Ese hechizo requiere una transformación.".into());
+        // PuedeLanzar: forms cast only on themselves; CancelActiveEffect on an effect the
+        // target already has switches it off (free, the cast stops there).
+        if self.cast_only_on_self(id) && target != Target::User(id) {
+            return refuse(self, "En esta forma sólo podés lanzarte hechizos a vos mismo.".into());
         }
+        if s.effects.contains(Fx::CANCEL_ACTIVE_EFFECT) && s.eot_id > 0 {
+            if let Target::User(t) = target {
+                if let Some(i) = self.player(t).and_then(|p| p.status.eots.iter().position(|e| e.eot == s.eot_id as u16)) {
+                    self.remove_eot_at(Who::User(t), i);
+                    self.console(id, format!("Has cancelado {}.", s.name), Tone::Info);
+                    return false;
+                }
+            }
+        }
+        if s.require_transform > 0 && self.active_transform(id) != s.require_transform as u16 {
+            let form = self.ao.npcs.get(s.require_transform as u32).map_or_else(|| "otra criatura".to_string(), |d| d.name.clone());
+            return refuse(self, format!("Ese hechizo requiere la forma de {form}."));
+        }
+        let p = self.player(id).unwrap();
         if s.needs_obj > 0 {
             let has = |o: i32| p.inv.slots.iter().flatten().any(|it| it.obj as i32 == o);
             if !has(s.needs_obj) && !has(s.needs_obj2) {
@@ -646,16 +547,22 @@ impl World {
 
     /// `HandleHechizoUsuario` minus the costs (paid in `after_cast`).
     fn cast_on_user(&mut self, id: u32, spell_id: u16, s: &Spell, t: u32) -> bool {
-        if s.eot_id > 0 {
-            let table = eot_table(&self.recursos.clone());
-            let def = table.get(&(s.eot_id as u16)).cloned();
-            let has = self.player(t).unwrap().status.eots.iter().any(|e| e.eot == s.eot_id as u16);
-            if has && !def.as_ref().is_some_and(|d| d.override_) {
-                self.console(id, "El objetivo ya está afectado por ese efecto.", Tone::Warn);
+        let eot = s.eot_id.clamp(0, u16::MAX as i32) as u16;
+        if eot > 0 {
+            // Effects not ported here say so and cost nothing (audit bug 8).
+            if let Err(m) = self.eot_cast_check(Who::User(id), Who::User(t), eot) {
+                self.console(id, m, Tone::Warn);
                 return false;
             }
         }
         let ok = match s.spell_type {
+            // HechizoEstadoUsuario: a spell with an EotId succeeds by carrying it.
+            SpellType::Status if eot > 0 => {
+                if s.effects.contains(Fx::INVISIBILITY) {
+                    self.status_on_user(id, s, t);
+                }
+                self.player(t).is_some_and(|p| !p.combat.dead && p.hp > 0)
+            }
             SpellType::Status => self.status_on_user(id, s, t),
             SpellType::Properties => self.props_on_user(id, s, t),
             // HechizoCombinados applies both families.
@@ -669,33 +576,15 @@ impl World {
                 false
             }
         };
-        if ok && s.eot_id > 0 && self.player(t).is_some_and(|p| !p.combat.dead && p.hp > 0) {
-            self.start_eot(id, t, s.eot_id as u16);
-        }
-        // Spells that only carry an effect over time not ported yet (stat buffs, taunts,
-        // transforms...) do nothing: say so (no mana is spent, `after_cast` needs `ok`).
-        if !ok && s.eot_id > 0 && !eot_table(&self.recursos.clone()).get(&(s.eot_id as u16)).is_some_and(|d| matches!(d.kind, 1 | 9)) {
-            self.console(id, "Ese hechizo todavía no está disponible.", Tone::Warn);
+        // CreateEffect / Effect.Reset; a song or form cast again is switched off for free.
+        if ok && eot > 0 && self.player(t).is_some_and(|p| !p.combat.dead && p.hp > 0) && !self.apply_eot(Who::User(id), Who::User(t), eot, true) {
+            if !self.has_eot(Who::User(t), eot) {
+                self.console(id, format!("Has dejado de usar {}.", s.name), Tone::Info);
+            }
+            return false;
         }
         let _ = spell_id;
         ok
-    }
-
-    fn start_eot(&mut self, source: u32, t: u32, eot: u16) {
-        let table = eot_table(&self.recursos.clone());
-        let Some(def) = table.get(&eot) else { return };
-        if !matches!(def.kind, 1 | 9) {
-            // Stat modifiers, taunts, transforms... (other IBaseEffectOverTime classes).
-            return;
-        }
-        let now = self.now();
-        let e = ActiveEot { eot, source, ticks_left: def.ticks, next_tick: now.after_ms(def.tick_ms.max(1)) };
-        let eots = &mut self.player_mut(t).status.eots;
-        if let Some(old) = eots.iter_mut().find(|x| x.eot == eot) {
-            *old = e;
-        } else {
-            eots.push(e);
-        }
     }
 
     /// `HechizoEstadoUsuario` (the effects present in P1).
@@ -753,6 +642,11 @@ impl World {
                 return false;
             }
             if self.player(t).unwrap().status.paralysis_immune_until.is_some_and(|u| now < u) {
+                return false;
+            }
+            // eCCInmunity (cart shields): MsgCCInunity.
+            if self.cc_immune(Who::User(t)) {
+                warn(self, "El objetivo es inmune a los efectos de control.");
                 return false;
             }
             if !self.can_move(t) {
@@ -897,8 +791,10 @@ impl World {
                 self.console(id, "El usuario no tiene heridas.", Tone::Warn);
                 return false;
             }
-            let amount = roll(self, s.hp.min, s.hp.max);
-            let healed = self.heal_player(t, amount);
+            let amount = roll(self, s.hp.min, s.hp.max) as i64;
+            // HechizoPropUsuario: x GetMagicHealingBonus(caster) x GetSelfHealingBonus(target).
+            let amount = ao_rules::eot::scale(ao_rules::eot::scale(amount, self.modifiers(Who::User(id)).magic_healing_factor()), self.modifiers(Who::User(t)).self_healing_factor());
+            let healed = self.heal_player(t, amount as i32);
             if id != t {
                 let tname = self.player(t).unwrap().name.clone();
                 self.console(id, format!("Le has restaurado {healed} puntos de vida a {tname}."), Tone::Good);
@@ -920,10 +816,14 @@ impl World {
                 let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
                 rules::damage_vs_user(dmg, self.user_magic_resistance(t, false), pen, s.anti_magic_resistance != 0)
             };
+            // GetMagicDamageModifier(caster) x GetMagicDamageReduction(target).
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::User(t)).magic_taken()) as i32;
             let tname = self.player(t).unwrap().name.clone();
             self.console(id, format!("Le has quitado {dmg} puntos de vida a {tname}."), Tone::Combat);
             // As a player hit (not a named source): faction and kill credit apply to spells too.
             self.hurt_player(t, dmg, super::combat::Source::Player(id));
+            // TargetDidHit with e_magic (the VB calls it on spells against players).
+            self.eot_on_hit(id, Who::User(t));
             self.raise_skill(t, ao_formats::dat::balance::Skill::MagicResistance);
             ok = true;
         }
@@ -958,6 +858,44 @@ impl World {
     /// need fields on `Npc` (NPC system): not in P1.
     fn cast_on_npc(&mut self, id: u32, spell_id: u16, s: &Spell, nid: u32) -> bool {
         let map = self.player(id).unwrap().map;
+        let eot = s.eot_id.clamp(0, u16::MAX as i32) as u16;
+        if eot == 0 {
+            return self.cast_on_npc_effects(id, spell_id, s, nid);
+        }
+        if let Err(m) = self.eot_cast_check(Who::User(id), Who::Npc(map, nid), eot) {
+            self.console(id, m, Tone::Warn);
+            return false;
+        }
+        let ok = if s.spell_type == SpellType::Status {
+            // HechizoEstadoNPC: the EotId alone makes the cast; a harmful one needs a
+            // creature that may be attacked.
+            if s.target_effect == TargetEffect::Negative {
+                let number = self.instance(map).npcs.get(&nid).map_or(0, |n| n.def);
+                if !self.instance(map).npcs.get(&nid).is_some_and(|n| n.attackable) {
+                    self.console(id, "No podés atacar a esta criatura.", Tone::Warn);
+                    return false;
+                }
+                if let Some(why) = self.faction_npc_attack_refusal(id, number) {
+                    self.console(id, why, Tone::Warn);
+                    return false;
+                }
+                self.npc_attacked_by(map, nid, id);
+            }
+            if s.effects.contains(Fx::PARALYZE) || s.effects.contains(Fx::IMMOBILIZE) {
+                self.status_on_npc(id, s, map, nid);
+            }
+            true
+        } else {
+            self.cast_on_npc_effects(id, spell_id, s, nid)
+        };
+        if ok && self.instance(map).npcs.get(&nid).is_some_and(|n| n.alive()) {
+            self.apply_eot(Who::User(id), Who::Npc(map, nid), eot, true);
+        }
+        ok
+    }
+
+    fn cast_on_npc_effects(&mut self, id: u32, spell_id: u16, s: &Spell, nid: u32) -> bool {
+        let map = self.player(id).unwrap().map;
         let Some(n) = self.instance(map).npcs.get(&nid) else { return false };
         let (hp, max_hp, name) = (n.hp, n.max_hp, n.name.clone());
         match s.spell_type {
@@ -974,7 +912,9 @@ impl World {
                 self.console(id, "La criatura no tiene heridas que curar, el hechizo no tiene efecto.", Tone::Warn);
                 return false;
             }
-            let amount = roll(self, s.hp.min, s.hp.max).min(max_hp - hp);
+            let amount = roll(self, s.hp.min, s.hp.max) as i64;
+            let amount = ao_rules::eot::scale(ao_rules::eot::scale(amount, self.modifiers(Who::User(id)).magic_healing_factor()), self.modifiers(Who::Npc(map, nid)).self_healing_factor());
+            let amount = (amount as i32).min(max_hp - hp);
             let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
             n.hp += amount;
             let (hp, max_hp) = (n.hp, n.max_hp);
@@ -997,6 +937,7 @@ impl World {
                 rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0)
             };
             let _ = name;
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
             self.damage_npc(map, nid, dmg, id);
             return true;
         }
@@ -1055,8 +996,8 @@ impl World {
                 self.refresh_status(t);
             }
         }
-        // SubirSkill(Magia), except for physical skills (TipoHechizo 10).
-        if s.spell_type != SpellType::PhysicalSkill {
+        // SubirSkill(Magia), except for skills (`IsSkill`, TipoHechizo 10).
+        if s.spell_type != SpellType::PhysicalSkill && !s.requirements.contains(Req::IS_SKILL) {
             self.raise_skill(id, ao_formats::dat::balance::Skill::Magic);
         }
     }
@@ -1102,6 +1043,8 @@ impl World {
             } else {
                 dmg = rules::damage_vs_user(dmg, self.user_magic_resistance(pid, true), 0, s.anti_magic_resistance != 0);
             }
+            // NpcLanzaSpellSobreUser: x GetMagicDamageModifier(npc) x GetMagicDamageReduction(user).
+            dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::User(pid)).magic_taken()) as i32;
             self.pets_defend(pid, map, nid);
             self.damage_player(pid, dmg, &name);
             self.raise_skill(pid, ao_formats::dat::balance::Skill::MagicResistance);
@@ -1110,7 +1053,7 @@ impl World {
             return;
         }
         if s.eot_id > 0 {
-            self.start_eot(0, pid, s.eot_id as u16);
+            self.apply_eot(Who::Npc(map, nid), Who::User(pid), s.eot_id as u16, false);
         }
         let change = s.mana;
         if change.mode == 1 || change.mode == 2 {
@@ -1123,10 +1066,12 @@ impl World {
         // NpcLanzaSpellSobreUser: creatures paralyse/immobilise for Duration / 2; the ring of
         // immunity resists 1 in 8.
         let half = Some(now.after_secs(rules::vb_round(s.duration as f64 / 2.0).max(0) as u64));
-        let resisted = (fx.contains(Fx::PARALYZE) || fx.contains(Fx::IMMOBILIZE)) && self.resists_paralysis(pid, true);
+        let immune = self.cc_immune(Who::User(pid));
+        let resisted = (fx.contains(Fx::PARALYZE) || fx.contains(Fx::IMMOBILIZE)) && !immune && self.resists_paralysis(pid, true);
         if resisted {
             self.console(pid, "¡Tu anillo ha resistido la parálisis!", Tone::Good);
         }
+        let resisted = resisted || immune;
         let st = &mut self.player_mut(pid).status;
         if !resisted && fx.contains(Fx::PARALYZE) && st.paralyzed_until.is_none_or(|u| now >= u) {
             st.paralyzed_until = half;
@@ -1223,13 +1168,6 @@ mod tests {
         // And it takes its share off a spell: 100 damage, 11 % resisted.
         assert_eq!(rules::damage_vs_user(100, w.user_magic_resistance(1, false), 0, false), 89);
         assert_eq!(rules::damage_vs_user(100, w.user_magic_resistance(1, false), 0, true), 100, "AntiRM spells ignore it");
-    }
-
-    #[test]
-    fn eot_file_parses() {
-        let t = parse_eots("[INIT]\nEffectCount=2\n[EOT1] 'x\nType=1\nTickPowerMin=8\nTickPowerMax=12\nTicks=10\nTickTime=3000\nTickFX=144\nOverride=1\n[EOT2]\nType=1\nTickPowerMin=-15 'c\n");
-        assert_eq!(t[&1], EotDef { kind: 1, power_min: 8, power_max: 12, ticks: 10, tick_ms: 3000, tick_fx: 144, override_: true });
-        assert_eq!(t[&2].power_min, -15);
     }
 
     #[test]

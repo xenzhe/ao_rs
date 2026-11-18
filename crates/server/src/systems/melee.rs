@@ -5,6 +5,7 @@
 //! Protocol.bas (HandleAttack, HandleWorkLeftClick `Case e_Skill.Proyectiles`).
 use super::combat::{Fighter, Source};
 use super::creatures::Vs;
+use super::eot::Who;
 use crate::world::World;
 use ao_formats::dat::balance::{Class, Skill};
 use ao_formats::dat::obj::{ObjData, ObjType};
@@ -45,6 +46,17 @@ impl World {
         }
         self.player_mut(id).combat.last_attack = Some(now);
         if !self.spend_attack_stamina(id) {
+            return;
+        }
+        // TargetWillAttackPosition: Golpes Rápidos queues its extra blows.
+        self.eot_will_attack(id);
+        self.attack_front(id);
+    }
+
+    /// `UserAttackPosition`: the blow itself on the tile in front (also the extra blows
+    /// of `MultipleAttacks`, which skip the interval and the stamina).
+    pub(crate) fn attack_front(&mut self, id: u32) {
+        if self.is_dead(id) {
             return;
         }
         let p = self.player_mut(id);
@@ -258,8 +270,12 @@ impl World {
             return false;
         }
         let Some(f) = self.fighter(id) else { return false };
-        let attack = self.attack_power_of(&f);
-        let chance = if self.tsao_rules() { ao_rules::tsao_combat::hit_chance(attack, npc.evasion_power) } else { rules::user_hit_chance(attack, npc.evasion_power, 0) };
+        // EOT modifiers (GetHitBonus, GetEvasionBonus, GetDefenseBonus, GetLinearDamageBonus,
+        // GetPhysicalDamageModifier, GetPhysicDamageReduction).
+        let (um, nm) = (self.modifiers(Who::User(id)), self.modifiers(Who::Npc(map, nid)));
+        let attack = self.attack_power_of(&f) + um.hit as i64;
+        let evasion = npc.evasion_power + nm.evasion as i64;
+        let chance = if self.tsao_rules() { ao_rules::tsao_combat::hit_chance(attack, evasion) } else { rules::user_hit_chance(attack, evasion, 0) };
         let hit = self.chance(chance);
         if !hit {
             self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: false, damage: 0, critical: false }, None);
@@ -267,9 +283,10 @@ impl World {
         }
         self.raise_weapon_skill(id);
         let vs = self.melee_target_kind(map, nid);
-        let base = self.base_damage(&f, vs);
-        let def = (npc.defense - self.armor_penetration(&f, npc.defense)).max(0) as i64;
-        let mut damage = (base - def).max(0);
+        let base = self.base_damage(&f, vs) + um.linear_bonus(true) as i64;
+        let npc_def = npc.defense + nm.defense;
+        let def = (npc_def - self.armor_penetration(&f, npc_def)).max(0) as i64;
+        let mut damage = ao_rules::eot::scale(ao_rules::eot::scale(base - def, um.physical_factor(true)), nm.physical_taken()).max(0);
         // TSAO UserDañoNpc: pets x1.5, paladin bonus, 2-in-5 critical x2 (profile keys).
         let mut tsao_crit = false;
         if self.tsao_rules() {
@@ -299,6 +316,8 @@ impl World {
         let total = (damage + extra.max(0)) as i32;
         self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 || tsao_crit }, None);
         self.damage_npc(map, nid, total, id);
+        // TargetDidHit: on-hit effects (Filo de Toxina, Desgarro...).
+        self.eot_on_hit(id, Who::Npc(map, nid));
         true
     }
 
@@ -350,8 +369,9 @@ impl World {
         let (Some(fa), Some(fv)) = (self.fighter(a), self.fighter(v)) else { return false };
 
         // UsuarioImpacto
-        let attack = self.attack_power_of(&fa);
-        let mut evasion = rules::evasion_power(fv.skill(Skill::Tactics), fv.agility, fv.level, fv.mods.evasion, 0);
+        let (am, vm) = (self.modifiers(Who::User(a)), self.modifiers(Who::User(v)));
+        let attack = self.attack_power_of(&fa) + am.hit as i64;
+        let mut evasion = rules::evasion_power(fv.skill(Skill::Tactics), fv.agility, fv.level, fv.mods.evasion, 0) + vm.evasion as i64;
         let mut block = 0;
         if let Some(s) = self.obj(fv.shield).cloned() {
             if s.percentage > 0 {
@@ -388,7 +408,7 @@ impl World {
 
         self.raise_weapon_skill(a);
         // UserDamageToUser
-        let base = self.base_damage(&fa, Vs::User);
+        let base = self.base_damage(&fa, Vs::User) + am.linear_bonus(false) as i64;
         // Body part 1..8; past the torso it is re-rolled among legs/arms/torso (only the
         // console text of the original depends on which one).
         let place = self.roll(1, 8);
@@ -406,8 +426,9 @@ impl World {
                 def += self.roll(o.min_def, o.max_def);
             }
         }
+        let def = def + vm.defense;
         let def = (def - self.armor_penetration(&fa, def)).max(0) as i64;
-        let mut damage = (base - def).max(0);
+        let mut damage = ao_rules::eot::scale(ao_rules::eot::scale(base - def, am.physical_factor(false)), vm.physical_taken()).max(0);
         if self.tsao_rules() {
             // TSAO "BALANCEO": class percents and the flat class-versus-class bonus.
             let ranged = self.obj(fa.weapon).is_some_and(|w| w.projectile > 0);

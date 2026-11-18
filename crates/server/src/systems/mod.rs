@@ -9,6 +9,7 @@ mod melee;
 mod progression;
 mod combat;
 mod magic;
+pub(crate) mod eot;
 mod movement;
 mod npc_ai;
 mod regen;
