@@ -87,6 +87,44 @@ fn a_quest_object_offers_its_quest() {
     assert!(!b.console().any(|l| l.contains("Has aceptado")));
 }
 
+/// Campfires: wood on the floor + a dagger -> unlit campfire (1 in 3 with no survival
+/// skill), a click lights it (1 in 4), never in a safe map.
+#[test]
+fn wood_and_a_dagger_make_a_campfire_that_a_click_lights() {
+    const WOOD: u16 = 58;
+    const DAGGER: u16 = 15;
+    const UNLIT: u16 = 136;
+    const LIT: u16 = 63;
+    let s = TestServer::start_at(2, 50, 50);
+    let mut b = s.bot("Explorador");
+    let here = b.pos();
+    b.say(&format!("/dar {WOOD} 9"));
+    b.say(&format!("/dar {DAGGER} 1"));
+    b.wait_until("leña y daga", |b| slot_of(b, WOOD).is_some() && slot_of(b, DAGGER).is_some());
+    s.advance(500);
+    b.send(&C2S::DropItem { slot: slot_of(&b, WOOD).unwrap(), amount: 9 });
+    b.wait_until("leña en el suelo", |b| b.game.local.ground.get(&here).is_some_and(|g| g.0 == WOOD));
+    b.send(&C2S::Interact { tx: here.0, ty: here.1 });
+    for _ in 0..60 {
+        if b.game.local.ground.get(&here).is_some_and(|g| g.0 == UNLIT) {
+            break;
+        }
+        s.advance(400);
+        b.send(&C2S::UseItem { slot: slot_of(&b, DAGGER).unwrap() });
+        b.sync();
+    }
+    assert_eq!(b.game.local.ground.get(&here).map(|g| g.0), Some(UNLIT), "the wood became an unlit campfire");
+    for _ in 0..80 {
+        if b.game.local.ground.get(&here).is_some_and(|g| g.0 == LIT) {
+            break;
+        }
+        s.advance(400);
+        b.send(&C2S::Interact { tx: here.0, ty: here.1 });
+        b.sync();
+    }
+    assert_eq!(b.game.local.ground.get(&here).map(|g| g.0), Some(LIT), "lit: {:?}", b.console().collect::<Vec<_>>());
+}
+
 #[test]
 fn an_empty_bottle_is_filled_next_to_water_only() {
     // A dry tile with water within two tiles, on the first maps.

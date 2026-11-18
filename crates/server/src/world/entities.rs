@@ -20,6 +20,8 @@ pub struct Player {
     pub last_refusal: Option<String>,
     /// Last door clicked (`flags.TargetObjMap/X/Y`), for keys used from the inventory.
     pub target_door: Option<(u16, i32, i32)>,
+    /// Last floor stack clicked (wood for the dagger, campfires).
+    pub target_floor: Option<(u16, i32, i32)>,
     /// `/hogar`: when the ghost arrives home (`Accion.TipoAccion = Hogar`).
     pub going_home: Option<crate::clock::GameTime>,
     /// Walking speed multiplier (`Char.speeding`), kept by `systems::speed`.

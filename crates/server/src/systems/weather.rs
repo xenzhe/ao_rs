@@ -58,6 +58,7 @@ impl World {
             if self.rng.range(1, 5) <= 2 {
                 self.weather.precipitation = true;
                 thunder = true;
+                self.put_out_campfires();
             }
         }
         let w = &mut self.weather;

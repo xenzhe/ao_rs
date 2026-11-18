@@ -32,7 +32,7 @@ impl World {
         }
         let Some(nid) = self.instance(map).npc_at(tx, ty) else {
             // Map objects with an action: the anvil opens the blacksmith (craft system).
-            if self.door_click(id, tx, ty) || self.craft_click_tile(id, tx, ty) || self.tsao_click_player(id, map, tx, ty) {
+            if self.door_click(id, tx, ty) || self.craft_click_tile(id, tx, ty) || self.floor_click(id, map, tx, ty) || self.tsao_click_player(id, map, tx, ty) {
                 return;
             }
             self.console(id, "No hay nada con que interactuar ahi.", Tone::Info);

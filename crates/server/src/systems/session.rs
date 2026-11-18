@@ -147,6 +147,7 @@ impl World {
             char_id,
             last_refusal: None,
             target_door: None,
+            target_floor: None,
             going_home: None,
             speed: 1.0,
             mounted: None,

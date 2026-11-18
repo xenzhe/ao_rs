@@ -30,6 +30,7 @@ mod craft;
 mod doors;
 mod maprules;
 mod speed;
+mod campfire;
 mod gm;
 mod gm_mod;
 mod gm_tsao;

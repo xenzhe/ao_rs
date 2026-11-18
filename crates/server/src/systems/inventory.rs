@@ -623,6 +623,8 @@ impl World {
             ObjType::Potions => self.use_potion(id, slot, o, free),
             ObjType::Keys => self.use_key(id, slot),
             ObjType::Saddles => self.use_saddle(id, slot),
+            // The dagger on a pile of wood (UseInvItem otWeapon: TratarDeHacerFogata).
+            ObjType::Weapon if item.obj == super::campfire::DAGGER && self.try_make_campfire(id) => {}
             ObjType::EmptyBottle => self.fill_bottle(id, slot, o),
             ObjType::MusicalInstruments => self.play_instrument(id, o),
             ObjType::Parchment => {
