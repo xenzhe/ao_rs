@@ -96,4 +96,22 @@ pub enum GmS2C {
     Rank { rank: GmRank },
     Online { players: Vec<GmPlayerRow> },
     Log { entries: Vec<GmLogRow> },
+    /// Open help requests (`/GM` questions and `/DENUNCIAR` reports), oldest first.
+    /// Sent with every panel refresh (`HandleSOSShowList` / `WriteShowSOSForm`).
+    Sos { entries: Vec<GmSosRow> },
+}
+
+/// One open help request (`Ayuda` queue entry: name, text, kind, time).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct GmSosRow {
+    /// What `/ATENDER id` takes.
+    pub id: i64,
+    pub name: String,
+    /// `TipoDeConsulta` ("Consulta regular", "Denuncia a X"...).
+    pub kind: String,
+    pub text: String,
+    /// Unix seconds.
+    pub at: i64,
+    /// The author is online now.
+    pub online: bool,
 }

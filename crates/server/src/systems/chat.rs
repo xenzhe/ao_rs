@@ -38,6 +38,7 @@ impl World {
             return self.console(id, "No hagas flood.", Tone::Warn);
         }
         let name = p.name.clone();
+        self.gm_chat_record(id, &clean);
         let line = |target: &str| S2C::Channel(ChannelS2C::Message { channel: kind, author: name.clone(), target: target.to_string(), text: clean.clone() });
         match msg {
             ChannelC2S::Whisper { to, .. } => self.channel_whisper(id, to.trim(), &line),
@@ -107,7 +108,7 @@ impl World {
 
     /// HandleGlobalMessage: interval between lines, enough gold (charged), then everyone.
     fn channel_global(&mut self, id: u32, line: &dyn Fn(&str) -> S2C) {
-        if !GLOBAL_ENABLED {
+        if !GLOBAL_ENABLED || self.global_chat_off() {
             return self.console(id, "El global se encuentra Desactivado.", Tone::Warn);
         }
         let now = self.now();
@@ -147,6 +148,7 @@ impl World {
             return self.console(id, "No hagas flood.", Tone::Warn);
         }
         let (name, map) = (p.name.clone(), p.map);
+        self.gm_chat_record(id, &clean);
         self.broadcast(map, &S2C::Console { text: format!("{name}: {clean}"), color: Tone::Chat }, None);
         self.reveal(id);
     }
@@ -157,6 +159,9 @@ impl World {
     ///   maps (TCP_HandleData2.bas).
     /// - `/online`: how many players are in.
     fn player_command(&mut self, id: u32, line: &str) -> bool {
+        if self.sos_player_command(id, line) {
+            return true;
+        }
         let cmd = line.split_whitespace().next().unwrap_or("").to_lowercase();
         match cmd.as_str() {
             "/regresar" => {

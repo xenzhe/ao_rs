@@ -4,7 +4,7 @@
 //! The rank only decides whether the panel shows; every command is checked again by the
 //! server, so a tampered client gains nothing.
 use crate::state::Game;
-use ao_protocol::p4::gm::{GmLogRow, GmPlayerRow, GmRank};
+use ao_protocol::p4::gm::{GmLogRow, GmPlayerRow, GmRank, GmSosRow};
 use ao_protocol::{GmC2S, GmS2C, C2S};
 
 #[derive(Debug, Default)]
@@ -14,6 +14,8 @@ pub struct GmState {
     pub online: Vec<GmPlayerRow>,
     /// Newest first.
     pub log: Vec<GmLogRow>,
+    /// Open help requests (`/GM`, `/DENUNCIAR`), oldest first.
+    pub sos: Vec<GmSosRow>,
     /// Bumped on every list received (the panel uses it to refresh on its own).
     pub updates: u32,
 }
@@ -27,6 +29,7 @@ impl GmState {
                 self.updates = self.updates.wrapping_add(1);
             }
             GmS2C::Log { entries } => self.log = entries.clone(),
+            GmS2C::Sos { entries } => self.sos = entries.clone(),
         }
     }
 
@@ -53,6 +56,13 @@ pub fn action_line(action: &str, name: &str, minutes: u32, reason: &str) -> Stri
         "echar" => format!("/ECHAR {name}"),
         "revivir" => format!("/REVIVIR {name}"),
         "penas" => format!("/PENAS {name}"),
+        "stat" => format!("/STAT {name}"),
+        "inv" => format!("/INV {name}"),
+        "bov" => format!("/BOV {name}"),
+        "skills" => format!("/SKILLS {name}"),
+        "ip" => format!("/NICK2IP {name}"),
+        // The minutes field holds the days here (`/BANT`).
+        "bant" => format!("/BANT {name}@{reason}@{}", minutes.max(1)),
         _ => String::new(),
     }
 }
@@ -98,5 +108,7 @@ mod tests {
         assert_eq!(action_line("silenciar", "Beto", 5, "x"), "/SILENCIAR Beto@5");
         assert_eq!(action_line("ir", "Beto", 0, ""), "/IRA Beto");
         assert_eq!(action_line("nada", "Beto", 0, ""), "");
+        assert_eq!(action_line("bant", "Beto", 3, "flood"), "/BANT Beto@flood@3");
+        assert_eq!(action_line("bant", "Beto", 0, ""), "/BANT Beto@sin motivo@1");
     }
 }

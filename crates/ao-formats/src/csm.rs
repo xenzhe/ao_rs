@@ -393,6 +393,36 @@ impl AoMap {
         (i >= 0).then(|| self.exits[i as usize])
     }
 
+    /// Sets (Some: map, x, y) or clears (None) the exit of a tile at runtime (`/CT`, `/DT`:
+    /// `MapData.TileExit`). Off-map tiles are ignored.
+    pub fn set_exit(&mut self, x: i32, y: i32, dest: Option<(u16, i32, i32)>) {
+        if !on_map(x, y) {
+            return;
+        }
+        let t = tile(x, y);
+        match (dest, self.exit_at[t]) {
+            (Some((map, dest_x, dest_y)), i) => {
+                let e = TileExit { x, y, map, dest_x, dest_y };
+                if i >= 0 {
+                    self.exits[i as usize] = e;
+                } else {
+                    self.exit_at[t] = self.exits.len() as i32;
+                    self.exits.push(e);
+                }
+            }
+            (None, i) if i >= 0 => {
+                // Swap-remove keeps the other indexes valid with one fix-up.
+                let i = i as usize;
+                self.exits.swap_remove(i);
+                self.exit_at[t] = -1;
+                if let Some(moved) = self.exits.get(i) {
+                    self.exit_at[tile(moved.x, moved.y)] = i as i32;
+                }
+            }
+            (None, _) => {}
+        }
+    }
+
     /// Roof id that covers (x, y): the tile's own roof trigger or a neighbour's (NearRoof).
     pub fn near_roof(&self, x: i32, y: i32) -> u16 {
         for ly in y - 1..=y + 1 {

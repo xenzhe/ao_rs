@@ -26,6 +26,50 @@ struct PanelState {
     line: String,
     last_refresh: f64,
     scroll: usize,
+    /// Bottom area shows the log instead of the help requests.
+    show_log: bool,
+}
+
+/// The open help requests: who, what kind, when and the text, with "Ir" and "Atendido".
+fn help_list(game: &mut Game, r: Rect, tips: &mut Vec<String>, u: f32) {
+    let rows = game.local.p4.gm.sos.clone();
+    if rows.is_empty() {
+        text_with(FontKind::NarrativeItalic, "Nadie pidió ayuda. Los jugadores escriben /GM o /DENUNCIAR.", r.x + 12.0 * u, r.y + 24.0 * u, 15.0 * u, TEXT_FAINT);
+        return;
+    }
+    let row_h = 26.0 * u;
+    let fits = ((r.h - 6.0 * u) / row_h).floor().max(0.0) as usize;
+    let mut send: Option<String> = None;
+    for (i, s) in rows.iter().take(fits).enumerate() {
+        let row = Rect::new(r.x + 2.0 * u, r.y + 3.0 * u + i as f32 * row_h, r.w - 4.0 * u, row_h - 2.0 * u);
+        let yy = row.y + 17.0 * u;
+        let report = s.kind.starts_with("Denuncia");
+        text_with(FontKind::Body, &hhmm(s.at), row.x + 10.0 * u, yy, 14.0 * u, TEXT_FAINT);
+        kit::fit(FontKind::Body, &s.name, row.x + 56.0 * u, yy, 15.0 * u, 100.0 * u, if s.online { GOLD_TEXT } else { TEXT_FAINT });
+        kit::fit(FontKind::Body, &s.kind, row.x + 162.0 * u, yy, 14.0 * u, 120.0 * u, if report { BAD } else { GOOD });
+        let text_r = Rect::new(row.x + 288.0 * u, row.y, row.w - 288.0 * u - 150.0 * u, row.h);
+        kit::fit(FontKind::Body, &s.text, text_r.x, yy, 14.0 * u, text_r.w, TEXT);
+        if kit::hover(text_r) {
+            *tips = vec![format!("{} ({})", s.name, s.kind), s.text.clone()];
+        }
+        let go = Rect::new(row.right() - 146.0 * u, row.y + 1.0 * u, 56.0 * u, row.h - 2.0 * u);
+        let done = Rect::new(row.right() - 84.0 * u, row.y + 1.0 * u, 82.0 * u, row.h - 2.0 * u);
+        if button_kind(go, "Ir", Kind::Secondary, s.online, u) && s.online {
+            send = Some(format!("/IRA {}", s.name));
+        }
+        if button_kind(done, "Atendido", Kind::Secondary, true, u) {
+            send = Some(format!("/ATENDER {}", s.id));
+        }
+        if kit::hover(done) {
+            *tips = vec!["Cierra el pedido y avisa al jugador si está conectado".into()];
+        }
+    }
+    if rows.len() > fits {
+        text_with(FontKind::Body, &format!("y {} más (/SHOW SOS)", rows.len() - fits), r.right() - 150.0 * u, r.bottom() - 6.0 * u, 13.0 * u, TEXT_FAINT);
+    }
+    if let Some(line) = send {
+        game.gm_command(line);
+    }
 }
 
 thread_local! {
@@ -155,11 +199,21 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
             text_with(FontKind::NarrativeItalic, "Elige un jugador de la lista", ax, y + 40.0 * u, 17.0 * u, TEXT_FAINT);
         }
     }
-    y += 70.0 * u;
-    let bw = (aw - 16.0 * u) / 3.0;
+    y += 64.0 * u;
+    let bw =(aw - 16.0 * u) / 3.0;
     let bh = 28.0 * u;
     let mut send: Option<&str> = None;
-    let grid = [("Ir", "ir", "Ir hasta él (/IRA)"), ("Traer", "traer", "Traerlo a tu lado (/SUM)"), ("Info", "info", "Datos del personaje (/INFO)"), ("Penas", "penas", "Historial de penas (/PENAS)"), ("Revivir", "revivir", "Resucitar o curar (/REVIVIR)"), ("Echar", "echar", "Desconectarlo (/ECHAR)")];
+    let grid = [
+        ("Ir", "ir", "Ir hasta él (/IRA)"),
+        ("Traer", "traer", "Traerlo a tu lado (/SUM)"),
+        ("Info", "info", "Datos del personaje (/INFO)"),
+        ("Penas", "penas", "Historial de penas (/PENAS)"),
+        ("Revivir", "revivir", "Resucitar o curar (/REVIVIR)"),
+        ("Echar", "echar", "Desconectarlo (/ECHAR)"),
+        ("Stats", "stat", "Muertes, oro y pena (/STAT)"),
+        ("Inventario", "inv", "Lo que lleva encima (/INV)"),
+        ("IP", "ip", "Su IP y quién más entra desde ella (/NICK2IP)"),
+    ];
     for (i, (label, action, tip)) in grid.iter().enumerate() {
         let b = Rect::new(ax + (i % 3) as f32 * (bw + 8.0 * u), y + (i / 3) as f32 * (bh + 6.0 * u), bw, bh);
         if button_kind(b, label, Kind::Secondary, selected.is_some(), u) && selected.is_some() {
@@ -169,12 +223,12 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
             tips = vec![tip.to_string()];
         }
     }
-    y += 2.0 * (bh + 6.0 * u) + 2.0 * u;
+    y += 3.0 * (bh + 6.0 * u);
     let mut sy = kit::section("Sanción", ax, y, aw, u);
     let min_r = Rect::new(ax, sy, 64.0 * u, 26.0 * u);
     text_field(ui, "gm_minutes", &mut st.minutes, min_r, 6, false, |c| c.is_ascii_digit());
     if st.minutes.is_empty() && ui.focus.as_deref() != Some("gm_minutes") {
-        super::widgets::placeholder(min_r, "min", u);
+        super::widgets::placeholder(min_r, "min/días", u);
     }
     let why_r = Rect::new(min_r.right() + 8.0 * u, sy, aw - 72.0 * u, 26.0 * u);
     text_field(ui, "gm_reason", &mut st.reason, why_r, 60, false, |c| c != '@');
@@ -182,20 +236,27 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
         super::widgets::placeholder(why_r, "Motivo (opcional)", u);
     }
     sy += 34.0 * u;
-    let hw = (aw - 8.0 * u) / 2.0;
-    let b1 = Rect::new(ax, sy, hw, bh);
-    let b2 = Rect::new(ax + hw + 8.0 * u, sy, hw, bh);
+    let tw = (aw - 16.0 * u) / 3.0;
+    let b1 = Rect::new(ax, sy, tw, bh);
+    let b2 = Rect::new(ax + tw + 8.0 * u, sy, tw, bh);
+    let b3 = Rect::new(ax + 2.0 * (tw + 8.0 * u), sy, tw, bh);
     if button_kind(b1, "Silenciar", Kind::Secondary, selected.is_some(), u) && selected.is_some() {
         send = Some("silenciar");
     }
     if button_kind(b2, "Encarcelar", Kind::Danger, selected.is_some(), u) && selected.is_some() {
         send = Some("carcel");
     }
+    if button_kind(b3, "Banear días", Kind::Danger, selected.is_some(), u) && selected.is_some() {
+        send = Some("bant");
+    }
     if kit::hover(b1) {
         tips = vec!["Silenciar los minutos indicados (0 = quitar)".into()];
     }
     if kit::hover(b2) {
         tips = vec!["Encarcelar los minutos indicados (0 = liberar)".into()];
+    }
+    if kit::hover(b3) {
+        tips = vec!["Ban temporal: la cifra son días (1 a 255) (/BANT)".into()];
     }
     if let (Some(action), Some(name)) = (send, &selected) {
         let minutes = st.minutes.parse().unwrap_or(0);
@@ -218,11 +279,34 @@ fn panel(ui: &mut Ui, game: &mut Game, r: Rect, st: &mut PanelState) {
         st.last_refresh = -100.0;
     }
 
-    // ---- recent log
+    // ---- bottom: help requests (when there are any, they come first) or the recent log
     let ly = cy + 40.0 * u;
-    let hy = kit::section("Registro reciente", r.x, ly, r.w, u);
+    let open = game.local.p4.gm.sos.len();
+    let tab_w = 190.0 * u;
+    let t1 = Rect::new(r.x, ly, tab_w, 26.0 * u);
+    let t2 = Rect::new(r.x + tab_w + 8.0 * u, ly, tab_w, 26.0 * u);
+    let help_label = if open > 0 { format!("Pedidos de ayuda ({open})") } else { "Pedidos de ayuda".to_string() };
+    if button_kind(t1, &help_label, if st.show_log { Kind::Ghost } else { Kind::Secondary }, true, u) {
+        st.show_log = false;
+    }
+    if button_kind(t2, "Registro reciente", if st.show_log { Kind::Secondary } else { Kind::Ghost }, true, u) {
+        st.show_log = true;
+    }
+    if open > 0 && st.show_log {
+        let dot = Rect::new(t1.right() - 12.0 * u, t1.y + 4.0 * u, 6.0 * u, 6.0 * u);
+        draw_circle(dot.x, dot.y, 4.0 * u, BAD);
+    }
+    kit::rule(r.x, ly + 32.0 * u, r.w, GOLD_DIM);
+    let hy = ly + 40.0 * u;
     let log_r = Rect::new(r.x, hy - 4.0 * u, r.w, r.bottom() - hy + 4.0 * u);
     kit::well(log_r, u);
+    if !st.show_log {
+        help_list(game, log_r, &mut tips, u);
+        if !tips.is_empty() {
+            tooltip(&tips, u);
+        }
+        return;
+    }
     let lines = ((log_r.h - 8.0 * u) / (20.0 * u)).floor().max(0.0) as usize;
     let log = &game.local.p4.gm.log;
     if log.is_empty() {

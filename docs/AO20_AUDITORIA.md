@@ -54,6 +54,49 @@ restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
 - **Reloj del mundo**: el servidor manda la hora; día de 120 minutos (`day_length_minutes`),
   todos ven la misma hora; empieza a las 08:00 al arrancar.
 
+## Fase 5 hecha (18/11): GM y moderación
+
+Código en `crates/server/src/systems/gm_mod.rs` (los comandos de siempre siguen en `gm.rs`),
+migración `0014_gm_moderation.sql` y protocolo 17 (`GmS2C::Sos`). Rangos como en el VB:
+
+- **Ban temporal** (`Admin.BanTemporal`): `/BANT nick@motivo@días` (SemiDiós, 1 a 255 días;
+  el VB solo lo mandaba desde el panel). Se guarda en `gm_ban.until`, caduca solo (barrido
+  cada minuto con aviso a los GM, y también al intentar entrar) y `/UNBAN` lo levanta antes.
+  Echa al personaje si está conectado. Botón «Banear días» en el panel.
+- **Inspección**: `/STAT`, `/INV`, `/BOV`, `/SKILLS` (SemiDiós), `/BAL` (Admin), `/NICK2IP`,
+  `/IP2NICK`, `/ONLINEGM`, `/ONLINEMAP [mapa]` (SemiDiós; a un SemiDiós no le salen los Dioses
+  ni los Admins, como en el VB). Botones Stats, Inventario e IP en el panel.
+- **Moderación**: `/ESTUPIDO` y `/NOESTUPIDO` (Dios), `/BORRARPENA nick@n@texto` (cambia el
+  texto de la pena n, como `CambiarPenaDatabase`), `/ECHARTODOSPJS` (solo usuarios), `/GRABAR`.
+- **Ayuda y denuncias** (`Ayuda`, `QuestionGM`, `Denounce`): `/GM [tipo@]texto` (una cada
+  5 minutos), `/DENUNCIAR nick` (lleva las últimas 15 líneas que dijo el denunciado y responde
+  igual si no está conectado), `/SHOW SOS`, `/ATENDER id` (Consejero; avisa al jugador),
+  `/BORRAR SOS` (Dios). La cola está en la base de datos. El panel de GM tiene la pestaña
+  «Pedidos de ayuda» con Ir y Atendido.
+- **Mapa y mundo**: `/CT mapa x y [radio]` y `/DT [x y]` (Dios), `/MODMAPINFO PK|RESTRINGIR|
+  MAGIASINEFECTO|INVISINEFECTO|TERRENO|ZONA` (Dios, hasta reiniciar), `/MOTDCAMBIA` y `/MOTD`
+  (el MOTD se muestra al entrar), `/GLOBAL` (Dios), `/CR segundos` (Consejero: cuenta a todos
+  e inmoviliza a los de alrededor), `/LIMPIAR` (SemiDiós).
+
+**Bugs del VB corregidos**: el ban temporal no miraba el rango ni si el personaje existía, no
+echaba al conectado, un segundo ban creaba otra entrada (la primera en vencer lo desbaneaba) y
+el barrido borraba dentro de un `For` (se saltaba la entrada siguiente); `CleanWorld` solo
+escribía el mensaje; `GlobalOnOff` anunciaba sin cambiar nada; `ChangeMapInfoPK` guardaba el
+seguro al revés; `NoMagic`/`NoInvi` solo escribían el registro; `MakeDumb` no comparaba
+rangos; la cola de ayuda se perdía al reiniciar y `SOSRemove` buscaba por el texto entero.
+
+**Pruebas**: `crates/server/tests/p5_gm.rs` (bots: cada comando sin rango, ban temporal,
+inspección con filtros por rango, moderación, SOS y denuncias, teleport andando, MOTD, global,
+cuenta atrás), tests de `db/gm.rs` y `systems/gm_mod.rs` (vencimiento del ban, cuenta atrás,
+teleport). Panel capturado con `scripts/captura_invisible.ps1`.
+
+**Falta**: inspeccionar personajes desconectados (el VB tampoco lo hace); `/MODMAPINFO`
+no se guarda en el mapa (en el VB, `Backup`, `Terreno` y `Zona` iban al `.dat`) y no hay
+`BACKUP` ni `RESUSINEFECTO` (no existen esos datos aquí); los teleports de `/CT` desaparecen al
+reiniciar; el cliente no mueve al azar a un jugador estúpido (solo lo marca); siguen sin portar
+`WarpMeToTarget`, `NPCFollow`, `SpawnCreature`, `TalkAsNPC`, `CerrarCliente`, `AlterName`,
+`Working`/`Hiding`, clima y sonido, y los comandos de eventos y lobby (fase 6).
+
 ## Hallazgo importante: datos del servidor desfasados
 
 El servidor lee `Dat/` (npcs.dat, obj.dat, misiones…) del repositorio público, pero los

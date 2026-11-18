@@ -64,13 +64,13 @@ use ao_rules::{Dir, MAX_CHAT};
 use std::net::IpAddr;
 use tracing::{info, warn};
 
-const DENIED: &str = "Servidor » Comando deshabilitado para tu cargo.";
-const NOT_ONLINE: &str = "El usuario no está online.";
-const HIGHER: &str = "No puedes hacer eso a un administrador de mayor o igual rango.";
-const MS_PER_MIN: u64 = 60_000;
+pub(crate) const DENIED: &str = "Servidor » Comando deshabilitado para tu cargo.";
+pub(crate) const NOT_ONLINE: &str = "El usuario no está online.";
+pub(crate) const HIGHER: &str = "No puedes hacer eso a un administrador de mayor o igual rango.";
+pub(crate) const MS_PER_MIN: u64 = 60_000;
 
 /// Splits the arguments like the VB client: by `@` if there is one, else by spaces.
-fn args(rest: &str) -> Vec<String> {
+pub(crate) fn args(rest: &str) -> Vec<String> {
     let rest = rest.trim();
     if rest.is_empty() {
         return Vec::new();
@@ -94,8 +94,20 @@ pub fn parse_seed(s: &str) -> Vec<(String, GmRank)> {
         .collect()
 }
 
-fn mins(ms: u64) -> u64 {
+pub(crate) fn mins(ms: u64) -> u64 {
     ms.div_ceil(MS_PER_MIN)
+}
+
+/// "durante 3 días más" / "durante 5 horas más" for a temporary ban with `secs` left.
+pub(crate) fn ban_left(secs: i64) -> String {
+    let secs = secs.max(1);
+    if secs >= 86_400 {
+        let d = (secs + 86_399) / 86_400;
+        format!("durante {d} día{} más", if d == 1 { "" } else { "s" })
+    } else {
+        let h = (secs + 3_599) / 3_600;
+        format!("durante {h} hora{} más", if h == 1 { "" } else { "s" })
+    }
 }
 
 impl World {
@@ -138,6 +150,18 @@ impl World {
             "/CI" | "/QUITAR" | "/ROL" | "/APAGAR" => GmRank::Admin,
             // `/dar` without `@` is the development command (`/dar obj cant`).
             "/DAR" if rest.contains('@') => GmRank::Admin,
+            // Phase 5 (systems/gm_mod.rs): inspection, moderation, help queue, map and world.
+            c if Self::gm_mod_rank(c).is_some() => {
+                let need = Self::gm_mod_rank(c).unwrap();
+                if rank < need {
+                    self.console(id, DENIED, Tone::Warn);
+                    return true;
+                }
+                let me = self.name_of(id);
+                info!(gm = %me, %line, "comando de GM");
+                self.gm_mod(id, &me, c, rest.trim(), &a);
+                return true;
+            }
             "/KILL" | "/HOME" | "/LIBERAR" | "/DEST" | "/GO" | "/SMSG" | "/HORA" | "/IRCERCA" | "/SOBJ" | "/NENE" | "/TRIGGER" | "/BLOQ" | "/LMAP" | "/EXP" | "/GLD" | "/HECHIZO" => {
                 let need = Self::gm_tsao_rank(cmd.as_str()).unwrap();
                 if rank < need {
@@ -209,8 +233,11 @@ impl World {
         if self.gms.shut_down {
             return Some("El servidor se está apagando.".into());
         }
-        if let Ok(Some(reason)) = self.db.gm_ban_reason(character) {
-            return Some(format!("Este personaje está baneado: {reason}"));
+        if let Ok(Some((reason, until))) = self.db.gm_ban_reason(character, self.unix_now()) {
+            return Some(match until {
+                None => format!("Este personaje está baneado: {reason}"),
+                Some(u) => format!("Este personaje está baneado {}: {reason}", ban_left(u - self.unix_now())),
+            });
         }
         let gm = self.offline_rank(character).is_gm();
         if let (false, Some(ip)) = (gm, ip) {
@@ -235,6 +262,7 @@ impl World {
         }
         self.tick_no_respawn();
         self.tick_shutdown(now);
+        self.tick_moderation(now);
     }
 
     /// When the player enters the world (after everything else is sent).
@@ -269,6 +297,7 @@ impl World {
         if silence_ms > 0 {
             self.console(id, format!("Estás silenciado. Te quedan {} minutos.", mins(silence_ms)), Tone::Warn);
         }
+        self.gm_mod_on_enter(id);
     }
 
     /// Right before the player leaves the world, still present.
@@ -311,7 +340,7 @@ impl World {
         }
     }
 
-    fn online(&self, name: &str) -> Option<u32> {
+    pub(crate) fn online(&self, name: &str) -> Option<u32> {
         self.player_ids().into_iter().find(|i| self.player(*i).is_some_and(|p| p.name.eq_ignore_ascii_case(name)))
     }
 
@@ -322,7 +351,7 @@ impl World {
     }
 
     /// Rank of a character, online or not.
-    fn rank_of(&self, name: &str) -> GmRank {
+    pub(crate) fn rank_of(&self, name: &str) -> GmRank {
         match self.online(name) {
             Some(t) => self.gm_rank(t),
             None => self.offline_rank(name),
@@ -330,7 +359,7 @@ impl World {
     }
 
     /// The target online, of a lower rank than the actor. Says why not otherwise.
-    fn target(&self, id: u32, a: &[String], usage: &str) -> Option<u32> {
+    pub(crate) fn target(&self, id: u32, a: &[String], usage: &str) -> Option<u32> {
         let Some(name) = a.first().filter(|n| !n.is_empty()) else {
             self.console(id, usage, Tone::Info);
             return None;
@@ -351,20 +380,20 @@ impl World {
         self.player(id).map(|p| p.name.clone()).unwrap_or_default()
     }
 
-    fn log_gm(&self, gm: &str, action: &str, target: &str, detail: &str) {
+    pub(crate) fn log_gm(&self, gm: &str, action: &str, target: &str, detail: &str) {
         if let Err(e) = self.db.gm_log(gm, action, target, detail) {
             warn!(?e, "no se pudo escribir el registro de GM");
         }
     }
 
-    fn penalty(&self, target: &str, gm: &str, kind: &str, minutes: i64, reason: &str) {
+    pub(crate) fn penalty(&self, target: &str, gm: &str, kind: &str, minutes: i64, reason: &str) {
         if let Err(e) = self.db.gm_add_penalty(target, gm, kind, minutes, reason) {
             warn!(?e, "no se pudo guardar la pena");
         }
     }
 
     /// `SendData(ToGM)`.
-    fn to_gms(&self, text: &str) {
+    pub(crate) fn to_gms(&self, text: &str) {
         let msg = S2C::Console { text: text.to_string(), color: Tone::Info };
         for pid in self.player_ids() {
             if self.gm_rank(pid).is_gm() {
@@ -402,6 +431,7 @@ impl World {
         self.send(id, &S2C::Gm(GmS2C::Online { players }));
         let entries = self.db.gm_recent_log(PANEL_LOG_ROWS, None).unwrap_or_default();
         self.send(id, &S2C::Gm(GmS2C::Log { entries }));
+        self.send(id, &S2C::Gm(GmS2C::Sos { entries: self.sos_rows() }));
     }
 
     // ------------------------------------------------------------ ticks
@@ -661,7 +691,7 @@ impl World {
             return self.console(id, "El personaje no existe.", Tone::Warn);
         }
         let name = online.map(|t| self.name_of(t)).unwrap_or(name);
-        let _ = self.db.gm_ban(&name, &reason, me);
+        let _ = self.db.gm_ban(&name, &reason, me, None);
         self.penalty(&name, me, "ban", 0, &reason);
         self.log_gm(me, "ban", &name, &reason);
         self.to_gms(&format!("Servidor » {me} ha baneado a {name}: {reason}"));
@@ -798,8 +828,10 @@ impl World {
         let Some(name) = a.first() else { return self.console(id, "Uso: /INFO nick", Tone::Info) };
         let Some(t) = self.online(name) else {
             let pen = self.db.gm_penalties(name).map(|v| v.len()).unwrap_or(0);
-            let ban = self.db.gm_ban_reason(name).ok().flatten();
-            return self.console(id, format!("{name} (offline): rango {}, {pen} penas{}.", self.rank_of(name).label(), ban.map(|r| format!(", baneado: {r}")).unwrap_or_default()), Tone::Info);
+            let now = self.unix_now();
+            let ban = self.db.gm_ban_reason(name, now).ok().flatten();
+            let ban = ban.map(|(r, until)| format!(", baneado{}: {r}", until.map(|u| format!(" {}", ban_left(u - now))).unwrap_or_default()));
+            return self.console(id, format!("{name} (offline): rango {}, {pen} penas{}.", self.rank_of(name).label(), ban.unwrap_or_default()), Tone::Info);
         };
         let s = &self.sessions[&t];
         let p = s.player.as_ref().unwrap();

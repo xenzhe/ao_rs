@@ -29,6 +29,28 @@ pub struct GmPiece {
     pub invisible: bool,
     /// Refused on entering (ban): leaving must not save anything.
     pub refused: bool,
+    /// `flags.ChatHistory`: the last lines the player said, for `/DENUNCIAR`.
+    pub chat_history: std::collections::VecDeque<String>,
+    /// `Counters.LastGmMessage`: last `/GM` question (one every `SOS_INTERVAL_MS`).
+    pub last_question: Option<GameTime>,
+}
+
+/// `ChatHistory(1 To 15)`.
+pub const CHAT_HISTORY: usize = 15;
+/// `IntervaloConsultaGM`: one question to the GMs every 5 minutes.
+pub const SOS_INTERVAL_MS: u64 = 300_000;
+/// Open requests sent to the panel.
+pub const PANEL_SOS_ROWS: usize = 40;
+/// Days accepted by `/BANT` (the VB reads a Byte).
+pub const MAX_BAN_DAYS: u32 = 255;
+/// Area frozen by `/CR` around the GM (`MapAreaSizeX/Y`).
+pub const COUNTDOWN_AREA: (i32, i32) = (12, 10);
+
+/// A running `/CR` countdown (`CuentaRegresivaTimer`).
+#[derive(Debug)]
+pub struct Countdown {
+    pub left: u32,
+    pub next: GameTime,
 }
 
 /// A scheduled server shutdown (`/APAGAR`).
@@ -55,4 +77,18 @@ pub struct GmWorld {
     /// Refused on entering (ban, shutdown): kicked on the next tick, not inside the
     /// enter fan-out (other systems still run their `*_on_enter` after ours).
     pub refusals: Vec<(u32, String)>,
+    /// Unix seconds at game time 0 (set on first use): bans by days follow the game
+    /// clock, which is the wall clock in production and the virtual one in tests.
+    pub unix_base: std::cell::Cell<Option<i64>>,
+    /// Added to the unix clock (in-crate tests jump days without ticking them).
+    pub unix_skew: i64,
+    /// Next sweep of ended temporary bans (once a minute).
+    pub next_ban_sweep: GameTime,
+    pub countdown: Option<Countdown>,
+    /// `/GLOBAL` turned the global chat off (`ChatGlobal = 0`). Loaded from the database.
+    pub global_off: Option<bool>,
+    /// Message of the day lines (`Motd.ini`); None = not loaded yet.
+    pub motd: Option<Vec<String>>,
+    /// Teleports made with `/CT`: (map, x, y) of the entrance.
+    pub teleports: HashSet<(u16, i32, i32)>,
 }
