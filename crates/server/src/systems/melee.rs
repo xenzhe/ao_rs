@@ -4,6 +4,7 @@
 //! PuedeAtacar, ThrowProjectileToTarget, ConsumeAmunition) and the checks of
 //! Protocol.bas (HandleAttack, HandleWorkLeftClick `Case e_Skill.Proyectiles`).
 use super::combat::{Fighter, Source};
+use super::creatures::Vs;
 use crate::world::World;
 use ao_formats::dat::balance::{Class, Skill};
 use ao_formats::dat::obj::{ObjData, ObjType};
@@ -157,8 +158,13 @@ impl World {
     }
 
     /// Weapon plus ammunition damage roll and its maximum (GetUserDamageWithItem).
-    fn weapon_roll(&mut self, f: &Fighter, vs_npc: bool) -> (i32, i32) {
+    fn weapon_roll(&mut self, f: &Fighter, vs: Vs) -> (i32, i32) {
+        let vs_npc = vs != Vs::User;
         let Some(w) = self.obj(f.weapon).cloned() else { return (0, 0) };
+        // TSAO CalcularDaño: the dragon slayer's fixed rolls (systems/creatures.rs).
+        if let Some(r) = self.special_weapon_roll(f.weapon, vs) {
+            return r;
+        }
         let (lo, hi) = rules::hit_range(&w, vs_npc);
         let (mut roll, mut max) = (self.roll(lo, hi), hi);
         if w.projectile > 0 && w.ammo > 0 {
@@ -172,13 +178,13 @@ impl World {
     }
 
     /// `GetUserDamage`.
-    fn base_damage(&mut self, f: &Fighter, vs_npc: bool) -> i64 {
+    fn base_damage(&mut self, f: &Fighter, vs: Vs) -> i64 {
         let (lo, hi) = rules::user_hit_range(&f.mods, f.level);
         if f.weapon.is_none() && self.tsao_rules() {
             // TSAO CalcularDaño with bare hands: CInt(MaxHIT / 5).
             return rules::vb_round(hi as f64 / 5.0);
         }
-        let (weapon_roll, max_weapon) = self.weapon_roll(f, vs_npc);
+        let (weapon_roll, max_weapon) = self.weapon_roll(f, vs);
         let user_roll = self.roll(lo, hi);
         let modifier = rules::class_damage_modifier(&f.mods, self.obj(f.weapon));
         rules::user_damage(weapon_roll, max_weapon, f.strength, user_roll, modifier)
@@ -247,9 +253,15 @@ impl World {
             self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: false, damage: 0, critical: false }, None);
             return true;
         }
-        let base = self.base_damage(&f, true);
+        let vs = self.melee_target_kind(map, nid);
+        let base = self.base_damage(&f, vs);
         let def = (npc.defense - self.armor_penetration(&f, npc.defense)).max(0) as i64;
-        let damage = (base - def).max(0);
+        let mut damage = (base - def).max(0);
+        // TSAO UserDañoNpc: pets x1.5, paladin bonus, 2-in-5 critical x2 (profile keys).
+        let mut tsao_crit = false;
+        if self.tsao_rules() {
+            (damage, tsao_crit) = self.tsao_melee_vs_npc(id, map, nid, damage);
+        }
         // healers_and_tanks: warriors heal a share of what they deal.
         if rules::FEATURE_HEALERS_AND_TANKS && f.class == Class::Warrior && damage > 0 {
             let max_hp = self.player(id).unwrap().max_hp as i64;
@@ -268,7 +280,7 @@ impl World {
             extra = rules::vb_round(damage as f64 * (r * (hi - lo) + lo));
         }
         let total = (damage + extra.max(0)) as i32;
-        self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 }, None);
+        self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 || tsao_crit }, None);
         self.damage_npc(map, nid, total, id);
         true
     }
@@ -357,7 +369,7 @@ impl World {
         }
 
         // UserDamageToUser
-        let base = self.base_damage(&fa, false);
+        let base = self.base_damage(&fa, Vs::User);
         // Body part 1..8; past the torso it is re-rolled among legs/arms/torso (only the
         // console text of the original depends on which one).
         let place = self.roll(1, 8);

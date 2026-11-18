@@ -78,9 +78,9 @@ impl World {
         }
     }
 
-    /// `DoDomar`: pets come with their own AI (next step); for now it says so.
-    fn do_tame(&mut self, id: u32, _x: i32, _y: i32) {
-        self.console(id, "Domar criaturas todavía no está disponible.", Tone::Info);
+    /// `DoDomar`: see systems/pets.rs.
+    fn do_tame(&mut self, id: u32, x: i32, y: i32) {
+        self.tame(id, x, y);
     }
 
     // ------------------------------------------------------------ hiding

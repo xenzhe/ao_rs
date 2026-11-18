@@ -11,6 +11,7 @@ use macroquad::prelude::*;
 thread_local! {
     /// The steal key was pressed: the next left click picks the victim.
     static STEALING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static TAMING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Returns the direction held this frame (for movement), if any.
@@ -39,7 +40,13 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
         }
         if crate::keys::pressed(Action::Steal) {
             STEALING.with(|s| s.set(true));
+            TAMING.with(|s| s.set(false));
             game.say("Haz clic sobre el jugador al que quieres robar.", Tone::Info);
+        }
+        if crate::keys::pressed(Action::Tame) {
+            TAMING.with(|s| s.set(true));
+            STEALING.with(|s| s.set(false));
+            game.say("Haz clic sobre la criatura que quieres domar.", Tone::Info);
         }
         if let Some(it) = item {
             if crate::keys::pressed(Action::Use) {
@@ -86,6 +93,10 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
         if is_mouse_button_pressed(MouseButton::Left) && STEALING.with(|s| s.replace(false)) {
             if let Some((x, y)) = tile_under_mouse(game, lay) {
                 game.send(&ao_protocol::C2S::Skill(ao_protocol::p4::skill::SkillC2S::Steal { x, y }));
+            }
+        } else if is_mouse_button_pressed(MouseButton::Left) && TAMING.with(|s| s.replace(false)) {
+            if let Some((x, y)) = tile_under_mouse(game, lay) {
+                game.send(&ao_protocol::C2S::Skill(ao_protocol::p4::skill::SkillC2S::Tame { x, y }));
             }
         } else if is_mouse_button_pressed(MouseButton::Left) {
             if game.local.p4.work.pending.is_some() {

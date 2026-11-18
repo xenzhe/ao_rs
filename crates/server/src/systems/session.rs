@@ -218,6 +218,7 @@ impl World {
     pub(crate) fn logout(&mut self, id: u32) {
         if self.player(id).is_some() {
             self.social_on_leave(id);
+            self.pets_on_leave(id);
         }
         let Some(session) = self.sessions.remove(&id) else { return };
         if let Some(p) = session.player {
@@ -266,6 +267,7 @@ impl World {
             inst.players.remove(&id);
         }
         self.maps.get_mut(&map).unwrap().players.insert(id);
+        self.pets_on_map_change(id, old);
 
         self.send(id, &S2C::EnterMap { map, x, y });
         let inst = self.instance(map);

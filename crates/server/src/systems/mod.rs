@@ -31,6 +31,8 @@ mod mail;
 mod surgeon;
 mod tsao;
 pub(crate) mod thief;
+pub(crate) mod pets;
+pub(crate) mod creatures;
 
 use crate::world::World;
 use ao_protocol::C2S;

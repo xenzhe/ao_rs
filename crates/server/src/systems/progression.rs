@@ -494,12 +494,12 @@ mod tests {
         assert_eq!((ATTR_INTELLIGENCE, ATTR_CONSTITUTION), (2, 3));
     }
 
-    /// The TSAO data (X:\dev\tsao_rec + tsao/data/levels.toml; skipped without them):
-    /// 70 levels, TSAO curve, life from the class/race table, TSAO start values, gold from
-    /// GiveGLDMin/Max straight to the purse, the TSAO meditation FX.
+    /// The TSAO data (`AO_TSAO`, default X:\dev\tsao_rec, + tsao/data/levels.toml; skipped
+    /// without them): 70 levels, TSAO curve, life from the class/race table, TSAO start
+    /// values, gold from GiveGLDMin/Max straight to the purse, the TSAO meditation FX.
     #[test]
     fn tsao_progression_gold_and_meditation() {
-        let rec = std::path::PathBuf::from("X:/dev/tsao_rec");
+        let rec = std::path::PathBuf::from(std::env::var("AO_TSAO").unwrap_or_else(|_| "X:/dev/tsao_rec".into()));
         let table = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tsao/data/levels.toml");
         let (true, Ok(text)) = (rec.join("Dat").is_dir(), std::fs::read_to_string(&table)) else { return };
         let mut s = crate::Settings::defaults();

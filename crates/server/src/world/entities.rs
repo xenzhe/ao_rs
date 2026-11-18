@@ -117,6 +117,10 @@ pub struct Npc {
     pub respawn_secs: u32,
     /// When the NPC system will bring it back (None while alive or not yet seen dead).
     pub respawn_at: Option<GameTime>,
+    /// Owner, kind and target of a pet (systems/pets.rs). Default = a wild creature.
+    pub pet: crate::systems::pets::PetState,
+    /// Paralysis / immobilisation (systems/creatures.rs).
+    pub status: crate::systems::creatures::NpcStatus,
 }
 
 impl Npc {

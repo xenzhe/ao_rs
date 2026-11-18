@@ -961,6 +961,8 @@ impl World {
             // `tick_no_respawn` removes it (a 0 s respawn would revive it in the same tick).
             respawn_secs: if respawn { respawn_secs } else { u32::MAX / 4 },
             respawn_at: None,
+            pet: Default::default(),
+            status: Default::default(),
         };
         let nid = self.next_npc;
         self.next_npc += 1;
