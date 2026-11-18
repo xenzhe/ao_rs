@@ -18,3 +18,6 @@ data/backups/
 config/cuenta_pruebas.txt
 /target-dev
 config/last_account.key
+tsao/data/ao.db*
+tsao/data/stats.json
+tsao/data/backups/

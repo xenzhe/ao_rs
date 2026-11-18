@@ -1,0 +1,40 @@
+# Hechizos del juego. El servidor lee este archivo al arrancar y se lo envia a cada
+# cliente al entrar, asi que para anadir o ajustar un hechizo no hace falta recompilar.
+#
+# id          numero unico (no reutilizar uno borrado)
+# mana        coste de mana
+# range       alcance en casillas (cuadrado, como en AO)
+# cooldown_ms tiempo minimo entre dos lanzamientos
+# power       dano o curacion base; se suma 2 por nivel del lanzador y +-15% al azar
+# target      enemy (dana criaturas) | ally (cura personajes)
+# effect      efecto visual del cliente: fireball | lightning | heal
+
+[[spell]]
+id = 1
+name = "Bola de fuego"
+mana = 12
+range = 8
+cooldown_ms = 900
+power = 22
+target = "enemy"
+effect = "fireball"
+
+[[spell]]
+id = 2
+name = "Descarga"
+mana = 25
+range = 9
+cooldown_ms = 2200
+power = 45
+target = "enemy"
+effect = "lightning"
+
+[[spell]]
+id = 3
+name = "Curar heridas"
+mana = 15
+range = 7
+cooldown_ms = 1200
+power = 35
+target = "ally"
+effect = "heal"

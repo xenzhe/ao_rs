@@ -1,0 +1,8 @@
+# Numic AO con los datos de Tierras Sagradas (tools/tsao/convert.py).
+recursos = "../tsao_rec"
+data_dir = "tsao/data"
+database = "tsao/data/ao.db"
+
+[ops]
+stats_file = "tsao/data/stats.json"
+backup_dir = "tsao/data/backups"
