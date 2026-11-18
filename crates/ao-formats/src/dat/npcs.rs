@@ -305,6 +305,32 @@ pub struct TransportCity {
     pub price_high: i32,
 }
 
+/// `HealsOwner=spell,secs,range[,CLASS]`: while its owner is hurt and within `range`
+/// tiles, the pet casts `spell` on them every `secs` seconds (only for owners of `CLASS`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HealsOwner {
+    pub spell: i32,
+    pub secs: u32,
+    pub range: i32,
+    pub class: Option<String>,
+}
+
+/// TSAO behaviour by NPC number turned into data by tools/tsao/convert.py (all empty for AO20).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SpecialNpc {
+    /// `UniqueSummon=1`: a player may have only one of this summon at a time.
+    pub unique_summon: bool,
+    /// `CastsOnNpcs=1`: as a pet it casts its spell on the creature it fights.
+    pub casts_on_npcs: bool,
+    /// `Companion=1`: a pet that only follows its owner (never fights).
+    pub companion: bool,
+    /// `SpellDamage=min-max`: its spells hit players for this instead of the spell's roll.
+    pub spell_damage: Option<(i32, i32)>,
+    pub heals_owner: Option<HealsOwner>,
+    /// `ImmuneSpells=12,...`: Hechizos.dat spells that do nothing to it.
+    pub immune_spells: Vec<i32>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Npc {
     // ---- identity and look ----
@@ -468,6 +494,8 @@ pub struct Npc {
     pub gold: i32,
     /// TSAO `GiveGLDMin` / `GiveGLDMax` (0, 0 = not used).
     pub gold_range: (i32, i32),
+    /// Behaviour TSAO hard-coded by NPC number, as data written by tools/tsao.
+    pub special: SpecialNpc,
     /// `InvReSpawn`.
     pub inventory_respawn: i32,
     /// `DropCount` + `Drop1..n` (at most 12).
@@ -681,6 +709,24 @@ fn read_npc(s: &mut Sec) -> Npc {
     }
     // TSAO: gold straight to the killer, `RandomNumber(GiveGLDMin, GiveGLDMax)`.
     n.gold_range = (s.int("GiveGLDMin"), s.int("GiveGLDMax"));
+    n.special = SpecialNpc {
+        unique_summon: s.flag("UniqueSummon"),
+        casts_on_npcs: s.flag("CastsOnNpcs"),
+        companion: s.flag("Companion"),
+        spell_damage: s.text("SpellDamage").split_once('-').and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?))),
+        heals_owner: {
+            let t = s.text("HealsOwner");
+            let f: Vec<&str> = t.split(',').map(str::trim).collect();
+            match f[..] {
+                [sp, secs, range, ref rest @ ..] => match (sp.parse(), secs.parse(), range.parse()) {
+                    (Ok(spell), Ok(secs), Ok(range)) => Some(HealsOwner { spell, secs, range, class: rest.first().map(|c| c.to_uppercase()).filter(|c| !c.is_empty()) }),
+                    _ => None,
+                },
+                _ => None,
+            }
+        },
+        immune_spells: s.text("ImmuneSpells").split(',').filter_map(|v| v.trim().parse().ok()).collect(),
+    };
     n.humanoid = s.int("Humanoide");
     let spells = s.count("LanzaSpells", MAX_LIST);
     if spells > 0 {

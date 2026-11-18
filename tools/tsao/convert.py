@@ -237,8 +237,35 @@ OBJ_TYPE = {7: 20, 10: 8, 15: 20, 35: 20, 36: 20, 37: 20, 38: 20, 39: 20, 40: 20
             47: 48, 48: 44, 49: 20, 50: 20, 51: 20, 52: 20, 53: 20, 54: 20, 55: 20}
 
 
+# Objects the VB recognised by number (now data the server reads):
+# - SistemaCombate.CalcularDaño: the dragon slayer (1053) hits dragons for 220..225 (max
+#   350 in the strength term) and users for 1; UserDañoNpc takes it away when the dragon
+#   dies -> `DragonHit=220-225`, `DragonHitMax=350`, `UserHit=1`, `LostOnDragonKill=1`;
+# - CalcularDarExp: 1051, 1052, 1455, 1496 add a quarter of the experience -> `ExpBonusPct`;
+# - NPCTirarOro: 1049, 1050, 1456, 1497 add a quarter of the gold -> `GoldBonusPct`;
+# - NPC_TIRAR_ITEMS: 917, 918, 1455, 1456, 1496, 1497 add 3 in 200 to each drop -> `DropLuck`;
+# - General.calcularDefCasco / calcularDefAnillo: the golden tiara (1035) and the ring of
+#   immunity (1540) give a fixed magic defence by class -> `MagicDefByClass=CLASS:n,...,*:n`;
+# - modHechizos (HechizoEstadoUsuario / NpcLanzaSpellSobreUser): the ring resists
+#   paralysis 1 time in 10 from users and 1 in 8 from creatures -> `ParalysisResist=10,8`;
+# - HechizoPropUsuario: the magic lute (696) adds 4% to spells on users -> `SpellDamagePct=4`.
+OBJ_KEYS = {
+    1053: ["DragonHit=220-225", "DragonHitMax=350", "UserHit=1", "LostOnDragonKill=1"],
+    917: ["DropLuck=3"], 918: ["DropLuck=3"],
+    1049: ["GoldBonusPct=25"], 1050: ["GoldBonusPct=25"],
+    1051: ["ExpBonusPct=25"], 1052: ["ExpBonusPct=25"],
+    1455: ["ExpBonusPct=25", "DropLuck=3"], 1496: ["ExpBonusPct=25", "DropLuck=3"],
+    1456: ["GoldBonusPct=25", "DropLuck=3"], 1497: ["GoldBonusPct=25", "DropLuck=3"],
+    1035: ["MagicDefByClass=PALADIN:17,BARDO:25,CLERIGO:17,ASESINO:24,*:26"],
+    1540: ["MagicDefByClass=PALADIN:9,GUERRERO:11,*:18", "ParalysisResist=10,8"],
+    696: ["SpellDamagePct=4"],
+}
+
+
 def remap_obj_classes(m):
     head, body = m.group(1), m.group(2)
+    num = int(re.match(r"\[OBJ(\d+)\]", head).group(1))
+    body = "".join(k + "\n" for k in OBJ_KEYS.get(num, [])) + body
     t = re.search(r"(?im)^ObjType=(\d+)", body)
     if t and int(t.group(1)) in OBJ_TYPE:
         old = int(t.group(1))
@@ -329,6 +356,32 @@ def convert_quests(text, ddat):
     return n
 
 
+# Behaviours the VB dispatched by NPC number (now data the server reads):
+# - modHechizos.HechizoInvocacion: one elemental of each kind per player (92 water, 93
+#   fire, 94 earth) -> `UniqueSummon=1`;
+# - AI_NPC.AiNpcAtacaNpc: the fire and earth elementals cast their spell on the creature
+#   they fight instead of hitting it -> `CastsOnNpcs=1`;
+# - NpcLanzaSpellSobreUser: the fire elemental's spell hits users for 70..90 -> `SpellDamage`;
+# - General.bas (PasarSegundo): the water elemental heals its druid owner with spell 59
+#   every 4 s while hurt and within 10 tiles -> `HealsOwner=spell,secs,range,class`;
+# - modHechizos.InvocarMascota: the companions of the "Invocar Mascota" spells (follow the
+#   owner, never fight) -> `Companion=1`.
+NPC_KEYS = {
+    92: ["UniqueSummon=1", "HealsOwner=59,4,10,DRUIDA"],
+    93: ["UniqueSummon=1", "CastsOnNpcs=1", "SpellDamage=70-90"],
+    94: ["UniqueSummon=1", "CastsOnNpcs=1"],
+    156: ["Companion=1"], 157: ["Companion=1"], 158: ["Companion=1"], 181: ["Companion=1"], 182: ["Companion=1"],
+}
+# AI_NPC.bas TipoAI -> engine Movement: TSAO 3 `NpcMaloAtacaUsersBuenos` (IrUsuarioCercano:
+# goes for the nearest user) and 10 `NpcPathfinding` (walks a path to its target) are the
+# engine's chasing hostile wanderer (2); the engine's 3 is FixedInPos and its 10 a guard
+# mode, so 179 TSAO creatures (dragons among them) used to stand still.
+MOVEMENT = {3: 2, 10: 2}
+# modHechizos.HechizoPropNPC: `AfectaRelampago=1` creatures ignore the spell named
+# "Relampago" (HECHIZO12) -> the list of spells they ignore.
+RELAMPAGO = 12
+
+
 def remap_npc(m):
     head, num, body = m.group(1), int(m.group(2)), m.group(3)
     t = re.search(r"(?im)^NpcType=(\d+)", body)
@@ -337,6 +390,12 @@ def remap_npc(m):
     if t:
         body = body[:t.start()] + f"NpcType={new}" + body[t.end():]
     extra = f"TsaoType={tsao}\n" if tsao not in NPC_TYPE and num not in NPC_FIX else ""
+    extra += "".join(k + "\n" for k in NPC_KEYS.get(num, []))
+    mv = re.search(r"(?im)^Movement=(\d+)", body)
+    if mv and int(mv.group(1)) in MOVEMENT:
+        body = body[:mv.start()] + f"Movement={MOVEMENT[int(mv.group(1))]}\nTsaoMovement={mv.group(1)}" + body[mv.end():]
+    if re.search(r"(?im)^AfectaRelampago=1", body):
+        extra += f"ImmuneSpells={RELAMPAGO}\n"
     if num == QUEST_NPC:
         extra += "NumQuest=31\n" + "".join(f"QuestNumber{i}={i}\n" for i in range(1, 32))
     if new == 17 and num != QUEST_NPC:
@@ -430,7 +489,16 @@ def main(src, dst):
     prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", "",
                                                                                                                             # TCP_HandleData2.bas /MEDITAR: FXMEDITARCHICO 4 (<15), MEDIANO 5 (<30), GRANDE 6 (<50), XGRANDE 43 (<60), CIUDA 44.
                                                                                                                             "[Meditate]", "FxByLevel=15:4,30:5,50:6,60:43,255:44", "",
-                                                                                                                            "[Combat]", "Rules=tsao", "",
+                                                                                                                            "[Combat]", "Rules=tsao",
+            # UserDañoNpc / HechizoPropNPC: RandomNumber(1, 5) hits 2 of 5 -> 40% critical x2;
+            # spells on creatures x1.4; on someone's pet x1.5 (blows) and x1.3 (spells);
+            # paladins +45 against creatures.
+            "NpcCriticalPct=40", "NpcCriticalMult=2", "SpellVsNpcPct=140", "MeleeVsPetPct=150", "SpellVsPetPct=130", "NpcFlatBonus=PALADIN:45",
+            # Server.ini IntervaloParalizado 500 ticks of TIMER_AI (100 ms) for creatures.
+            "NpcParalysisSecs=50", "",
+            # Declares.bas MAXMASCOTAS 3 / MAXMASCOTASENTRENADOR 7; IntervaloInvocacion 3000
+            # ticks of the 40 ms game timer = 120 s; Trabajo.bas ModDomar.
+            "[Pets]", "Max=3", "TrainerMax=7", "SummonSecs=120", "TameMod=DRUIDA:6,CAZADOR:6,CLERIGO:7,*:10", "",
             # 0.11.5 window 17x13: MinXBorder 9, MaxXBorder 92, MinYBorder 7, MaxYBorder 94 (map exits are there).
             "[Walk]", "Bounds=9,92,7,94", "",
             # DoPasosFx: always 23/24 (50 sailing); no meditation sound.

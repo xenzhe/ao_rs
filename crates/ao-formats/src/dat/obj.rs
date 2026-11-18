@@ -246,6 +246,84 @@ pub struct CraftRecipe {
     pub price: i32,
 }
 
+/// Behaviour Tierras Sagradas hard-coded by object number (SistemaCombate.bas, General.bas,
+/// MODULO_NPCs.bas...), written as obj.dat keys by tools/tsao/convert.py. All 0 / empty
+/// for AO20 objects.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SpecialObj {
+    /// `DragonHit=min-max`: weapon roll against `NpcType::Dragon` (the dragon slayer).
+    pub dragon_hit: Option<(i32, i32)>,
+    /// `DragonHitMax`: the weapon maximum used in the strength term against dragons.
+    pub dragon_hit_max: i32,
+    /// `UserHit`: fixed weapon roll and maximum against players (0 = normal).
+    pub user_hit: i32,
+    /// `LostOnDragonKill=1`: the weapon is consumed when its wielder kills a dragon.
+    pub lost_on_dragon_kill: bool,
+    /// `ExpBonusPct` / `GoldBonusPct` (worn armour): % more experience / creature gold.
+    pub exp_bonus_pct: i32,
+    pub gold_bonus_pct: i32,
+    /// `DropLuck` (worn armour): added to each drop's chance out of 200.
+    pub drop_luck: i32,
+    /// `MagicDefByClass=PALADIN:17,...,*:26`: fixed magic defence by class (uppercase
+    /// class name without accents; `*` = everyone else) instead of `DefensaMagica*`.
+    pub magic_def_by_class: Vec<(String, i32)>,
+    /// `ParalysisResist=users,creatures`: resists a paralysis 1 time in N (0 = never).
+    pub paralysis_resist_users: i32,
+    pub paralysis_resist_npcs: i32,
+    /// `SpellDamagePct`: % more damage of the wearer's spells on players.
+    pub spell_damage_pct: i32,
+}
+
+/// `"Clérigo"` -> `"CLERIGO"`: how TSAO data names classes.
+pub fn class_key(class: &str) -> String {
+    class
+        .chars()
+        .map(|c| match c {
+            'á' | 'Á' => 'A',
+            'é' | 'É' => 'E',
+            'í' | 'Í' => 'I',
+            'ó' | 'Ó' => 'O',
+            'ú' | 'Ú' => 'U',
+            c => c.to_ascii_uppercase(),
+        })
+        .collect()
+}
+
+fn pair(v: &str, sep: char) -> Option<(i32, i32)> {
+    let (a, b) = v.split_once(sep)?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+impl SpecialObj {
+    fn read(s: &mut Sec) -> SpecialObj {
+        let text = s.text("DragonHit");
+        SpecialObj {
+            dragon_hit: pair(&text, '-'),
+            dragon_hit_max: s.int("DragonHitMax"),
+            user_hit: s.int("UserHit"),
+            lost_on_dragon_kill: s.flag("LostOnDragonKill"),
+            exp_bonus_pct: s.int("ExpBonusPct"),
+            gold_bonus_pct: s.int("GoldBonusPct"),
+            drop_luck: s.int("DropLuck"),
+            magic_def_by_class: s
+                .text("MagicDefByClass")
+                .split(',')
+                .filter_map(|p| p.split_once(':'))
+                .filter_map(|(c, n)| Some((c.trim().to_uppercase(), n.trim().parse().ok()?)))
+                .collect(),
+            paralysis_resist_users: pair(&s.text("ParalysisResist"), ',').map_or(0, |p| p.0),
+            paralysis_resist_npcs: pair(&s.text("ParalysisResist"), ',').map_or(0, |p| p.1),
+            spell_damage_pct: s.int("SpellDamagePct"),
+        }
+    }
+
+    /// Fixed magic defence for `class` (any case, accents ignored), if this object has a table.
+    pub fn magic_def_for(&self, class: &str) -> Option<i32> {
+        let up = class_key(class);
+        self.magic_def_by_class.iter().find(|(c, _)| *c == up).or_else(|| self.magic_def_by_class.iter().find(|(c, _)| c == "*")).map(|(_, n)| *n)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ObjData {
     // ---- identity ----
@@ -462,6 +540,8 @@ pub struct ObjData {
     pub tsao_type: i32,
     /// TSAO `cofreLlave`: object consumed to open it.
     pub chest_key: i32,
+    /// Objects TSAO recognised by number, as data written by tools/tsao.
+    pub special: SpecialObj,
     /// `HechizoIndex`.
     pub spell_index: i32,
     /// `Hechizo` (potion, elemental rune).
@@ -725,6 +805,7 @@ fn read_obj(s: &mut Sec, declared: u32) -> ObjData {
     o.chest_kind = s.int("TipoCofre");
     o.tsao_type = s.int("TsaoObjType");
     o.chest_key = s.int("cofreLlave");
+    o.special = SpecialObj::read(s);
     o.destroys = s.int("Destruye");
     o.non_droppable = s.int("Intirable");
     o.skill_amount = s.int("CantidadSkill");

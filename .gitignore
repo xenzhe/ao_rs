@@ -17,6 +17,7 @@ data/stats.json
 data/backups/
 config/cuenta_pruebas.txt
 /target-dev
+/target-a
 config/last_account.key
 tsao/data/ao.db*
 tsao/data/stats.json
