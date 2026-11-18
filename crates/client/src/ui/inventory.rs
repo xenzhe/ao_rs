@@ -1104,6 +1104,7 @@ fn use_item(game: &mut Game, obj: Option<&ao_formats::dat::obj::ObjData>, hit: H
     let target = match obj {
         Some(o) if o.obj_type == ObjType::WorkingTools && equipped => targeting_for_tool(o),
         Some(o) if o.obj_type == ObjType::Minerals => Some(Targeting::Smelt { slot: hit.slot }),
+        Some(o) if o.obj_type == ObjType::UsableOnTarget => Some(Targeting::UseOn { slot: hit.slot }),
         _ => None,
     };
     match target {

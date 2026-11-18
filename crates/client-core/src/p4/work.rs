@@ -20,6 +20,8 @@ use ao_rules::work::{self as rules, Job};
 pub enum Targeting {
     Tool(Job),
     Smelt { slot: u8 },
+    /// Phase 7: a trap or a hand cannon (`otUsableOntarget`) used on a tile.
+    UseOn { slot: u8 },
 }
 
 #[derive(Debug, Default)]
