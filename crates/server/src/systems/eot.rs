@@ -1005,6 +1005,43 @@ pub(crate) mod tests {
         assert!(eot_works(&table, 1) && eot_works(&table, 29) && eot_works(&table, 30));
     }
 
+    /// HechizoSobreArea: the square around the tile, less damage away from the centre,
+    /// nothing outside, nothing spent when it reaches no one.
+    #[test]
+    fn area_spell_hits_the_square_with_falloff() {
+        use ao_formats::dat::spells::{SpellEffects, SpellType};
+        let mut t = T::new();
+        t.join(1, 1, 50, 50);
+        let (sid, side) = t
+            .w
+            .ao
+            .spells
+            .iter()
+            .find(|(_, s)| s.spell_type == SpellType::Area && s.effects.contains(SpellEffects::DO_DAMAGE) && matches!(s.area_affects, 2 | 3) && (3..=5).contains(&s.area_radius) && s.hp.min > 20)
+            .map(|(i, s)| (i as u16, s.area_radius))
+            .expect("an official area spell against creatures");
+        t.learn(1, sid);
+        // Right edge of the square: an even side leans right (x - half .. x + side - 1 - half).
+        let edge = side - 1 - (side - 1) / 2;
+        t.dummy(900_001, 55, 55);
+        t.dummy(900_002, 55 + edge, 55);
+        t.dummy(900_003, 55 + edge + 1, 55);
+        // Nobody there: refused, free.
+        let mana = t.mana(1);
+        let empty = (40..60)
+            .flat_map(|x| (40..60).map(move |y| (x, y)))
+            .find(|c| ao_rules::eot::area_tiles(*c, side).all(|(x, y)| t.w.instance(MAP).npc_at(x, y).is_none() && t.w.player_at(MAP, x, y).is_none()))
+            .expect("an empty square");
+        t.cast(1, sid, empty.0, empty.1);
+        assert_eq!(t.mana(1), mana, "an empty area costs nothing");
+        t.cast(1, sid, 55, 55);
+        assert!(t.mana(1) < mana);
+        let hp = |t: &T, n: u32| 100_000 - t.w.instance(MAP).npcs[&n].hp;
+        assert!(hp(&t, 900_001) > 0, "centre hit");
+        assert!(hp(&t, 900_002) > 0, "edge hit");
+        assert_eq!(hp(&t, 900_003), 0, "outside the square");
+    }
+
     #[test]
     fn restoration_heals_over_time() {
         let mut t = T::new();

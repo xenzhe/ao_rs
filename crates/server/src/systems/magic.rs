@@ -42,6 +42,8 @@ const TRIGGER_ARENA: u16 = 6;
 enum Target {
     User(u32),
     Npc(u32),
+    /// The centre of an area spell (`HechizoSobreArea`).
+    Tile(i32, i32),
 }
 
 /// `RandomNumber` with the bounds in any order (EffectsOverTime.dat has min > max).
@@ -399,6 +401,18 @@ impl World {
             }
             return;
         }
+        // HechizoSobreArea (TipoHechizo 5): everyone on the square around the tile.
+        if spell.spell_type == SpellType::Area {
+            let target = Target::Tile(tx, ty);
+            if self.can_cast(id, spell_id, &spell, target) {
+                if self.cast_area(id, &spell, tx, ty) {
+                    self.after_cast(id, spell_id, &spell, target);
+                } else {
+                    self.console(id, "El hechizo no alcanzó a nadie.", Tone::Info);
+                }
+            }
+            return;
+        }
         let Some(target) = self.resolve_target(id, &spell, tx, ty) else { return };
         if !self.can_cast(id, spell_id, &spell, target) {
             return;
@@ -406,6 +420,7 @@ impl World {
         let ok = match target {
             Target::User(t) => self.cast_on_user(id, spell_id, &spell, t),
             Target::Npc(n) => self.cast_on_npc(id, spell_id, &spell, n),
+            Target::Tile(..) => false,
         };
         if ok {
             self.after_cast(id, spell_id, &spell, target);
@@ -945,6 +960,104 @@ impl World {
         false
     }
 
+    /// `HechizoSobreArea` + `AreaHechizo`: a square of side `AreaRadio` centred on the
+    /// tile; `AreaAfecta` 1 users, 2 creatures, 3 both. Damage and healing lose 20 % per
+    /// tile away from the centre (`ApplyAreaSpellFalloff`). True if it reached anyone
+    /// (the cast is only paid then).
+    ///
+    /// The VB used its own resistance arithmetic here (item `ResistenciaMagica` one by one,
+    /// no Resistencia skill; only `DefM` on creatures). Area damage uses the same
+    /// resistances as a single-target spell instead, so one hit of a spell is worth the
+    /// same alone or in an area.
+    fn cast_area(&mut self, id: u32, s: &Spell, tx: i32, ty: i32) -> bool {
+        let map = self.player(id).unwrap().map;
+        let (users, npcs) = (matches!(s.area_affects, 1 | 3), matches!(s.area_affects, 2 | 3));
+        let mut hits = 0;
+        let tiles: Vec<(i32, i32)> = ao_rules::eot::area_tiles((tx, ty), s.area_radius).filter(|(x, y)| ao_rules::walk::in_bounds(*x, *y)).collect();
+        for (x, y) in tiles {
+            let dist = ao_rules::eot::area_tile_distance((tx, ty), (x, y));
+            if users {
+                if let Some(u) = self.player_at(map, x, y).filter(|u| !self.is_dead(*u)) {
+                    if self.area_on_user(id, s, u, dist) {
+                        hits += 1;
+                        self.area_fx(map, s, u);
+                    }
+                }
+            }
+            if npcs {
+                if let Some(n) = self.instance(map).npc_at(x, y) {
+                    if self.area_on_npc(id, s, map, n, dist) {
+                        hits += 1;
+                        self.area_fx(map, s, n);
+                    }
+                }
+            }
+        }
+        hits > 0
+    }
+
+    /// `SendAreaSpellTargetFx`.
+    fn area_fx(&self, map: u16, s: &Spell, who: u32) {
+        if s.fx > 0 {
+            self.broadcast(map, &S2C::Fx { id: who, fx: s.fx as u16, loops: s.loops.clamp(0, 255) as u8 }, None);
+        }
+    }
+
+    /// `AreaHechizo` on a creature: only damage, and only creatures the caster may attack
+    /// without turning criminal (`CanAreaSpellHitNpc`); never its own pets.
+    fn area_on_npc(&mut self, id: u32, s: &Spell, map: u16, nid: u32, dist: i32) -> bool {
+        if !s.effects.contains(Fx::DO_DAMAGE) {
+            return false;
+        }
+        let Some(n) = self.instance(map).npcs.get(&nid).filter(|n| n.alive() && n.attackable) else { return false };
+        if n.pet.owner == Some(id) || self.faction_npc_attack_refusal(id, n.def).is_some() {
+            return false;
+        }
+        let level = self.player(id).unwrap().level;
+        let r = roll(self, s.hp.min, s.hp.max);
+        let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
+        let dmg = ao_rules::eot::area_falloff(dmg, dist);
+        let skill = self.player(id).unwrap().stats.skills[SKILL_MAGIC] as i32;
+        let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32));
+        let npc_def = def.map(|d| rules::NpcMagicDefense { magic_resistance: d.magic_resistance, magic_def: d.magic_def, def_m: d.magic_defense_flat }).unwrap_or_default();
+        let dmg = rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0);
+        let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
+        self.damage_npc(map, nid, dmg.max(0), id);
+        true
+    }
+
+    /// `AreaHechizo` on a player: damage (never the caster), healing, and the states
+    /// (paralysis, poison, blindness...) through the single-target rules.
+    fn area_on_user(&mut self, id: u32, s: &Spell, t: u32, dist: i32) -> bool {
+        let mut hit = false;
+        if s.effects.contains(Fx::DO_DAMAGE) {
+            if t == id || self.spell_can_hit_user(id, t).is_err() {
+                return false;
+            }
+            let level = self.player(id).unwrap().level;
+            let r = roll(self, s.hp.min, s.hp.max);
+            let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
+            let dmg = ao_rules::eot::area_falloff(dmg, dist);
+            let dmg = rules::damage_vs_user(dmg, self.user_magic_resistance(t, false), pen, s.anti_magic_resistance != 0);
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::User(t)).magic_taken()) as i32;
+            self.hurt_player(t, dmg.max(0), super::combat::Source::Player(id));
+            self.raise_skill(t, ao_formats::dat::balance::Skill::MagicResistance);
+            hit = true;
+        }
+        if s.effects.contains(Fx::DO_HEAL) && !self.is_dead(t) {
+            let r = ao_rules::eot::area_falloff(roll(self, s.hp.min, s.hp.max), dist) as i64;
+            let amount = ao_rules::eot::scale(ao_rules::eot::scale(r, self.modifiers(Who::User(id)).magic_healing_factor()), self.modifiers(Who::User(t)).self_healing_factor());
+            self.heal_player(t, amount as i32);
+            hit = true;
+        }
+        let states = Fx::PARALYZE | Fx::IMMOBILIZE | Fx::BLINDNESS | Fx::DUMB | Fx::INVISIBILITY | Fx::REMOVE_PARALYSIS | Fx::CURE_POISON;
+        if (s.poison > 0 || s.effects.0 & states != 0) && self.player(t).is_some() && (t != id || !s.effects.contains(Fx::PARALYZE)) {
+            hit |= self.status_on_user(id, s, t);
+            self.refresh_status(t);
+        }
+        hit
+    }
+
     /// Costs and presentation of a successful cast (`HandleHechizoUsuario`/`NPC` tail,
     /// `InfoHechizo`, `LanzarHechizo` cooldown).
     fn after_cast(&mut self, id: u32, spell_id: u16, s: &Spell, target: Target) {
@@ -980,9 +1093,11 @@ impl World {
         let (tid, tx, ty) = match target {
             Target::User(t) => self.player(t).map_or((t, px, py), |p| (t, p.x, p.y)),
             Target::Npc(n) => self.instance(map).npcs.get(&n).map_or((n, px, py), |n2| (n, n2.x, n2.y)),
+            // Area spells put their FX on each creature or player hit (cast_area).
+            Target::Tile(x, y) => (0, x, y),
         };
         self.broadcast(map, &S2C::Effect { spell: spell_id, from: id, tx, ty }, None);
-        if s.fx > 0 && !self.spell_has_particles(spell_id) {
+        if s.fx > 0 && tid != 0 && !self.spell_has_particles(spell_id) {
             self.broadcast(map, &S2C::Fx { id: tid, fx: s.fx as u16, loops: s.loops.clamp(0, 255) as u8 }, None);
         }
         if let Some(p) = self.player(id) {
