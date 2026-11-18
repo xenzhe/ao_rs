@@ -3,9 +3,8 @@
 //! (`modHechizos.AreaSpellTileDistance`, `ApplyAreaSpellFalloff`).
 //!
 //! AO20 keeps a running sum per character that every effect adds on start and subtracts
-//! on removal. Here the sum is rebuilt from the active effects whenever it is needed, so an
-//! effect removed twice (the VB `BonusDamageEffect` does that: see `Modifiers`) can never
-//! leave a permanent bonus behind.
+//! on removal. Here the sum is rebuilt from the active effects whenever it is needed, so a
+//! missed or repeated removal can never leave a permanent bonus behind.
 use ao_formats::dat::eots::{EotDef, EotKind, EotLimit, EotModifiers};
 
 /// `Declares.AREA_SPELL_FALLOFF_PER_TILE`: % less per tile away from the centre.

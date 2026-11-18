@@ -6,10 +6,10 @@
 //! `ApplyEffectToParty`).
 //!
 //! Differences with the VB, on purpose:
-//! - Modifiers are rebuilt from the active effects (`modifiers`) instead of a running
-//!   sum. `BonusDamageEffect` (Penitencia) calls `OnRemove` itself when its hits run out
-//!   and the list calls it again on removal, so in AO20 the 30 % weakness is removed twice
-//!   and the target ends up 30 % *tougher* for good; that cannot happen here.
+//! - Modifiers are rebuilt from the active effects (`modifiers`) instead of a running sum
+//!   that every effect adds to and subtracts from (same result, nothing can leak).
+//! - A shield with `Ticks` (EOT62, núcleo enano: "80 seconds duration") lasted only its
+//!   `TickTime` (2 s) in `ProtectEffect`; here it lasts `Ticks x TickTime`.
 //! - `ProtectEffect` and `StatModifier` ignore the new id on `Reset`: casting Protección
 //!   Divina 3 over Protección Divina 1 only refreshed the small shield. Here the new
 //!   effect replaces the old one.
@@ -236,6 +236,7 @@ impl World {
     fn new_eot(&mut self, caster: Who, eot: u16, def: &EotDef, now: GameTime) -> ActiveEot {
         use EotKind::*;
         let total = matches!(def.kind, ApplyModifiers | Taunted | Shield | DamageBonus | ApplyEffectOnHit | MultipleAttacks);
+        let lasts = def.tick_ms.max(1) * if def.kind == Shield && def.ticks > 0 { def.ticks as u64 } else { 1 };
         let shield = if def.kind == Shield { self.rng.range(def.power_min.min(def.power_max), def.power_min.max(def.power_max)) } else { 0 };
         // StatModifier.Setup: AffectedByMagicBonus scales by the caster's weapon.
         let scale = match caster {
@@ -252,7 +253,7 @@ impl World {
             caster: caster.caster(),
             ticks_left: def.ticks,
             next_tick: now.after_ms(def.tick_ms.max(1)),
-            ends: total.then(|| now.after_ms(def.tick_ms.max(1))),
+            ends: total.then(|| now.after_ms(lasts)),
             shield,
             hits_left: if matches!(def.kind, DamageBonus | ApplyEffectOnHit | MultipleAttacks) { def.ticks } else { 0 },
             scale,
@@ -554,7 +555,11 @@ impl World {
                     let (hp, max_hp) = (n.hp, n.max_hp);
                     self.broadcast(map, &S2C::Hp { id: nid, hp, max_hp }, None);
                 } else {
-                    let attacker = if let Some(Who::User(c)) = caster { c } else { 0 };
+                    // A tick never steals a creature: on someone else's, nobody gets credit.
+                    let attacker = match caster {
+                        Some(Who::User(c)) if self.npc_owner_rule(c, map, nid) == super::npc_owner::OwnerRule::Free => c,
+                        _ => 0,
+                    };
                     self.damage_npc(map, nid, -hp, attacker);
                 }
             }
@@ -871,7 +876,7 @@ pub(crate) mod tests {
         assert!((t.w.modifiers(who).physical_taken() - 1.3).abs() < 1e-6, "takes 30 % more");
         t.w.damage_npc(MAP, 900_001, 10, 1);
         assert!(t.w.eot_list(who).unwrap().is_empty(), "Ticks=1: one hit");
-        assert_eq!(t.w.modifiers(who), Modifiers::default(), "and nothing is left behind (VB removed it twice)");
+        assert_eq!(t.w.modifiers(who), Modifiers::default(), "and nothing is left behind");
     }
 
     #[test]
@@ -1001,6 +1006,12 @@ pub(crate) mod tests {
         assert!(!eot_works(&table, 5), "taunt");
         assert!(!eot_works(&table, 20), "delayed blast");
         assert!(eot_works(&table, 1) && eot_works(&table, 29) && eot_works(&table, 30));
+        // EOT62 (núcleo enano, RequireArmor): Ticks=40 x TickTime=2 s, not just 2 s.
+        let armor = t.first_obj(|o| o.obj_type == ObjType::Armor);
+        t.give_equipped(1, 2, armor);
+        assert!(t.w.apply_eot(Who::User(1), Who::User(1), 62, false));
+        t.advance(3_000);
+        assert!(t.w.has_eot(Who::User(1), 62));
     }
 
     /// HechizoSobreArea: the square around the tile, less damage away from the centre,

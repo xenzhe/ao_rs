@@ -77,12 +77,18 @@ restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
   (primero quitar parálisis o curar, luego paralizar o dañar, enfriamiento por hechizo) y
   `NpcLanzaSpellInmovilizado`.
 - **Dueño de la criatura y veneno** (`systems/npc_owner.rs`): `GetOwnedBy` 10 s,
-  `CanAttackNotOwner`, robar con seguro = rechazado, sin seguro = criminal; `NpcEnvenenarUser`.
-- **Bugs del VB corregidos**: Penitencia se quitaba dos veces y dejaba al objetivo un 30 % más
-  duro para siempre; Protección Divina 3 sobre la 1 solo renovaba la pequeña; los dos golpes
-  extra de Golpes Rápidos salían en frames seguidos; el daño de área usaba otra cuenta de
-  resistencia (ahora la misma que el hechizo de un objetivo); `IsSkill` no subía Magia en VB
-  pero aquí sí subía.
+  `CanAttackNotOwner`, robar con seguro = rechazado antes de golpear o lanzar (sin gastar),
+  sin seguro = criminal; el área nunca roba ni vuelve criminal; `NpcEnvenenarUser`
+  (`creature_poison` en la configuración, encendido como en AO20).
+- **Bugs del VB corregidos**: Protección Divina 3 sobre la 1 solo renovaba la pequeña; el
+  escudo del núcleo enano (EOT62, "80 segundos") duraba 2 s; los dos golpes extra de Golpes
+  Rápidos salían en frames seguidos; el daño de área usaba otra cuenta de resistencia (ahora
+  la misma que el hechizo de un objetivo). Bug nuestro corregido: los hechizos `IsSkill`
+  subían Magia (en el VB no).
+- **Decisiones**: el efecto al golpear no se aplica en cuerpo a cuerpo PvP (el VB tiene esa
+  llamada comentada) y sí en hechizos de daño contra jugadores y golpes a criaturas; el bonus
+  de curación recibida no llega a las pociones (`inventory.rs`, otra sesión); el reto
+  (`event.rs`) ahora termina los efectos bien (antes un transformado quedaba con el aspecto).
 - **Falta**: provocar (3), trampas (5), borracho (6), empujar y atraer (7, 11), explosión
   retardada (12), desequipar (13); la velocidad de movimiento (Eco Veloz, Desplazamiento
   Veloz, Acelerar Mascotas) porque el paso es fijo y el cliente no recibe velocidad. Esos

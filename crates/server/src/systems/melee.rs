@@ -269,6 +269,9 @@ impl World {
             self.console(id, "No podes atacar a este NPC.", Tone::Warn);
             return false;
         }
+        if self.npc_owner_refuses(id, map, nid) {
+            return false;
+        }
         let Some(f) = self.fighter(id) else { return false };
         // EOT modifiers (GetHitBonus, GetEvasionBonus, GetDefenseBonus, GetLinearDamageBonus,
         // GetPhysicalDamageModifier, GetPhysicDamageReduction).

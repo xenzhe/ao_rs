@@ -36,6 +36,10 @@ impl World {
 
     /// The ownership part of `UserCanAttackNpc` for player `id`.
     pub(crate) fn npc_owner_rule(&self, id: u32, map: u16, nid: u32) -> OwnerRule {
+        // An AO20 rule: the TSAO server has no creature owners.
+        if self.tsao_rules() || self.player(id).is_none() {
+            return OwnerRule::Free;
+        }
         let Some(owner) = self.npc_owner(map, nid).filter(|o| *o != id) else { return OwnerRule::Free };
         let Some(n) = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)) else { return OwnerRule::Free };
         if self.ao.npcs.get(n.def as u32).is_some_and(|d| d.attackable_by_everyone != 0) || n.pet.owner.is_some() {
@@ -58,15 +62,22 @@ impl World {
         }
     }
 
-    /// Called on every hit of a player on a creature (`damage_npc`): refuses a steal with
-    /// the seguro on, turns a thief criminal, then makes the attacker the owner. False =
-    /// the hit does not happen.
+    /// Before a swing, shot or spell on a creature (`UserCanAttackNpc`): true = refused
+    /// (seguro on against another citizen's creature), with the warning. Nothing is spent.
+    pub(crate) fn npc_owner_refuses(&self, id: u32, map: u16, nid: u32) -> bool {
+        if self.npc_owner_rule(id, map, nid) == OwnerRule::SafeOn {
+            self.console(id, "Esa criatura está peleando con otro ciudadano. Quitá el seguro para atacarla.", Tone::Warn);
+            return true;
+        }
+        false
+    }
+
+    /// Called on every hit of a player on a creature (`damage_npc`, `NPCAtacado`): a thief
+    /// turns criminal, then the attacker becomes the owner. False = the hit does not happen
+    /// (only reached with the seguro on by paths that skipped `npc_owner_refuses`).
     pub(crate) fn npc_owner_on_hit(&mut self, id: u32, map: u16, nid: u32) -> bool {
         match self.npc_owner_rule(id, map, nid) {
-            OwnerRule::SafeOn => {
-                self.console(id, "Esa criatura está peleando con otro ciudadano. Quitá el seguro para atacarla.", Tone::Warn);
-                return false;
-            }
+            OwnerRule::SafeOn => return false,
             OwnerRule::TurnsCriminal => self.faction_turn_criminal(id),
             OwnerRule::Free => {}
         }
@@ -89,7 +100,7 @@ impl World {
     /// `NpcEnvenenarUser`: a creature with `Veneno` poisons on a hit, 29 % of the time.
     pub(crate) fn npc_poison_on_hit(&mut self, map: u16, nid: u32, pid: u32) {
         let poison = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32)).map_or(0, |d| d.poison);
-        if poison <= 0 || self.is_dead(pid) || self.rng.range(1, 100) >= NPC_POISON_CHANCE_BELOW {
+        if !self.cfg.world.creature_poison || poison <= 0 || self.is_dead(pid) || self.rng.range(1, 100) >= NPC_POISON_CHANCE_BELOW {
             return;
         }
         let now = self.now();
@@ -126,6 +137,31 @@ mod tests {
         assert_eq!(t.w.npc_owner(MAP, 900_040), Some(2));
         t.advance(super::NPC_OWNER_MS);
         assert_eq!(t.w.npc_owner(MAP, 900_040), None, "10 s without hitting it: free again");
+    }
+
+    /// Through the real entry points: the refused swing shows nothing and the refused
+    /// spell costs nothing.
+    #[test]
+    fn a_refused_steal_spends_nothing() {
+        let mut t = T::new();
+        t.join(1, 3, 50, 50);
+        t.join(2, 1, 52, 50);
+        t.dummy(900_042, 51, 50);
+        assert!(t.w.npc_owner_on_hit(1, MAP, 900_042));
+        t.w.player_mut(2).faction.safe = true;
+        t.w.player_mut(2).dir = ao_rules::Dir::Left;
+        t.advance(2_000);
+        t.drain(2);
+        t.seq += 1;
+        t.w.on_melee(2, t.seq);
+        let msgs = t.drain(2);
+        assert!(!msgs.iter().any(|m| matches!(m, ao_protocol::S2C::Attack { attacker: 2, .. })), "no swing shown");
+        assert_eq!(t.w.instance(MAP).npcs[&900_042].hp, 100_000);
+        t.learn(2, 1);
+        let mana = t.mana(2);
+        t.cast(2, 1, 51, 50);
+        assert_eq!(t.mana(2), mana, "Dardo Mágico refused for free");
+        assert_eq!(t.w.instance(MAP).npcs[&900_042].hp, 100_000);
     }
 
     #[test]

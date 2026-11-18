@@ -252,6 +252,8 @@ impl World {
         if self.is_dead(id) {
             self.resurrect(id);
         }
+        // Effects over time end properly (a transformed player gets its look back).
+        self.clear_eots(super::eot::Who::User(id));
         let p = self.player_mut(id);
         let s = &mut p.status;
         s.paralyzed_until = None;

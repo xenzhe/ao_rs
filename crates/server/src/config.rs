@@ -78,6 +78,8 @@ pub struct WorldConfig {
     pub floor_cleanup_minutes: u64,
     /// Real minutes per in-game day (`DuracionDia` of Configuracion.ini, 120 officially).
     pub day_length_minutes: u64,
+    /// Creatures with npcs.dat `Veneno` poison on a hit (`NpcEnvenenarUser`). On, as in AO20.
+    pub creature_poison: bool,
 }
 
 impl Default for ServerConfig {
@@ -103,7 +105,7 @@ impl Default for SecurityConfig {
 
 impl Default for WorldConfig {
     fn default() -> Self {
-        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120 }
+        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120, creature_poison: true }
     }
 }
 

@@ -873,6 +873,10 @@ impl World {
     /// need fields on `Npc` (NPC system): not in P1.
     fn cast_on_npc(&mut self, id: u32, spell_id: u16, s: &Spell, nid: u32) -> bool {
         let map = self.player(id).unwrap().map;
+        // UserCanAttackNpc (owner) before anything is spent, for harmful spells.
+        if (s.target_effect == TargetEffect::Negative || s.effects.contains(Fx::DO_DAMAGE)) && self.npc_owner_refuses(id, map, nid) {
+            return false;
+        }
         let eot = s.eot_id.clamp(0, u16::MAX as i32) as u16;
         if eot == 0 {
             return self.cast_on_npc_effects(id, spell_id, s, nid);
@@ -1010,7 +1014,8 @@ impl World {
             return false;
         }
         let Some(n) = self.instance(map).npcs.get(&nid).filter(|n| n.alive() && n.attackable) else { return false };
-        if n.pet.owner == Some(id) || self.faction_npc_attack_refusal(id, n.def).is_some() {
+        // CanAreaSpellHitNpc: collateral damage never makes the caster criminal.
+        if n.pet.owner == Some(id) || self.faction_npc_attack_refusal(id, n.def).is_some() || self.npc_owner_rule(id, map, nid) != super::npc_owner::OwnerRule::Free {
             return false;
         }
         let level = self.player(id).unwrap().level;
