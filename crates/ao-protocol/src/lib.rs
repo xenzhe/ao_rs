@@ -14,7 +14,7 @@ pub use messages::*;
 pub use p4::*;
 pub use social::*;
 
-pub const PROTOCOL_VERSION: u16 = 13;
+pub const PROTOCOL_VERSION: u16 = 14;
 /// Hard cap on a single client frame; anything bigger is an attack.
 pub const MAX_CLIENT_FRAME: usize = 512;
 /// Cap for server frames read by the client.

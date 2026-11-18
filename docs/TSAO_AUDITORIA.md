@@ -12,7 +12,8 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Subida de nivel (vida por tabla clase/raza, maná, golpe, stamina) | ✅ | `tsao/data/levels.toml` |
 | **Premios por nivel** (oro <10, nivel 10 sale del Newbie Dungeon + Starterpack, nivel 20 Fuego Mágico) | ✅ | Esta tanda |
 | **Límite newbie (nivel 9)** y objetos newbie que se quitan | ✅ | Era 12 (AO20) |
-| Bonus de clase a niveles 53/56/60 (elegir mejora, `ClassBonus.dat`) | ❌ | |
+| Bonus de clase a niveles 53/56/60 (elegir mejora, `ClassBonus.dat`) | ✅ | Ventana «Bonificación de clase», una vez por tramo, `/bonus` la reabre. Efecto aplicado: vida, daño/resistencia mágica PvP. Evasión, escudo, golpe, flechas y apuñalar quedan en `tsao_bonus()` para el dueño del combate |
+| **Monedas TSAO** (puntos de torneo, puntos TS, créditos) | ✅ | Por nivel 50/60/65/70, `GivePTS` de criaturas, misiones; `/puntos` |
 | Vidas / Gran Poder / StatusMith / transformaciones | ❌ | Mecánicas propias de TSAO |
 | Atributos por raza | ✅ | |
 
@@ -55,7 +56,7 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Correo con paquetes | ✅ | |
 | Mejorar objetos (`Mejorados.dat`) | ❌ | |
 | Pergaminos de experiencia/oro (scrolls) | ❌ | |
-| Canje por puntos (torneo, TS, donación) | ❌ | Faltan esas monedas |
+| Canje por puntos (torneo, TS, donación) | ✅ | `/canje`: `Premios.dat`, tienda TS (`CanjeTS.dat`), `ItemsDonaciones.dat`; packs con premium/skins visibles pero no a la venta (no hay esos sistemas) |
 | Subastas | ✅ | (versión Numic) |
 
 ## 5. Trabajo
@@ -78,9 +79,10 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Ciudadanía | ❌ | |
 | Nobleza (quest de nobleza, ItemsNoble) | ❌ | |
 | Dioses y almas (Mifrit, Poseidón, Erebros, Tarraske) | ❌ | |
-| Parejas (/PAREJA) | ❌ | |
+| Matrimonio (/CASAR, /DIVORCIARSE) | ✅ | Guardado en BD; divorcio aunque la pareja esté desconectada |
+| Parejas 2v2 (/PAREJA, duelo pagado) | ❌ | Evento: pendiente |
 | Emoticonos | ❌ | |
-| Votaciones (/VOTAR) | ❌ | |
+| Votaciones (/VOTAR, /RESULTADOS, /ENCUESTA de GM) | ✅ | Consulta de `consultas.dat` al arrancar; un voto por cuenta, guardado |
 | Ranking | ❌ | |
 
 ## 7. Eventos y PvP organizado
@@ -95,7 +97,7 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Juegos del hambre | ❌ | |
 | Evento faccionario, evento luz, ARAM, batalla mística | ❌ | |
 | Misiones diarias | ❌ | |
-| Misiones (QUESTS.DAT) | ✅ | Sin puntos de torneo |
+| Misiones (QUESTS.DAT) | ✅ | Con puntos de torneo, TS y créditos |
 
 ## 8. Otros
 

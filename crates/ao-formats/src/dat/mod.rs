@@ -22,6 +22,7 @@ pub mod npcs;
 pub mod obj;
 pub mod quests;
 pub mod spells;
+pub mod tsao_progress;
 
 /// A file could not be read at all (missing, no permission). Bad *contents* are never an
 /// error: they become [`Warning`]s.

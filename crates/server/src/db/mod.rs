@@ -17,6 +17,7 @@ mod gm;
 mod event;
 mod mail;
 mod clan_vault;
+pub(crate) mod tsao;
 
 pub use mail::MailLetter;
 pub use accounts::{Account, CharacterRecord, CharacterState, NewCharacter};
@@ -38,6 +39,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0010_events.sql"),
     include_str!("../../migrations/0011_mail.sql"),
     include_str!("../../migrations/0012_clan_vault.sql"),
+    include_str!("../../migrations/0013_tsao_progress.sql"),
 ];
 
 #[derive(Debug, PartialEq)]

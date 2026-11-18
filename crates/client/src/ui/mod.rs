@@ -32,6 +32,7 @@ pub mod auction;
 pub mod travel;
 pub mod mail;
 pub mod surgeon;
+pub mod tsao;
 
 pub use frame::{Drag, Ui, WindowId};
 
@@ -72,6 +73,9 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
             WindowId::Travel => travel::draw(ui, game, assets, r),
             WindowId::Mail => mail::draw(ui, game, assets, r),
             WindowId::Surgeon => surgeon::draw(ui, game, assets, r),
+            WindowId::Exchange => tsao::draw_exchange(ui, game, assets, r),
+            WindowId::Bonus => tsao::draw_bonus(ui, game, assets, r),
+            WindowId::Poll => tsao::draw_poll(ui, game, assets, r),
         }
     }
     // Floating "X invites you to trade" and orphan prompts.
@@ -92,6 +96,9 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
         (WindowId::Travel, l.p4.travel.open.is_some()),
         (WindowId::Mail, l.p4.mail.open.is_some()),
         (WindowId::Surgeon, l.p4.surgeon.open.is_some()),
+        (WindowId::Exchange, l.p4.tsao.exchange.is_some()),
+        (WindowId::Bonus, l.p4.tsao.bonus_offer.is_some()),
+        (WindowId::Poll, l.p4.tsao.poll.is_some()),
     ];
     for (w, on) in states {
         let was = ui.server_windows.contains(&w);
@@ -104,6 +111,9 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
                     WindowId::Travel => game.travel_close(),
                     WindowId::Mail => game.mail_close(),
                     WindowId::Surgeon => game.surgeon_close(),
+                    WindowId::Exchange => game.exchange_close(),
+                    WindowId::Bonus => game.bonus_later(),
+                    WindowId::Poll => game.poll_close(),
                     _ => game.trade_cancel(),
                 }
                 ui.server_windows.remove(&w);

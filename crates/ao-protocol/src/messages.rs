@@ -100,6 +100,7 @@ pub enum C2S {
     Mail(crate::p4::MailC2S),
     Surgeon(crate::p4::SurgeonC2S),
     Skill(crate::p4::SkillC2S),
+    Tsao(crate::p4::TsaoC2S),
 }
 
 /// Server -> client.
@@ -190,6 +191,7 @@ pub enum S2C {
     Travel(crate::p4::TravelS2C),
     Mail(crate::p4::MailS2C),
     Surgeon(crate::p4::SurgeonS2C),
+    Tsao(crate::p4::TsaoS2C),
 }
 
 /// Bits of `S2C::Status::flags`.

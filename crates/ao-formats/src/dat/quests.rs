@@ -77,6 +77,11 @@ pub struct Quest {
     pub reward_gold: i32,
     /// `RewardEXP`.
     pub reward_exp: i32,
+    /// TSAO `ptsTorneo` / `ptsTS` / `Creditos` (QUESTS.DAT, written by tools/tsao/progress.py
+    /// as `RewardTorneo` / `RewardTS` / `RewardCreditos`).
+    pub reward_tournament: i32,
+    pub reward_ts: i32,
+    pub reward_credits: i32,
     /// `Repetible`: 0 = can be done once, anything else = repeatable.
     pub repeatable: i32,
     /// `PermittedFactions`: bit set (1 citizen, 2 royal army, 4 royal council, 8 criminal,
@@ -185,6 +190,9 @@ fn read_quest(s: &mut Sec) -> Quest {
 
     q.reward_gold = s.int("RewardGLD");
     q.reward_exp = s.int("RewardEXP");
+    q.reward_tournament = s.int("RewardTorneo");
+    q.reward_ts = s.int("RewardTS");
+    q.reward_credits = s.int("RewardCreditos");
     q.repeatable = s.int("Repetible");
     q.permitted_factions = s.int("PermittedFactions");
     q.global_quest_index = s.int("GlobalQuestIndex");

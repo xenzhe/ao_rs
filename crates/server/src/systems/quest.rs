@@ -562,6 +562,7 @@ impl World {
             }
             None => {}
         }
+        self.tsao_quest_reward(id, q);
         for r in &q.reward_objs {
             let Some(obj) = self.ao.objs.get(r.obj.max(0) as u32).map(|o| o.name.clone()) else { continue };
             if r.amount > 0 && self.add_item(id, InvItem { obj: u16c(r.obj), amount: r.amount as u32 }) {

@@ -5,6 +5,7 @@ pub mod gm;
 pub mod event;
 pub mod travel;
 pub mod mail;
+pub mod tsao;
 
 use ao_protocol::S2C;
 
@@ -17,6 +18,7 @@ pub struct P4 {
     pub travel: travel::TravelState,
     pub mail: mail::MailState,
     pub surgeon: mail::SurgeonState,
+    pub tsao: tsao::TsaoState,
 }
 
 impl P4 {
@@ -30,6 +32,7 @@ impl P4 {
             S2C::Travel(m) => self.travel.apply(m),
             S2C::Mail(m) => self.mail.apply(m),
             S2C::Surgeon(m) => self.surgeon.apply(m),
+            S2C::Tsao(m) => self.tsao.apply(m),
             _ => return false,
         }
         true

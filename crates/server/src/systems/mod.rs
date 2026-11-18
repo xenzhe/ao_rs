@@ -31,6 +31,7 @@ mod mail;
 mod surgeon;
 mod tsao;
 pub(crate) mod thief;
+pub(crate) mod tsao_progress;
 
 use crate::world::World;
 use ao_protocol::C2S;
@@ -78,6 +79,7 @@ impl World {
             C2S::Travel(m) => self.on_travel(id, m),
             C2S::Mail(m) => self.on_mail(id, m),
             C2S::Surgeon(m) => self.on_surgeon(id, m),
+            C2S::Tsao(m) => self.on_tsao(id, m),
             C2S::Skill(m) => self.on_skill(id, m),
         }
     }
