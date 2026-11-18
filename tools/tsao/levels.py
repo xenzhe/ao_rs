@@ -60,6 +60,20 @@ def main(src, out):
         "Bardo = [50, 0]",
         "Asesino = [50, 0]",
         "",
+        "# CheckUserLevel: 600 * level of gold below 10, Fuego Magico at 20, out of the newbie",
+        "# area at 10 (Tanaris 54,34) with a Starterpack (1561 dwarves and gnomes).",
+        "[rewards]",
+        "gold_below_level = 10",
+        "gold_per_level = 600",
+        "spells = [[20, 8]]",
+        "[rewards.graduation]",
+        "level = 10",
+        "map = 28",
+        "x = 54",
+        "y = 34",
+        "item = 1560",
+        "item_short_races = 1561",
+        "",
     ]
     for cls in table:
         e = extra.get(cls, {})

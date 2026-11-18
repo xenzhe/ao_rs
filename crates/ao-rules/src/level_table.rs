@@ -42,10 +42,40 @@ pub struct StartVitals {
     pub mana: HashMap<String, [i32; 2]>,
 }
 
+/// Leaving the newbie area (TSAO CheckUserLevel, level 10): warp to a city and get a
+/// starter chest (another one for the short races).
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct Graduation {
+    pub level: u32,
+    pub map: u16,
+    pub x: i32,
+    pub y: i32,
+    pub item: u16,
+    /// Dwarves and gnomes (TSAO gives them obj 1561 instead of 1560).
+    #[serde(default)]
+    pub item_short_races: u16,
+}
+
+/// What reaching a level gives (TSAO CheckUserLevel).
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Rewards {
+    /// Below this level each new level pays `gold_per_level * level`.
+    #[serde(default)]
+    pub gold_below_level: u32,
+    #[serde(default)]
+    pub gold_per_level: u32,
+    /// `[level, spell]`: learnt on reaching that level (if there is room).
+    #[serde(default)]
+    pub spells: Vec<[u32; 2]>,
+    pub graduation: Option<Graduation>,
+}
+
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct LevelTable {
     pub class: HashMap<String, ClassLevels>,
     pub start: Option<StartVitals>,
+    #[serde(default)]
+    pub rewards: Rewards,
 }
 
 impl StartVitals {

@@ -6,6 +6,13 @@ pub struct Balance {
     /// Every skill of a new character starts here (AO20 0; TSAO 100).
     #[serde(default)]
     pub start_skills: u8,
+    /// Highest newbie level (AO20 12, TSAO `LimiteNewbie` 9): newbie items, newbie priest,
+    /// kills that do not count.
+    #[serde(default = "default_newbie")]
+    pub newbie_max_level: u32,
+    /// `/regresar` destination (TSAO: Tanaris 54,36). None = the command is off.
+    #[serde(default)]
+    pub home: Option<(u16, i32, i32)>,
     pub start_map: u16,
     pub start_x: i32,
     pub start_y: i32,
@@ -24,10 +31,16 @@ pub struct Balance {
     pub player_heads: Vec<u16>,
 }
 
+fn default_newbie() -> u32 {
+    12
+}
+
 impl Default for Balance {
     fn default() -> Self {
         Balance {
             start_skills: 0,
+            newbie_max_level: 12,
+            home: None,
             start_map: 1,
             start_x: 50,
             start_y: 50,

@@ -241,7 +241,7 @@ impl World {
         if p.guild.guild.is_some() || self.guilds.of_char(cid).is_some() {
             return self.console(id, "Ya perteneces a un clan, debes salir del mismo antes de solicitar ingresar a otro.", Tone::Warn);
         }
-        if level <= rules::NEWBIE_MAX_LEVEL {
+        if level <= self.data.balance.newbie_max_level {
             return self.console(id, "Los newbies no tienen derecho a entrar a un clan.", Tone::Warn);
         }
         let Some(g) = self.guilds.by_name(guild) else {

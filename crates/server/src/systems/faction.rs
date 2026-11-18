@@ -89,7 +89,7 @@ impl World {
         let killer_name = k.name.clone();
         let victim_name = v.name.clone();
         let rekill = v.faction.recent_killers.iter().any(|(n, t)| *n == killer_name && now.0.saturating_sub(t.0) < rekill_ms);
-        let Some(c) = rules::count_kill(k.faction.rec.status, k.level, v.faction.rec.status, v.level, ao_rules::items::is_newbie(v.level), rekill) else { return };
+        let Some(c) = rules::count_kill(k.faction.rec.status, k.level, v.faction.rec.status, v.level, v.level <= self.data.balance.newbie_max_level, rekill) else { return };
         if !rekill {
             let rk = &mut self.player_mut(victim).faction.recent_killers;
             rk.retain(|(n, _)| *n != killer_name);

@@ -382,9 +382,8 @@ impl World {
     /// duels do not count (alt farming), and finishing does not depend on `=` hitting the
     /// exact number.
     pub(crate) fn quest_on_player_killed(&mut self, killer: u32, victim: u32) {
-        const NEWBIE_LEVEL: u32 = 12;
         let (Some(k), Some(v)) = (self.player(killer), self.player(victim)) else { return };
-        if killer == victim || v.level <= NEWBIE_LEVEL || k.quest.slots.iter().all(Option::is_none) {
+        if killer == victim || v.level <= self.data.balance.newbie_max_level || k.quest.slots.iter().all(Option::is_none) {
             return;
         }
         let m = &self.instance(v.map).map;

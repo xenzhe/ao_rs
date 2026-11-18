@@ -135,7 +135,7 @@ impl World {
 
     pub(crate) fn on_say(&mut self, id: u32, text: String) {
         let Some(clean) = sanitize_chat(&text, MAX_CHAT) else { return };
-        if clean.starts_with('/') && (self.gm_command(id, &clean) || self.event_command(id, &clean) || self.dev_command(id, &clean)) {
+        if clean.starts_with('/') && (self.gm_command(id, &clean) || self.event_command(id, &clean) || self.player_command(id, &clean) || self.dev_command(id, &clean)) {
             return;
         }
         if self.gm_is_silenced(id) {
@@ -148,6 +148,39 @@ impl World {
         }
         let (name, map) = (p.name.clone(), p.map);
         self.broadcast(map, &S2C::Console { text: format!("{name}: {clean}"), color: Tone::Chat }, None);
+    }
+
+    /// Player commands of TSAO. Returns true if the line was one.
+    /// - `/regresar`: out of a dangerous map back to the home city, as a ghost (TSAO kills
+    ///   the player first: it is an escape, not a free trip). Not for newbies, not from safe
+    ///   maps (TCP_HandleData2.bas).
+    /// - `/online`: how many players are in.
+    fn player_command(&mut self, id: u32, line: &str) -> bool {
+        let cmd = line.split_whitespace().next().unwrap_or("").to_lowercase();
+        match cmd.as_str() {
+            "/regresar" => {
+                let Some(home) = self.data.balance.home else { return false };
+                let Some(p) = self.player(id) else { return true };
+                if p.level <= self.data.balance.newbie_max_level {
+                    self.console(id, "Los newbies no pueden usar /regresar.", Tone::Warn);
+                } else if self.instance(p.map).map.safe {
+                    self.console(id, "Ya estás en una zona segura.", Tone::Info);
+                } else {
+                    if !self.is_dead(id) {
+                        self.user_die(id);
+                    }
+                    self.teleport(id, home.0, home.1, home.2);
+                    self.console(id, "Has regresado a tu ciudad.", Tone::Info);
+                }
+                true
+            }
+            "/online" => {
+                let n = self.player_ids().len();
+                self.console(id, format!("Hay {n} jugador{} conectado{}.", if n == 1 { "" } else { "es" }, if n == 1 { "" } else { "s" }), Tone::Info);
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Development commands, only with `dev_login` (never on a real server). Returns true if

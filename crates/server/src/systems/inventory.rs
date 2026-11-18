@@ -147,7 +147,7 @@ impl World {
                 self.throw_gold(id, gold - keep);
             }
             let ao = self.ao.clone();
-            let newbie = items::is_newbie(level);
+            let newbie = level <= self.data.balance.newbie_max_level;
             for slot in 1..=MAX_INVENTORY_SLOTS as u8 {
                 let Some(item) = self.player(id).and_then(|p| p.inv.get(slot)) else { continue };
                 let Some(o) = ao.objs.get(item.obj as u32) else { continue };
@@ -545,6 +545,7 @@ impl World {
         }
         let free = items::consumable_free_map(self.player(id).unwrap().map);
         match o.obj_type {
+            ObjType::Chest if o.chest_kind > 0 => self.open_chest(id, slot, o.chest_kind as u32, o.chest_key),
             ObjType::UseOnce => {
                 let s = &mut self.player_mut(id).stats;
                 s.food = (s.food + o.min_hunger).min(MAX_FOOD);
@@ -695,7 +696,7 @@ impl World {
         let (map, x, y, level) = (p.map, p.x, p.y, p.level);
         let ao = self.ao.clone();
         let Some(o) = ao.objs.get(item.obj as u32) else { return };
-        if items::is_newbie(level) && o.newbie == 1 {
+        if level <= self.data.balance.newbie_max_level && o.newbie == 1 {
             return self.console(id, "No se pueden tirar los objetos Newbies.", Tone::Warn);
         }
         if o.non_droppable == 1 {

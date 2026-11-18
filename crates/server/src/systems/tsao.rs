@@ -61,6 +61,35 @@ impl World {
         d.clamp(0, i32::MAX as i64) as i32
     }
 
+    /// Uses chest object in `slot` (TSAO otCofreAzar): its key (if it needs one) and the
+    /// chest go, its contents come in (to the floor if the bag is full).
+    pub(crate) fn open_chest(&mut self, id: u32, slot: u8, kind: u32, key: i32) {
+        use crate::world::inventory::InvItem;
+        use ao_protocol::Tone;
+        static CHESTS: OnceLock<Mutex<HashMap<PathBuf, &'static HashMap<u32, ao_formats::dat::chests::Chest>>>> = OnceLock::new();
+        let chests = *CHESTS.get_or_init(Default::default).lock().unwrap().entry(self.recursos.clone()).or_insert_with(|| Box::leak(Box::new(ao_formats::dat::chests::load(&self.recursos))));
+        let Some(chest) = chests.get(&kind) else { return self.console(id, "Este cofre está vacío.", Tone::Warn) };
+        if key > 0 {
+            let Some(kslot) = self.player(id).and_then(|p| (1..=crate::world::inventory::MAX_INVENTORY_SLOTS as u8).find(|s| p.inv.get(*s).is_some_and(|i| i.obj as i32 == key))) else {
+                let name = self.ao.objs.get(key as u32).map_or("la llave".to_string(), |o| o.name.clone());
+                return self.console(id, format!("Necesitas {name} para abrir este cofre."), Tone::Warn);
+            };
+            self.remove_from_slot(id, kslot, 1);
+        }
+        let Some(class) = self.player(id).and_then(|p| ao_formats::dat::balance::Class::from_id(p.class as i32)) else { return };
+        self.remove_from_slot(id, slot, 1);
+        let contents = chest.open(class.spanish_name(), &mut |total| self.roll(1, total as i32) as u32);
+        for (obj, amount) in contents {
+            let Some(name) = self.ao.objs.get(obj as u32).map(|o| o.name.clone()) else { continue };
+            let item = InvItem { obj, amount };
+            if !self.add_item(id, item) {
+                let (m, x, y) = self.player(id).map(|p| (p.map, p.x, p.y)).unwrap();
+                self.drop_to_floor(m, x, y, item, false);
+            }
+            self.console(id, format!("Has obtenido {amount} {name}."), Tone::Good);
+        }
+    }
+
     /// The PvP layer, read once per resource folder (empty without the file).
     pub(crate) fn pvp_balance(&self) -> &'static PvpBalance {
         static CACHE: OnceLock<Mutex<HashMap<PathBuf, &'static PvpBalance>>> = OnceLock::new();

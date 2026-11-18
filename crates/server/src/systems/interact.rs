@@ -8,8 +8,6 @@ use ao_formats::csm::MAP_SIZE;
 use ao_formats::dat::npcs::NpcType;
 use ao_protocol::{Tone, S2C};
 
-/// `LimiteNewbie` (Declares.bas).
-const NEWBIE_LEVEL: u32 = 12;
 const TOO_FAR: &str = "Estas demasiado lejos.";
 const DEAD: &str = "Estas muerto!!";
 
@@ -136,7 +134,7 @@ impl World {
         }
         // Flags.Envenenado / Incinerado are cleared here in AO20: status effects belong to
         // the magic system (P1 B), not wired yet. MAP_HOME_IN_JAIL is P2.
-        if dead && (kind == NpcType::Reviver || level <= NEWBIE_LEVEL) {
+        if dead && (kind == NpcType::Reviver || level <= self.data.balance.newbie_max_level) {
             self.console(id, "Has sido resucitado!", Tone::Good);
             self.resurrect(id);
         } else if !dead {

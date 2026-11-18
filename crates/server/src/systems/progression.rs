@@ -187,6 +187,58 @@ impl World {
         self.send_stats(id);
         self.send_vitals(id);
         self.send_skills(id);
+        self.level_rewards(id, first, new_level);
+    }
+
+    /// What levels `first..=last` give: TSAO gold below level 10, spells at a level, the
+    /// newbie items taken away when the player stops being a newbie (QuitarNewbieObj) and
+    /// the graduation out of the newbie area (warp + starter chest).
+    fn level_rewards(&mut self, id: u32, first: u32, last: u32) {
+        let newbie_max = self.data.balance.newbie_max_level;
+        if first <= newbie_max + 1 && last > newbie_max {
+            self.remove_newbie_items(id);
+        }
+        let Some(r) = self.data.levels.as_ref().map(|t| t.rewards.clone()) else { return };
+        for level in first..=last {
+            if level < r.gold_below_level && r.gold_per_level > 0 {
+                let gold = r.gold_per_level.saturating_mul(level);
+                let p = self.player_mut(id);
+                p.inv.gold = p.inv.gold.saturating_add(gold);
+                self.send_inventory_vitals(id);
+                self.console(id, format!("Recibes {gold} monedas de oro por subir de nivel."), Tone::Good);
+            }
+            for [at, spell] in r.spells.iter().copied() {
+                if at == level && self.ao.spells.get(spell).is_some() && !self.player(id).unwrap().spells.knows(spell as u16) && self.player_mut(id).spells.add(spell as u16).is_some() {
+                    let name = self.ao.spells.get(spell).unwrap().name.clone();
+                    self.console(id, format!("Has aprendido el hechizo {name}."), Tone::Good);
+                    self.send_spellbook(id);
+                }
+            }
+            if let Some(g) = r.graduation.as_ref().filter(|g| g.level == level) {
+                let short = matches!(Race::from_id(self.player(id).unwrap().race as i32), Some(Race::Dwarf | Race::Gnome));
+                let item = if short && g.item_short_races > 0 { g.item_short_races } else { g.item };
+                self.console(id, "¡Has dejado de ser newbie! Te llevamos a la ciudad con un paquete de bienvenida.", Tone::Good);
+                if !self.add_item(id, crate::world::inventory::InvItem { obj: item, amount: 1 }) {
+                    let (m, x, y) = { let p = self.player(id).unwrap(); (p.map, p.x, p.y) };
+                    self.drop_to_floor(m, x, y, crate::world::inventory::InvItem { obj: item, amount: 1 }, false);
+                }
+                self.teleport(id, g.map, g.x, g.y);
+            }
+        }
+    }
+
+    /// QuitarNewbieObj: every newbie object leaves the bag (unequipped first).
+    pub(crate) fn remove_newbie_items(&mut self, id: u32) {
+        let ao = self.ao.clone();
+        let slots: Vec<(u8, u32)> = self.player(id).map_or(Vec::new(), |p| {
+            (1..=MAX_INVENTORY_SLOTS as u8).filter_map(|s| p.inv.get(s).filter(|i| ao.objs.get(i.obj as u32).is_some_and(|o| o.newbie == 1)).map(|i| (s, i.amount))).collect()
+        });
+        for (slot, amount) in &slots {
+            self.remove_from_slot(id, *slot, *amount);
+        }
+        if !slots.is_empty() {
+            self.console(id, "Tus objetos de newbie desaparecen.", Tone::Info);
+        }
     }
 
     /// `C2S::AssignSkill` (`HandleModifySkills`): spends free points on one skill. A skill
@@ -489,5 +541,27 @@ mod tests {
         assert_eq!(w.tsao_spell_damage(1, false, 10, None), 31);
         // The PvP layer of TSAO's Balance.dat: paladin vs warrior +25% then +28 flat.
         assert_eq!(w.pvp_balance().physical(100, "Paladín", "Guerrero", false), 153);
+
+        // Newbie flow: newbie up to 9; 2..9 pay 600 * level; level 10 takes the newbie
+        // items, warps to Tanaris (28, 54, 34) and gives the Starterpack (1560).
+        w.data.balance.newbie_max_level = 9;
+        let newbie_obj = w.ao.objs.iter().find(|(_, o)| o.newbie == 1).map(|(i, _)| i as u16).unwrap();
+        w.add_item(1, crate::world::inventory::InvItem { obj: newbie_obj, amount: 1 });
+        let p = w.player_mut(1);
+        (p.level, p.exp, p.inv.gold) = (2, 0, 0);
+        let need: u32 = (2..10).map(|l| w.ao.balance.exp_for_level(l).unwrap() as u32).sum();
+        w.give_exp(1, need);
+        let p = w.player(1).unwrap();
+        assert_eq!((p.level, p.map), (10, 28));
+        assert!((p.x - 54).abs() <= 2 && (p.y - 34).abs() <= 2);
+        assert!(p.inv.gold >= (3..10).map(|l| 600 * l).sum::<u32>());
+        let items: Vec<u16> = p.inv.slots.iter().flatten().map(|i| i.obj).collect();
+        assert!(!items.contains(&newbie_obj), "newbie items gone");
+        let pack = p.inv.slots.iter().position(|i| i.is_some_and(|i| i.obj == 1560)).expect("Starterpack") as u8 + 1;
+        // Opening it gives the whole pack 3 (Random=0): 11 objects.
+        let before = w.player(1).unwrap().inv.slots.iter().flatten().count();
+        w.on_use_item(1, pack);
+        let after = w.player(1).unwrap().inv.slots.iter().flatten().count();
+        assert!(after >= before + 9, "{before} -> {after}");
     }
 }

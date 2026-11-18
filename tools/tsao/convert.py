@@ -229,8 +229,20 @@ CLASS_MAP = {"ARTESANO": "TRABAJADOR", "RECOLECTOR": "TRABAJADOR"}
 DEAD_CLASSES = {"PESCADOR", "MINERO", "LEÑADOR", "LENADOR", "CARPINTERO", "HERRERO", "SASTRE", "ALQUIMISTA"}
 
 
+# TSAO eOBJType (Declares.bas) -> engine ObjType. 1-6, 8, 9, 11, 13, 14, 16-19, 22-24,
+# 26-28, 31-34 mean the same; the rest differ (TSAO 47 "cofre al azar" is engine 47
+# "mail"). Types without an engine system yet become decorations (20) and keep their
+# TSAO number in `TsaoObjType` for when it is ported.
+OBJ_TYPE = {7: 20, 10: 8, 15: 20, 35: 20, 36: 20, 37: 20, 38: 20, 39: 20, 40: 20, 41: 20, 42: 20, 43: 20, 45: 20, 46: 20,
+            47: 48, 48: 44, 49: 20, 50: 20, 51: 20, 52: 20, 53: 20, 54: 20, 55: 20}
+
+
 def remap_obj_classes(m):
     head, body = m.group(1), m.group(2)
+    t = re.search(r"(?im)^ObjType=(\d+)", body)
+    if t and int(t.group(1)) in OBJ_TYPE:
+        old = int(t.group(1))
+        body = body[:t.start()] + f"ObjType={OBJ_TYPE[old]}\nTsaoObjType={old}" + body[t.end():]
     cps = []
     for v in re.findall(r"(?im)^CP\d+=([^\r\n]*)", body):
         c = v.strip().upper()
@@ -365,6 +377,12 @@ def convert_dats(src, dst):
     # version where it has one, else an empty set until that system is ported.
     for f in ("ArmasHerrero.dat", "ArmadurasHerrero.dat", "Ciudades.Dat", "Invokar.dat", "Tesoros.dat", "Map.dat", "Help.dat", "Motd.ini", "NombresInvalidos.txt"):
         open(os.path.join(ddat, f), "w", encoding="latin-1", newline="\r\n").write(read(f).replace("\r\n", "\n"))
+    # Chests: the Random=0 ones (starter packs) swapped items by class in InvUsuario.bas.
+    swaps = "Swap1=Asesino|Paladin:206-530\nSwap2=Guerrero|Cazador:206-478\nSwap3=Guerrero|Cazador:207-551-100\nSwap4=Guerrero|Cazador:1012-404\n"
+    cofres = read("Cofres.dat").replace("\r\n", "\n")
+    for n in (3, 4):
+        cofres = re.sub(rf"(?im)^\[COFRE{n}\]\n", lambda m: m.group(0) + swaps, cofres)
+    open(os.path.join(ddat, "Cofres.dat"), "w", encoding="latin-1", newline="\r\n").write(cofres)
     empty = {
         "ObjCarpintero.dat": "[INIT]\nNumObjs=0\n",
         "ObjSastre.dat": "[INIT]\nNumObjs=0\n",

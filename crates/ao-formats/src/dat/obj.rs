@@ -456,6 +456,10 @@ pub struct ObjData {
     /// TSAO `StaffDamageBonus`: a mage's or druid's staff raises spell damage to
     /// `(70 + bonus)%` (65 for druids).
     pub staff_damage_bonus: i32,
+    /// TSAO `TipoCofre`: chest of `Cofres.dat` it opens into.
+    pub chest_kind: i32,
+    /// TSAO `cofreLlave`: object consumed to open it.
+    pub chest_key: i32,
     /// `HechizoIndex`.
     pub spell_index: i32,
     /// `Hechizo` (potion, elemental rune).
@@ -716,6 +720,8 @@ fn read_obj(s: &mut Sec, declared: u32) -> ObjData {
     o.tsao_magic_def = (s.int("DefensaMagicaMin"), s.int("DefensaMagicaMax"));
     o.tsao_magic_damage = (s.int("DañoMagicoMin"), s.int("DañoMagicoMax"));
     o.staff_damage_bonus = s.int("StaffDamageBonus");
+    o.chest_kind = s.int("TipoCofre");
+    o.chest_key = s.int("cofreLlave");
     o.destroys = s.int("Destruye");
     o.non_droppable = s.int("Intirable");
     o.skill_amount = s.int("CantidadSkill");
