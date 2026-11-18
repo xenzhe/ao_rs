@@ -310,14 +310,23 @@ impl Game {
                 s.next_exp = next_exp;
             }
             S2C::Effect { spell, from, tx, ty } => {
-                let Some(def) = self.spell_by_id(spell).cloned() else { return };
-                if from == self.my_id {
-                    self.cd_until.insert(spell, self.now + def.cooldown_ms as f64 / 1000.0 + 0.05);
-                    self.pending.remove(&spell);
-                }
+                // Spells outside my book (NPCs, other players) take their look from the profile.
+                let effect = match self.spell_by_id(spell).cloned() {
+                    Some(def) => {
+                        if from == self.my_id {
+                            self.cd_until.insert(spell, self.now + def.cooldown_ms as f64 / 1000.0 + 0.05);
+                            self.pending.remove(&spell);
+                        }
+                        def.effect
+                    }
+                    None => match ao_formats::profile::for_recursos(&self.recursos).spell_fx.get(&(spell as u32)).and_then(|n| ao_rules::spells::SpellEffect::parse(n)) {
+                        Some(e) => e,
+                        None => return,
+                    },
+                };
                 let to = tile_center(tx, ty);
                 let from_pos = self.ents.get(&from).map(|e| e.world_pos() - pt(0.0, 24.0)).unwrap_or(to);
-                self.events.push(ClientEvent::Effect { effect: def.effect, from: from_pos, to });
+                self.events.push(ClientEvent::Effect { effect, from: from_pos, to });
             }
             S2C::Hp { id, hp, max_hp } => {
                 if let Some(e) = self.ents.get_mut(&id) {

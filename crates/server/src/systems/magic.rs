@@ -991,7 +991,7 @@ impl World {
             Target::Npc(n) => self.instance(map).npcs.get(&n).map_or((n, px, py), |n2| (n, n2.x, n2.y)),
         };
         self.broadcast(map, &S2C::Effect { spell: spell_id, from: id, tx, ty }, None);
-        if s.fx > 0 {
+        if s.fx > 0 && !self.spell_has_particles(spell_id) {
             self.broadcast(map, &S2C::Fx { id: tid, fx: s.fx as u16, loops: s.loops.clamp(0, 255) as u8 }, None);
         }
         if let Some(p) = self.player(id) {
@@ -1008,6 +1008,12 @@ impl World {
         // TODO(progression): SubirSkill(Magia) unless the spell is a physical skill.
     }
 
+    /// The client draws its own particles for this spell (profile [SpellFx]): the old
+    /// FXs.ini sprite would play on top of them, so it is not sent.
+    fn spell_has_particles(&self, spell: u16) -> bool {
+        ao_formats::profile::for_recursos(&self.recursos).spell_fx.contains_key(&(spell as u32))
+    }
+
     /// Hook (contract): the NPC system wants creature `nid` on `map` to cast Hechizos.dat
     /// `spell` on player `pid` (`NpcLanzaSpellSobreUser`). The AI decides when (interval
     /// and range); magic applies the effect.
@@ -1022,7 +1028,7 @@ impl World {
         }
         let (px, py) = (p.x, p.y);
         self.broadcast(map, &S2C::Effect { spell, from: nid, tx: px, ty: py }, None);
-        if s.fx > 0 {
+        if s.fx > 0 && !self.spell_has_particles(spell) {
             self.broadcast(map, &S2C::Fx { id: pid, fx: s.fx as u16, loops: s.loops.clamp(0, 255) as u8 }, None);
         }
         if s.effects.contains(Fx::DO_HEAL) {
