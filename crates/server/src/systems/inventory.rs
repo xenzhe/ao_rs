@@ -581,6 +581,7 @@ impl World {
             _ if o.tsao_type == 38 => self.read_treasure_map(id),
             _ if o.tsao_type == super::tsao_progress::TSAO_OCTARINE_GEM => self.tsao_upgrades(id),
             ObjType::Chest if o.chest_kind > 0 => self.open_chest(id, slot, o.chest_kind as u32, o.chest_key),
+            ObjType::Chest => self.open_ao20_chest(id, slot, o),
             ObjType::UseOnce => {
                 let s = &mut self.player_mut(id).stats;
                 s.food = (s.food + o.min_hunger).min(MAX_FOOD);
@@ -616,6 +617,8 @@ impl World {
             }
             ObjType::Potions => self.use_potion(id, slot, o, free),
             ObjType::Keys => self.use_key(id, slot),
+            ObjType::EmptyBottle => self.fill_bottle(id, slot, o),
+            ObjType::MusicalInstruments => self.play_instrument(id, o),
             ObjType::Parchment => {
                 let p = self.player(id).unwrap();
                 if !items::class_can_use(o, p.class) || !items::race_can_use(o, p.race, p.gender) {
@@ -700,9 +703,197 @@ impl World {
                 self.send_inventory_vitals(id);
                 self.console(id, "Te sentis sano y lleno.", Tone::Good);
             }
-            // Strength/agility (timed attribute bonus), head/sex change, invisibility,
-            // marriage, effects over time: they belong to other systems (see report).
+            potion::AGILITY | potion::STRENGTH => {
+                // UserAtributos + RandomNumber(Min, Max), capped at twice the base, for
+                // DuracionEfecto seconds (DuracionPociones restores the backup).
+                let attr = if o.potion_type == potion::AGILITY { ao_rules::character::ATTR_AGILITY } else { ao_rules::character::ATTR_STRENGTH };
+                let add = roll(self);
+                let until = self.now().after_secs(o.effect_duration.max(1) as u64);
+                let s = &mut self.player_mut(id).stats;
+                let base = *s.attr_backup.get_or_insert(s.attributes);
+                s.attributes[attr] = (s.attributes[attr] as i32 + add).min(base[attr] as i32 * 2).clamp(0, 255) as u8;
+                s.potion_until = Some(until);
+                consume(self);
+                self.send_attributes(id);
+            }
+            potion::HEAD_RANDOM | potion::SEX => {
+                let p = self.player(id).unwrap();
+                let (race, mut gender, old) = (p.race, p.gender, p.head);
+                if o.potion_type == potion::SEX {
+                    gender = if gender == 1 { 2 } else { 1 };
+                }
+                // A random head of the race and (new) gender (the head ranges the account
+                // screen also validates).
+                let heads: Vec<u16> = ao_formats::heads::for_recursos(&self.recursos).heads(race, gender).collect();
+                if heads.is_empty() {
+                    return self.console(id, "Esta pocion no tiene efecto en vos.", Tone::Warn);
+                }
+                let head = heads[self.rng.range(0, heads.len() as i32 - 1) as usize];
+                let p = self.player_mut(id);
+                p.gender = gender;
+                p.head = head;
+                if head != old || o.potion_type == potion::SEX {
+                    self.remove_from_slot(id, slot, 1);
+                }
+                self.send_look(id);
+                self.console(id, if o.potion_type == potion::SEX { "Has cambiado de sexo." } else { "Has cambiado tu apariencia." }, Tone::Good);
+            }
+            potion::INVISIBLE => {
+                let now = self.now();
+                if self.player(id).unwrap().status.invisible_until.is_some_and(|u| now < u) {
+                    return self.console(id, "Ya estas invisible.", Tone::Warn);
+                }
+                let until = now.after_secs(o.effect_duration.max(1) as u64);
+                self.player_mut(id).status.invisible_until = Some(until);
+                self.remove_from_slot(id, slot, 1);
+                self.refresh_status(id);
+                self.console(id, "Te has escondido entre las sombras...", Tone::Good);
+            }
+            potion::SUICIDE => {
+                self.remove_from_slot(id, slot, 1);
+                let hp = self.player(id).unwrap().hp;
+                self.damage_player(id, hp, "una pocion negra");
+            }
+            // Marriage, legendary heads, particles and effects over time (types 16-23)
+            // belong to systems not ported yet.
             _ => self.console(id, "Ese efecto todavia no esta disponible.", Tone::Warn),
+        }
+    }
+
+    /// `otChest` of AO20 (`Subtipo`): 1 gives every item, 2 gives `CantEntrega` items at
+    /// random, 3 gives each item with its own chance (`RandomNumber(1, data) = 1`).
+    fn open_ao20_chest(&mut self, id: u32, slot: u8, o: &ObjData) {
+        if o.contents.is_empty() {
+            return self.console(id, "Este cofre esta vacio.", Tone::Info);
+        }
+        self.remove_from_slot(id, slot, 1);
+        let p = self.player(id).unwrap();
+        let (map, x, y) = (p.map, p.x, p.y);
+        if o.snd1 > 0 {
+            self.broadcast(map, &S2C::Sound { wav: o.snd1 as u16, x, y }, None);
+        }
+        let mut got: Vec<(u16, u32)> = Vec::new();
+        match o.subtype {
+            1 => got.extend(o.contents.iter().map(|c| (c.obj as u16, c.amount.max(1) as u32))),
+            2 => {
+                for _ in 0..o.deliver_count.max(1) {
+                    let c = &o.contents[self.rng.range(0, o.contents.len() as i32 - 1) as usize];
+                    got.push((c.obj as u16, c.amount.max(1) as u32));
+                }
+            }
+            _ => {
+                for c in &o.contents {
+                    if self.rng.range(1, c.drop_roll.max(1)) == 1 {
+                        got.push((c.obj as u16, c.amount.max(1) as u32));
+                    }
+                }
+            }
+        }
+        if got.is_empty() {
+            return self.console(id, "El cofre no tenia nada esta vez.", Tone::Info);
+        }
+        for (obj, amount) in got {
+            let it = InvItem { obj, amount };
+            if !self.add_item(id, it) {
+                self.drop_to_floor(map, x, y, it, true);
+            }
+            let name = self.ao.objs.get(obj as u32).map(|d| d.name.clone()).unwrap_or_default();
+            self.console(id, format!("{name} ({amount})"), Tone::Good);
+        }
+    }
+
+    /// `otEmptyBottle`: filled with water standing within two tiles of it (the official one
+    /// needs the water tile clicked first; any water that close is enough here).
+    fn fill_bottle(&mut self, id: u32, slot: u8, o: &ObjData) {
+        let p = self.player(id).unwrap();
+        let (map, px, py) = (p.map, p.x, p.y);
+        let m = &self.instance(map).map;
+        let near_water = (-2..=2).any(|dy| (-2..=2).any(|dx| ao_formats::csm::on_map(px + dx, py + dy) && m.blocked(px + dx, py + dy) & ao_formats::csm::FLAG_WATER != 0));
+        if !near_water {
+            return self.console(id, "Debes acercarte mas al agua.", Tone::Info);
+        }
+        if o.open_index <= 0 {
+            return;
+        }
+        self.remove_from_slot(id, slot, 1);
+        let full = InvItem { obj: o.open_index as u16, amount: 1 };
+        if !self.add_item(id, full) {
+            self.drop_to_floor(map, px, py, full, true);
+        }
+        self.broadcast(map, &S2C::Sound { wav: 15, x: px, y: py }, None);
+    }
+
+    /// `otMusicalInstruments`: plays its sound; the faction horns (`Real` / `Caos`) only
+    /// for their army, outside safe maps, and the whole map hears them.
+    fn play_instrument(&mut self, id: u32, o: &ObjData) {
+        let p = self.player(id).unwrap();
+        let (map, x, y, status) = (p.map, p.x, p.y, self.faction_status(id) as i32);
+        if o.snd1 <= 0 {
+            return;
+        }
+        let wav = o.snd1 as u16;
+        if o.royal != 0 || o.chaos != 0 {
+            // Status 3 royal army, 2 chaos legion.
+            let member = if o.royal != 0 { status == 3 } else { status == 2 };
+            if !member {
+                let who = if o.royal != 0 { "la Armada Real" } else { "la Legion Oscura" };
+                return self.console(id, format!("Solo los miembros de {who} pueden usar este cuerno."), Tone::Warn);
+            }
+            if self.instance(map).map.safe {
+                return self.console(id, "No hay peligro aqui. Es zona segura.", Tone::Info);
+            }
+        }
+        self.broadcast(map, &S2C::Sound { wav, x, y }, None);
+    }
+
+    /// `/hogar` (`goHome`): a ghost starts the trip home; `tick_potions` brings it there.
+    pub(crate) fn go_home(&mut self, id: u32) {
+        if !self.is_dead(id) {
+            return self.console(id, "Debes estar muerto para volver a tu hogar.", Tone::Info);
+        }
+        if self.player(id).is_some_and(|p| p.going_home.is_some()) {
+            return self.console(id, "Ya estas viajando a tu hogar.", Tone::Info);
+        }
+        let gm = self.gm_rank(id) != ao_protocol::p4::gm::GmRank::User;
+        let secs = if gm { 5 } else { self.ao.balance.extra.home_timer.max(1) as u64 };
+        let at = self.now().after_secs(secs);
+        self.player_mut(id).going_home = Some(at);
+        self.console(id, format!("Viajaras a tu hogar en {secs} segundos."), Tone::Info);
+    }
+
+    /// `HomeArrival`: the home city of `Ciudades.dat` (Ullathorpe: characters have no other
+    /// home city here yet).
+    fn home_arrival(&mut self, id: u32) {
+        self.player_mut(id).going_home = None;
+        if !self.is_dead(id) {
+            return; // resurrected on the way: the trip is off.
+        }
+        let (map, x, y) = home_city(&self.recursos);
+        self.teleport(id, map, x, y);
+        self.console(id, "Has llegado a tu hogar.", Tone::Info);
+    }
+
+    /// `DuracionPociones`: strength/agility potions wear off.
+    pub(crate) fn tick_potions(&mut self, now: crate::clock::GameTime) {
+        let due: Vec<u32> = self.sessions.iter().filter_map(|(id, s)| s.player.as_ref().filter(|p| p.stats.potion_until.is_some_and(|u| now >= u)).map(|_| *id)).collect();
+        let home: Vec<u32> = self.sessions.iter().filter_map(|(id, s)| s.player.as_ref().filter(|p| p.going_home.is_some_and(|u| now >= u)).map(|_| *id)).collect();
+        for id in home {
+            self.home_arrival(id);
+        }
+        for id in due {
+            let s = &mut self.player_mut(id).stats;
+            s.potion_until = None;
+            if let Some(b) = s.attr_backup.take() {
+                s.attributes = b;
+            }
+            self.send_attributes(id);
+            self.console(id, "El efecto de la pocion ha terminado.", Tone::Info);
+        }
+    }
+
+    pub(crate) fn send_attributes(&self, id: u32) {
+        if let Some(p) = self.player(id) {
+            self.send(id, &S2C::Attributes { values: p.stats.attributes });
         }
     }
 
@@ -1158,4 +1349,26 @@ mod tests {
         assert_eq!(w.look_of(2).2, anim);
         assert!(c.pump().iter().any(|m| matches!(m, S2C::InventorySlot { slot: s, equipped: true, .. } if *s == slot)));
     }
+}
+
+/// Ullathorpe in `Dat/Ciudades.dat` (MAPA, X, Y); map 1 (57, 44) without the file.
+fn home_city(recursos: &std::path::Path) -> (u16, i32, i32) {
+    let text = std::fs::read(recursos.join("Dat").join("Ciudades.dat")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    let mut in_city = false;
+    let (mut map, mut x, mut y) = (1u16, 57i32, 44i32);
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_city = line.eq_ignore_ascii_case("[Ullathorpe]");
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=').filter(|_| in_city) else { continue };
+        match k.trim().to_ascii_uppercase().as_str() {
+            "MAPA" => map = v.trim().parse().unwrap_or(map),
+            "X" => x = v.trim().parse().unwrap_or(x),
+            "Y" => y = v.trim().parse().unwrap_or(y),
+            _ => {}
+        }
+    }
+    (map, x, y)
 }

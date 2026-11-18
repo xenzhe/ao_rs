@@ -158,6 +158,8 @@ pub enum S2C {
     /// A fixed map object (door) now is `obj` instead of what the map file says; the
     /// client redraws it and applies its blocks (`ao_rules::doors`).
     MapObject { x: i32, y: i32, obj: u16 },
+    /// A sound (`PlayWave`) at a tile of the map: instruments, horns, filling a bottle...
+    Sound { wav: u16, x: i32, y: i32 },
 
     // Bank
     BankOpen { slots: Vec<(u8, u16, u32)>, gold: u32 },

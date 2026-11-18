@@ -54,6 +54,20 @@ restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
 - **Reloj del mundo**: el servidor manda la hora; día de 120 minutos (`day_length_minutes`),
   todos ven la misma hora; empieza a las 08:00 al arrancar.
 
+## Fase 3 hecha (18/11)
+
+- **Pociones**: fuerza y agilidad temporales (duran `DuracionEfecto` segundos, tope x2, nunca se
+  guardan subidas), cambio de cara y de sexo, invisibilidad, poción negra (suicidio).
+- **Cofres** de AO20 (subtipos 1-3: todo, N al azar, cada uno con su probabilidad).
+- **Botella vacía**: se llena a dos casillas del agua. **Instrumentos y cuernos de facción**
+  suenan (cuernos solo para su ejército y fuera de zona segura). Mensaje nuevo `S2C::Sound`.
+- **`/hogar`**: un fantasma vuelve a Ullathorpe tras `HomeTimer` (150 s; GMs 5 s).
+- No había nada que portar en pasajes de barco ni runas de regreso: los datos oficiales no tienen
+  ninguno.
+- **Pendiente**: monturas (necesitan el sistema de velocidad: muertos, barcos, monturas,
+  hechizos), fogatas, objetos de misión (`QuestOpenByObj`), cartas coleccionables y aspectos
+  (skins, unos 430 objetos estéticos).
+
 ## Hallazgo importante: datos del servidor desfasados
 
 El servidor lee `Dat/` (npcs.dat, obj.dat, misiones…) del repositorio público, pero los

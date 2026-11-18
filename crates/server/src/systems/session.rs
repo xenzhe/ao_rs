@@ -63,7 +63,8 @@ fn spellbook_from(s: &CharacterState) -> Spellbook {
 pub(crate) fn state_of(p: &Player) -> CharacterState {
     let slots = |v: &[Option<InvItem>]| v.iter().enumerate().filter_map(|(i, s)| s.map(|it| ((i + 1) as u8, it))).collect::<Vec<_>>();
     CharacterState {
-        attributes: p.stats.attributes,
+        // A potion bonus is temporary: the real attributes are saved.
+        attributes: p.stats.attr_backup.unwrap_or(p.stats.attributes),
         skills: p.stats.skills.to_vec(),
         skill_points: p.stats.skill_points,
         sta: p.stats.sta,
@@ -146,6 +147,7 @@ impl World {
             char_id,
             last_refusal: None,
             target_door: None,
+            going_home: None,
             race: c.race,
             class: c.class,
             gender: c.gender,

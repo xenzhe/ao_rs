@@ -220,7 +220,11 @@ pub mod potion {
     pub const HEALS_POISON: i32 = 5;
     pub const HEALS_PARALYSIS: i32 = 6;
     pub const STAMINA: i32 = 7;
+    pub const HEAD_RANDOM: i32 = 8;
+    pub const SEX: i32 = 9;
+    pub const INVISIBLE: i32 = 10;
     pub const HEALS_ALL: i32 = 13;
+    pub const SUICIDE: i32 = 21;
 }
 
 #[cfg(test)]

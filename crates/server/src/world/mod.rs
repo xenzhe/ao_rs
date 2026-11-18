@@ -334,6 +334,7 @@ impl World {
         self.tick_magic(now);
         self.tick_thief(now);
         self.tick_floor_cleanup(now);
+        self.tick_potions(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);
             self.regen();

@@ -189,6 +189,11 @@ impl World {
                 self.on_skill(id, ao_protocol::p4::skill::SkillC2S::Dig);
                 true
             }
+            // Hogar.bas goHome: only a ghost, after HomeTimer seconds, back to its city.
+            "/hogar" => {
+                self.go_home(id);
+                true
+            }
             "/online" => {
                 let n = self.player_ids().len();
                 self.console(id, format!("Hay {n} jugador{} conectado{}.", if n == 1 { "" } else { "es" }, if n == 1 { "" } else { "s" }), Tone::Info);

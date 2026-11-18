@@ -52,9 +52,18 @@ fn try_go(s: &TestServer, bot: &mut Bot, to: (i32, i32), within: i32) -> bool {
         step_towards(bot, to);
         s.advance(WALK_MS);
         bot.sync();
+        // Bats and rats keep nibbling a level-1 character on long walks: drink.
+        if bot.hp() > 0 && bot.hp() * 2 < bot.game.stats.max_hp.get() {
+            if let Some(slot) = bot.game.local.inventory.iter().position(|i| i.is_some_and(|i| i.obj == HP_POTION)) {
+                bot.send(&C2S::UseItem { slot: slot as u8 + 1 });
+            }
+        }
     }
     false
 }
+
+/// Poción de Vida (+27).
+const HP_POTION: u16 = 38;
 
 fn go(s: &TestServer, bot: &mut Bot, to: (i32, i32), within: i32) {
     if try_go(s, bot, to, within) {
@@ -141,12 +150,13 @@ fn warrior_and_mage_hunt_level_up_and_store_the_loot() {
     for (tile, (obj, _)) in &loot {
         // Respawned Ratas Gigantes would kill the warrior on the way.
         war.say("/quitarnpc 584");
+        war.say("/dar 38 5");
         war.sync();
         // A drop can lie where nobody stands (under a creature that stays): skip it.
         if !try_go(&s, &mut war, *tile, 0) {
             continue;
         }
-        assert!(war.hp() > 0, "muere recogiendo: {:?}", war.console().filter(|t| t.contains("pegado") || t.contains("matado")).collect::<Vec<_>>());
+        assert!(war.hp() > 0, "muere recogiendo: {:?}", war.console().filter(|t| t.contains("pegado") || t.contains("matado") || t.contains("quitado")).collect::<Vec<_>>().iter().rev().take(8).collect::<Vec<_>>());
         s.advance(300);
         war.send(&C2S::PickUp);
         war.wait_until("recoge", |b| !b.game.local.ground.contains_key(tile) || b.game.local.count_of(*obj) > 0);

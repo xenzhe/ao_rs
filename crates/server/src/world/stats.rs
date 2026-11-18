@@ -24,6 +24,11 @@ pub struct CharStats {
     pub water: i32,
     /// Runtime-only counters of the regeneration rules (not persisted).
     pub timers: RegenTimers,
+    /// Attributes before a strength/agility potion (`UserAtributosBackUP`): restored when
+    /// it wears off, and what is saved meanwhile.
+    pub attr_backup: Option<[u8; NUM_ATTRIBUTES]>,
+    /// When the potion bonus wears off (`flags.DuracionEfecto`, in seconds).
+    pub potion_until: Option<crate::clock::GameTime>,
 }
 
 /// Counters of `General.bas` (`Counters.HPCounter`, `STACounter`, `AGUACounter`,
@@ -44,6 +49,6 @@ pub struct RegenTimers {
 
 impl Default for CharStats {
     fn default() -> Self {
-        CharStats { attributes: [18; NUM_ATTRIBUTES], skills: [0; NUM_SKILLS], skill_points: 0, sta: 40, max_sta: 40, food: 100, water: 100, timers: RegenTimers::default() }
+        CharStats { attributes: [18; NUM_ATTRIBUTES], skills: [0; NUM_SKILLS], skill_points: 0, sta: 40, max_sta: 40, food: 100, water: 100, timers: RegenTimers::default(), attr_backup: None, potion_until: None }
     }
 }
