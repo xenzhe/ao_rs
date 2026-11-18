@@ -1247,7 +1247,7 @@ fn window_icon(w: WindowId) -> Icon {
         WindowId::WorldMap => Icon::Compass,
         WindowId::Options => Icon::Gear,
         WindowId::Events => Icon::Swords,
-        WindowId::Auction => Icon::Coins,
+        WindowId::Auction | WindowId::Travel => Icon::Coins,
         WindowId::Gm => Icon::Crown,
         WindowId::Crafting => Icon::Anvil,
         _ => Icon::Scroll,

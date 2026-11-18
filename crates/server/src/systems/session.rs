@@ -193,7 +193,7 @@ impl World {
         self.send_stats(id);
         self.magic_on_enter(id);
         self.social_on_enter(id);
-        self.console(id, "Bienvenido a Argentum (prototipo en Rust, mapas de AO20).", Tone::Good);
+        self.console(id, "Bienvenido a Numic AO.", Tone::Good);
         self.broadcast_all(&S2C::Console { text: format!("{name} se conecto."), color: Tone::Info }, Some(id));
         true
     }

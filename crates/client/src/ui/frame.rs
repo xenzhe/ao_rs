@@ -31,10 +31,12 @@ pub enum WindowId {
     Gm,
     Events,
     Auction,
+    Travel,
 }
 
 impl WindowId {
-    pub const ALL: [WindowId; 15] = [
+    pub const ALL: [WindowId; 16] = [
+        WindowId::Travel,
         WindowId::Inventory,
         WindowId::Bank,
         WindowId::Shop,
@@ -69,6 +71,7 @@ impl WindowId {
             WindowId::Gm => "Panel de GM",
             WindowId::Events => "Eventos",
             WindowId::Auction => "Subastas",
+            WindowId::Travel => "Viajes",
         }
     }
 
@@ -110,6 +113,7 @@ impl WindowId {
             WindowId::Gm => vec2(720.0, 580.0),
             WindowId::Events => vec2(780.0, 580.0),
             WindowId::Auction => vec2(780.0, 560.0),
+            WindowId::Travel => vec2(440.0, 560.0),
         }
     }
 }

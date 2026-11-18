@@ -3,6 +3,7 @@ pub mod work;
 pub mod craft;
 pub mod gm;
 pub mod event;
+pub mod travel;
 
 use ao_protocol::S2C;
 
@@ -12,6 +13,7 @@ pub struct P4 {
     pub craft: craft::CraftState,
     pub gm: gm::GmState,
     pub event: event::EventState,
+    pub travel: travel::TravelState,
 }
 
 impl P4 {
@@ -22,6 +24,7 @@ impl P4 {
             S2C::Craft(m) => self.craft.apply(m),
             S2C::Gm(m) => self.gm.apply(m),
             S2C::Event(m) => self.event.apply(m),
+            S2C::Travel(m) => self.travel.apply(m),
             _ => return false,
         }
         true

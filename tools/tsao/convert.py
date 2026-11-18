@@ -170,6 +170,56 @@ def convert_map(num, maps_dir, info):
 
 AO20_DAT = r"X:/dev/ao20/Recursos/Dat"
 
+# TSAO eNPCType -> engine NpcType (AO20 ids). TSAO-only types keep their number in
+# `TsaoType` and become ordinary NPCs until their system is ported (5 is not a TSAO type:
+# its NPCs are scripted by number in the VB code).
+NPC_TYPE = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 6: 6, 7: 7, 8: 8, 11: 17, 12: 26}
+
+# frmViajar + `/VIAJAR` (TCP_HandleData3.bas): name-map-x-y-price-minLevel-priceFromLv30.
+TRAVEL = [
+    "Tanaris-28-54-35-1000-0-5000",
+    "Anvilmar-29-46-85-1000-0-5000",
+    "Kahlimdor-27-50-48-1000-0-5000",
+    "Thir-25-74-45-1000-0-5000",
+    "Ruvendel-26-51-52-1000-0-5000",
+    "Jhumbel-69-44-44-1000-0-5000",
+    "Helka-136-52-55-1000-0-5000",
+    "Inthak-130-50-57-5000-30-5000",
+]
+
+
+# `CPn=CLASS` (classes that cannot use the object). TSAO's 12 classes (General.bas
+# ListaClases) end with Artesano and Recolector, the engine's work class is Trabajador;
+# the 0.11.5 work classes (Pescador, Minero...) left in Obj.dat no longer exist in TSAO
+# (the VB loader just never matched them), so they are dropped.
+CLASS_MAP = {"ARTESANO": "TRABAJADOR", "RECOLECTOR": "TRABAJADOR"}
+DEAD_CLASSES = {"PESCADOR", "MINERO", "LEÑADOR", "LENADOR", "CARPINTERO", "HERRERO", "SASTRE", "ALQUIMISTA"}
+
+
+def remap_obj_classes(m):
+    head, body = m.group(1), m.group(2)
+    cps = []
+    for v in re.findall(r"(?im)^CP\d+=([^\r\n]*)", body):
+        c = v.strip().upper()
+        c = CLASS_MAP.get(c, c)
+        if c and c not in DEAD_CLASSES and c not in cps:
+            cps.append(c)
+    body = re.sub(r"(?im)^CP\d+=[^\n]*\n?", "", body)
+    return head + "".join(f"CP{i + 1}={c}\n" for i, c in enumerate(cps)) + body
+
+
+def remap_npc(m):
+    head, num, body = m.group(1), int(m.group(2)), m.group(3)
+    t = re.search(r"(?im)^NpcType=(\d+)", body)
+    tsao = int(t.group(1)) if t else 0
+    new = NPC_TYPE.get(tsao, 0)
+    if t:
+        body = body[:t.start()] + f"NpcType={new}" + body[t.end():]
+    extra = f"TsaoType={tsao}\n" if tsao not in NPC_TYPE else ""
+    if new == 26:
+        extra += f"CityCount={len(TRAVEL)}\n" + "".join(f"City{i + 1}={c}\n" for i, c in enumerate(TRAVEL))
+    return head + extra + body
+
 
 def convert_dats(src, dst):
     """TSAO world data (NPCs, objects, spells) over the AO20 files the engine also needs
@@ -187,12 +237,14 @@ def convert_dats(src, dst):
         return b.decode("latin-1")
     # NPCs: friendly (< 500) and hostile (>= 500) live in two files in 0.11.5.
     npcs = read("NPCs.dat") + "\n" + re.sub(r"(?im)^\[INIT\][^\[]*", "", read("NPCs-HOSTILES.dat"))
+    npcs = re.sub(r"(?ims)^(\[NPC(\d+)\][^\n]*\n)(.*?)(?=^\[|\Z)", remap_npc, npcs)
     for f in os.listdir(ddat):
         if f.lower() in ("npcs.dat", "obj.dat", "hechizos.dat"):
             os.remove(os.path.join(ddat, f))
     open(os.path.join(ddat, "npcs.dat"), "w", encoding="latin-1", newline="\r\n").write(npcs.replace("\r\n", "\n"))
-    for f, out in (("Obj.dat", "obj.dat"), ("Hechizos.dat", "Hechizos.dat")):
-        open(os.path.join(ddat, out), "w", encoding="latin-1", newline="\r\n").write(read(f).replace("\r\n", "\n"))
+    objs = re.sub(r"(?ims)^(\[OBJ\d+\][^\n]*\n)(.*?)(?=^\[|\Z)", remap_obj_classes, read("Obj.dat"))
+    open(os.path.join(ddat, "obj.dat"), "w", encoding="latin-1", newline="\r\n").write(objs.replace("\r\n", "\n"))
+    open(os.path.join(ddat, "Hechizos.dat"), "w", encoding="latin-1", newline="\r\n").write(read("Hechizos.dat").replace("\r\n", "\n"))
 
 
 def main(src, dst):

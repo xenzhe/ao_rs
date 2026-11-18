@@ -276,7 +276,9 @@ fn screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
 
     // Footer: server, development access, credits.
     text_with(FontKind::Body, &format!("Servidor  {}", game.server_addr), 24.0 * u, sh - 18.0 * u, 14.0 * u, TEXT_FAINT);
-    let credit = "Mapas y gráficos de AO20  ·  proyecto sin fines comerciales";
+    // TSAO-converted resources are recognisable by the colour-keyed pack (tools/tsao).
+    let tsao = game.recursos.to_string_lossy().to_lowercase().contains("tsao");
+    let credit = if tsao { "Mapas y gráficos de Tierras Sagradas AO  ·  proyecto sin fines comerciales" } else { "Mapas y gráficos de AO20  ·  proyecto sin fines comerciales" };
     let cw = measure_with(FontKind::Body, credit, 14.0 * u).width;
     text_with(FontKind::Body, credit, sw - cw - 24.0 * u, sh - 18.0 * u, 14.0 * u, TEXT_FAINT);
     if mode != Mode::Dev && button_kind(Rect::new(sw / 2.0 - 110.0 * u, sh - 36.0 * u, 220.0 * u, 26.0 * u), "Acceso de desarrollo", Kind::Ghost, !busy, u) {

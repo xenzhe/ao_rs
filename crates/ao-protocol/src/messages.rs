@@ -96,6 +96,7 @@ pub enum C2S {
     Craft(crate::p4::CraftC2S),
     Gm(crate::p4::GmC2S),
     Event(crate::p4::EventC2S),
+    Travel(crate::p4::TravelC2S),
 }
 
 /// Server -> client.
@@ -183,6 +184,7 @@ pub enum S2C {
     Craft(crate::p4::CraftS2C),
     Gm(crate::p4::GmS2C),
     Event(crate::p4::EventS2C),
+    Travel(crate::p4::TravelS2C),
 }
 
 /// Bits of `S2C::Status::flags`.

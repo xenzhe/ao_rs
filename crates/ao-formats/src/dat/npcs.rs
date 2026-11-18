@@ -284,6 +284,10 @@ pub struct TransportCity {
     pub x: i32,
     pub y: i32,
     pub price: i32,
+    /// Lowest level allowed (0 = any).
+    pub min_level: i32,
+    /// Price from level 30 on (0 = the same `price`).
+    pub price_high: i32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -735,7 +739,10 @@ fn read_npc(s: &mut Sec) -> Npc {
             let name = parts.next().unwrap_or("").trim().to_string();
             let mut num = |s: &mut Sec| parts.next().map_or(0, |p| s.int_of(&key, &raw, p));
             let (map, x, y, price) = (num(s), num(s), num(s), num(s));
-            n.cities.push(TransportCity { name, map, x, y, price });
+            // Numic extension: optional `-minLevel-priceFromLevel30` (TSAO charged 5x
+            // from level 30 and kept some cities for level 30+).
+            let (min_level, price_high) = (num(s), num(s));
+            n.cities.push(TransportCity { name, map, x, y, price, min_level, price_high });
         }
     }
 
@@ -804,7 +811,7 @@ DropCount=99
         assert_eq!(trainer.spell_range, 9);
         assert_eq!(trainer.path_vision, DEFAULT_VISION);
         let ferry = t.get(502).unwrap();
-        assert_eq!(ferry.cities, vec![TransportCity { name: "Nix".into(), map: 34, x: 50, y: 60, price: 2500 }]);
+        assert_eq!(ferry.cities, vec![TransportCity { name: "Nix".into(), map: 34, x: 50, y: 60, price: 2500, ..Default::default() }]);
         assert_eq!(ferry.transporter_level, 10);
         assert!(ferry.drops.len() <= MAX_DROPS);
         assert!(warnings.iter().any(|w| w.key == "DropCount" && w.section == "NPC502"));
@@ -854,7 +861,7 @@ DropCount=99
         // Transporters (NPC1902-1904): hyphenated `City1=Name-map-x-y-price`.
         let ferry = t.get(1903).unwrap();
         assert_eq!(ferry.npc_type, NpcType::Transporter);
-        assert_eq!(ferry.cities[2], TransportCity { name: "Ciudad de Nix".into(), map: 34, x: 33, y: 26, price: 2000 });
+        assert_eq!(ferry.cities[2], TransportCity { name: "Ciudad de Nix".into(), map: 34, x: 33, y: 26, price: 2000, ..Default::default() });
         assert_eq!(ferry.cities.len(), 3);
         // The data has no trainers, vendors have prices-by-object lists.
         assert!(t.iter().all(|(_, n)| n.npc_type != NpcType::Trainer));

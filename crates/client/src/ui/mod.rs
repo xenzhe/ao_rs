@@ -29,6 +29,7 @@ pub mod craft;
 pub mod gm;
 pub mod events;
 pub mod auction;
+pub mod travel;
 
 pub use frame::{Drag, Ui, WindowId};
 
@@ -66,6 +67,7 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
             WindowId::Gm => gm::draw(ui, game, assets, r),
             WindowId::Events => events::draw(ui, game, assets, r),
             WindowId::Auction => auction::draw(ui, game, assets, r),
+            WindowId::Travel => travel::draw(ui, game, assets, r),
         }
     }
     // Floating "X invites you to trade" and orphan prompts.
@@ -79,7 +81,12 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
 /// player closed with its X while the server still has the session open ends it there.
 fn auto_windows(ui: &mut Ui, game: &mut Game) {
     let l = &game.local;
-    let states = [(WindowId::Bank, l.bank.is_some()), (WindowId::Shop, l.social.trade.shop.is_some()), (WindowId::Trade, l.social.trade.player.is_some())];
+    let states = [
+        (WindowId::Bank, l.bank.is_some()),
+        (WindowId::Shop, l.social.trade.shop.is_some()),
+        (WindowId::Trade, l.social.trade.player.is_some()),
+        (WindowId::Travel, l.p4.travel.open.is_some()),
+    ];
     for (w, on) in states {
         let was = ui.server_windows.contains(&w);
         if on && !ui.is_open(w) {
@@ -88,6 +95,7 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
                 match w {
                     WindowId::Bank => game.bank_close(),
                     WindowId::Shop => game.shop_close(),
+                    WindowId::Travel => game.travel_close(),
                     _ => game.trade_cancel(),
                 }
                 ui.server_windows.remove(&w);

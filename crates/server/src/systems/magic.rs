@@ -200,6 +200,10 @@ impl World {
             return false;
         }
         let spell = spell as u16;
+        if !self.class_may_use_spell(id, spell) {
+            self.console(id, "Tu clase no puede aprender ese hechizo.", Tone::Warn);
+            return false;
+        }
         if self.player(id).unwrap().spells.knows(spell) {
             self.console(id, "Ya tenés ese hechizo.", Tone::Warn);
             return false;
@@ -552,14 +556,24 @@ impl World {
         }
     }
 
+    /// TSAO `ExclusivoClase`: checked when learning AND casting. The VB cast check joined
+    /// the two class conditions with `And`, so it never refused anyone.
+    fn class_may_use_spell(&self, id: u32, spell: u16) -> bool {
+        let (Some(p), Some(s)) = (self.player(id), self.ao.spells.get(spell as u32)) else { return false };
+        s.exclusive_classes.is_empty() || s.exclusive_classes.iter().any(|c| *c as u8 == p.class)
+    }
+
     /// `PuedeLanzar` (the parts that exist in P1).
     fn can_cast(&mut self, id: u32, spell_id: u16, s: &Spell, target: Target) -> bool {
         let now = self.now();
-        let p = self.player(id).unwrap();
         let refuse = |w: &World, msg: String| {
             w.console(id, msg, Tone::Warn);
             false
         };
+        if !self.class_may_use_spell(id, spell_id) {
+            return refuse(self, "Tu clase no puede lanzar ese hechizo.".into());
+        }
+        let p = self.player(id).unwrap();
         if s.require_transform > 0 {
             return refuse(self, "Ese hechizo requiere una transformación.".into());
         }

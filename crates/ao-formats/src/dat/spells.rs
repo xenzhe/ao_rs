@@ -268,6 +268,9 @@ pub struct Spell {
     pub max_level_castable: i32,
     /// `RequireTransform`.
     pub require_transform: i32,
+    /// TSAO `ExclusivoClase` / `ExclusivoClase2`: only these classes may learn and cast it
+    /// (empty = everyone). Unknown names are dropped.
+    pub exclusive_classes: Vec<super::balance::Class>,
     /// `RequireWeaponType`.
     pub require_weapon_type: Option<WeaponType>,
     /// `IsElementalTagsOnly`.
@@ -485,6 +488,11 @@ fn read_spell(s: &mut Sec) -> Spell {
     p.target = SpellTarget::from_id(s.int("Target"));
     p.require_transform = s.int("RequireTransform");
     p.magic_power_needed = s.int("MagicPowerNeeded");
+    // TSAO staves: `NeedStaff` is the same staff power requirement.
+    if p.magic_power_needed == 0 {
+        p.magic_power_needed = s.int("NeedStaff");
+    }
+    p.exclusive_classes = ["ExclusivoClase", "ExclusivoClase2"].iter().filter_map(|k| super::balance::Class::from_name(&s.text(k))).collect();
     p.eot_id = s.int("EOTID");
     p.max_level_castable = s.int("MaxLevelCasteable");
     set(s.flag("RequireArmor"), SpellRequirements::ARMOR, &mut req);

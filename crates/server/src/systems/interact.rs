@@ -84,13 +84,17 @@ impl World {
             if self.npc_alive_and_near(id, dead, dist, 4) {
                 self.craft_npc(id, nid);
             }
+        } else if kind == NpcType::Transporter {
+            if self.npc_alive_and_near(id, dead, dist, 5) {
+                self.travel_npc(id, nid);
+            }
         } else if kind == NpcType::Auctioneer && !dead {
             // Auctions run from anywhere (event system, window U); no official map places one.
             self.console(id, "Las subastas están abiertas: pulsa U para verlas.", Tone::Info);
         } else if !dead
             && (matches!(
                     kind,
-                    NpcType::Pirate | NpcType::Governor | NpcType::FishDelivery | NpcType::Ao20Shop | NpcType::Ao20ShopPjs | NpcType::EventMaster | NpcType::Transporter
+                    NpcType::Pirate | NpcType::Governor | NpcType::FishDelivery | NpcType::Ao20Shop | NpcType::Ao20ShopPjs | NpcType::EventMaster
                 ))
         {
             // Travel (ships), homes, fish delivery, AO20 shops: not ported yet.
