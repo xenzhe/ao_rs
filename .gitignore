@@ -22,3 +22,4 @@ config/last_account.key
 tsao/data/ao.db*
 tsao/data/stats.json
 tsao/data/backups/
+/target-*

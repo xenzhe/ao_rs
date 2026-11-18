@@ -27,6 +27,7 @@ mod craft;
 mod doors;
 mod maprules;
 mod gm;
+mod gm_mod;
 mod gm_tsao;
 mod event;
 mod travel;

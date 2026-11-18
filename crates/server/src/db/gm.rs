@@ -14,6 +14,16 @@ pub struct PenaltyRow {
     pub reason: String,
 }
 
+/// One open help request (`Ayuda` queue entry).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SosRow {
+    pub id: i64,
+    pub name: String,
+    pub kind: String,
+    pub text: String,
+    pub at: i64,
+}
+
 impl Db {
     /// Rank of the character `name` whose database id is `char_id` (None = development
     /// login). A row bound to another id (the name was freed and taken again) gives
@@ -87,11 +97,14 @@ impl Db {
         Ok(())
     }
 
-    pub fn gm_ban(&self, name: &str, reason: &str, gm: &str) -> DbResult<()> {
+    /// BanPJ (`until` None, for good) or BanTemporal (`until` = unix seconds it ends).
+    /// One row per character: banning again replaces the previous ban (the VB added a
+    /// second `baneos.dat` entry, and the first one to expire unbanned the character).
+    pub fn gm_ban(&self, name: &str, reason: &str, gm: &str, until: Option<i64>) -> DbResult<()> {
         self.conn.execute(
-            "INSERT INTO gm_ban (name, reason, gm, at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(name) DO UPDATE SET reason = excluded.reason, gm = excluded.gm, at = excluded.at",
-            params![name, reason, gm, now_unix()],
+            "INSERT INTO gm_ban (name, reason, gm, at, until) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(name) DO UPDATE SET reason = excluded.reason, gm = excluded.gm, at = excluded.at, until = excluded.until",
+            params![name, reason, gm, now_unix(), until],
         )?;
         Ok(())
     }
@@ -101,9 +114,78 @@ impl Db {
         Ok(self.conn.execute("DELETE FROM gm_ban WHERE name = ?1", params![name])? > 0)
     }
 
-    /// Reason of a character ban.
-    pub fn gm_ban_reason(&self, name: &str) -> DbResult<Option<String>> {
-        Ok(self.conn.query_row("SELECT reason FROM gm_ban WHERE name = ?1", params![name], |r| r.get(0)).optional()?)
+    /// Reason and end (None = permanent) of a character ban still running at `now` (unix
+    /// seconds). An expired temporary ban is removed here, so it never keeps anyone out
+    /// even before the periodic sweep sees it.
+    pub fn gm_ban_reason(&self, name: &str, now: i64) -> DbResult<Option<(String, Option<i64>)>> {
+        let v: Option<(String, Option<i64>)> = self.conn.query_row("SELECT reason, until FROM gm_ban WHERE name = ?1", params![name], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+        match v {
+            Some((_, Some(until))) if until <= now => {
+                self.conn.execute("DELETE FROM gm_ban WHERE name = ?1", params![name])?;
+                Ok(None)
+            }
+            v => Ok(v),
+        }
+    }
+
+    /// Temporary bans ended at `now`: removed, names returned (EstadoTimer).
+    pub fn gm_expire_bans(&self, now: i64) -> DbResult<Vec<String>> {
+        let mut st = self.conn.prepare("SELECT name FROM gm_ban WHERE until IS NOT NULL AND until <= ?1 ORDER BY name")?;
+        let names: Vec<String> = st.query_map(params![now], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        self.conn.execute("DELETE FROM gm_ban WHERE until IS NOT NULL AND until <= ?1", params![now])?;
+        Ok(names)
+    }
+
+    /// CambiarPenaDatabase: replaces the text of penalty `n` (1-based, as `/PENAS` lists
+    /// them). Returns whether it existed.
+    pub fn gm_change_penalty(&self, target: &str, n: usize, text: &str) -> DbResult<bool> {
+        let id: Option<i64> = self
+            .conn
+            .query_row("SELECT id FROM gm_penalty WHERE target = ?1 ORDER BY at, id LIMIT 1 OFFSET ?2", params![target, n.saturating_sub(1) as i64], |r| r.get(0))
+            .optional()?;
+        let Some(id) = id.filter(|_| n > 0) else { return Ok(false) };
+        self.conn.execute("UPDATE gm_penalty SET reason = ?1 WHERE id = ?2", params![text, id])?;
+        Ok(true)
+    }
+
+    // ---------------------------------------------------------------- help queue
+
+    /// Ayuda.Push. Returns the new id.
+    pub fn gm_sos_push(&self, name: &str, kind: &str, text: &str) -> DbResult<i64> {
+        self.conn.execute("INSERT INTO gm_sos (name, kind, text, at) VALUES (?1, ?2, ?3, ?4)", params![name, kind, text, now_unix()])?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Open requests, oldest first.
+    pub fn gm_sos_open(&self) -> DbResult<Vec<SosRow>> {
+        let mut st = self.conn.prepare("SELECT id, name, kind, text, at FROM gm_sos WHERE done_by IS NULL ORDER BY id")?;
+        let rows = st.query_map([], |r| Ok(SosRow { id: r.get(0)?, name: r.get(1)?, kind: r.get(2)?, text: r.get(3)?, at: r.get(4)? }))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Ayuda.Quitar: marks it attended. Returns the request if it was open.
+    pub fn gm_sos_close(&self, id: i64, by: &str) -> DbResult<Option<SosRow>> {
+        let row = self.gm_sos_open()?.into_iter().find(|r| r.id == id);
+        if row.is_some() {
+            self.conn.execute("UPDATE gm_sos SET done_by = ?1, done_at = ?2 WHERE id = ?3", params![by, now_unix(), id])?;
+        }
+        Ok(row)
+    }
+
+    /// Ayuda.Reset: closes every open request. Returns how many.
+    pub fn gm_sos_clear(&self, by: &str) -> DbResult<usize> {
+        Ok(self.conn.execute("UPDATE gm_sos SET done_by = ?1, done_at = ?2 WHERE done_by IS NULL", params![by, now_unix()])?)
+    }
+
+    // ---------------------------------------------------------------- settings
+
+    pub fn gm_setting(&self, key: &str) -> DbResult<Option<String>> {
+        Ok(self.conn.query_row("SELECT value FROM gm_setting WHERE key = ?1", params![key], |r| r.get(0)).optional()?)
+    }
+
+    pub fn gm_set_setting(&self, key: &str, value: &str) -> DbResult<()> {
+        self.conn.execute("INSERT INTO gm_setting (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![key, value])?;
+        Ok(())
     }
 
     pub fn gm_ban_ip(&self, ip: &str, reason: &str, gm: &str) -> DbResult<()> {
@@ -191,15 +273,45 @@ mod tests {
         db.gm_save_sentence("Beto", 0, 0).unwrap();
         assert_eq!(db.gm_sentence("beto").unwrap(), (0, 0));
 
-        db.gm_ban("Malo", "cheat", "Gm").unwrap();
-        assert_eq!(db.gm_ban_reason("malo").unwrap().as_deref(), Some("cheat"));
+        db.gm_ban("Malo", "cheat", "Gm", None).unwrap();
+        assert_eq!(db.gm_ban_reason("malo", 0).unwrap(), Some(("cheat".to_string(), None)));
         assert!(db.gm_unban("MALO").unwrap());
         assert!(!db.gm_unban("MALO").unwrap());
+
+        // Temporary: running before its end, gone at it (lazily and by the sweep).
+        db.gm_ban("Temp", "flood", "Gm", Some(1000)).unwrap();
+        db.gm_ban("Otro", "flood", "Gm", Some(2000)).unwrap();
+        db.gm_ban("Siempre", "x", "Gm", None).unwrap();
+        assert_eq!(db.gm_ban_reason("temp", 999).unwrap(), Some(("flood".to_string(), Some(1000))));
+        assert_eq!(db.gm_ban_reason("temp", 1000).unwrap(), None);
+        assert_eq!(db.gm_expire_bans(5000).unwrap(), ["Otro"]);
+        assert!(db.gm_ban_reason("siempre", i64::MAX).unwrap().is_some(), "permanent bans never expire");
+        // Banning again replaces: a permanent ban over a temporary one stays permanent.
+        db.gm_ban("Doble", "a", "Gm", Some(10)).unwrap();
+        db.gm_ban("Doble", "b", "Gm", None).unwrap();
+        assert!(db.gm_expire_bans(100).unwrap().is_empty());
 
         db.gm_add_penalty("Malo", "Gm", "carcel", 10, "flood").unwrap();
         db.gm_add_penalty("Malo", "Gm", "silencio", 5, "").unwrap();
         let p = db.gm_penalties("malo").unwrap();
         assert_eq!(p.iter().map(|r| r.kind.as_str()).collect::<Vec<_>>(), ["carcel", "silencio"]);
+        assert!(db.gm_change_penalty("Malo", 2, "Gm: <corregida>").unwrap());
+        assert!(!db.gm_change_penalty("Malo", 3, "x").unwrap());
+        assert!(!db.gm_change_penalty("Malo", 0, "x").unwrap());
+        assert_eq!(db.gm_penalties("malo").unwrap()[1].reason, "Gm: <corregida>");
+
+        let a = db.gm_sos_push("Pepe", "Consulta regular", "me trabé").unwrap();
+        let b = db.gm_sos_push("Ana", "Denuncia a Beto", "insultos").unwrap();
+        assert_eq!(db.gm_sos_open().unwrap().len(), 2);
+        assert_eq!(db.gm_sos_close(a, "Gm").unwrap().map(|r| r.name), Some("Pepe".into()));
+        assert!(db.gm_sos_close(a, "Gm").unwrap().is_none(), "already attended");
+        assert_eq!(db.gm_sos_open().unwrap().iter().map(|r| r.id).collect::<Vec<_>>(), [b]);
+        assert_eq!(db.gm_sos_clear("Gm").unwrap(), 1);
+
+        assert_eq!(db.gm_setting("motd").unwrap(), None);
+        db.gm_set_setting("motd", "hola").unwrap();
+        db.gm_set_setting("motd", "chau").unwrap();
+        assert_eq!(db.gm_setting("motd").unwrap().as_deref(), Some("chau"));
 
         db.gm_log("Gm", "carcel", "Malo", "10 min").unwrap();
         db.gm_log("Otro", "echar", "X", "").unwrap();

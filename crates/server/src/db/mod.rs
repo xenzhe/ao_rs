@@ -40,6 +40,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0011_mail.sql"),
     include_str!("../../migrations/0012_clan_vault.sql"),
     include_str!("../../migrations/0013_tsao_progress.sql"),
+    include_str!("../../migrations/0014_gm_moderation.sql"),
 ];
 
 #[derive(Debug, PartialEq)]
