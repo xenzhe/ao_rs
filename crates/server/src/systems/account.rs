@@ -229,6 +229,7 @@ impl World {
             }
         };
         self.spawn_player(id, &record, &state, Some(char_id));
+        self.cards_on_enter(id);
     }
 
     /// Writes an account character back to the database (logout, and later autosave).

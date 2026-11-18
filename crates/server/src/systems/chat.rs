@@ -195,6 +195,10 @@ impl World {
                 true
             }
             // Hogar.bas goHome: only a ghost, after HomeTimer seconds, back to its city.
+            "/cartas" => {
+                self.cards_list(id);
+                true
+            }
             "/hogar" => {
                 self.go_home(id);
                 true

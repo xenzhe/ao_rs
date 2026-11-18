@@ -31,6 +31,7 @@ mod doors;
 mod maprules;
 mod speed;
 mod campfire;
+pub(crate) mod cards;
 mod gm;
 mod gm_mod;
 mod gm_tsao;

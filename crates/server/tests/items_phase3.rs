@@ -125,6 +125,19 @@ fn wood_and_a_dagger_make_a_campfire_that_a_click_lights() {
     assert_eq!(b.game.local.ground.get(&here).map(|g| g.0), Some(LIT), "lit: {:?}", b.console().collect::<Vec<_>>());
 }
 
+/// Collectible cards: "Carta Xin" (obj 64, card 450, bronze) adds 1 to the collection and
+/// is spent; `/cartas` shows it.
+#[test]
+fn a_collectible_card_joins_the_collection() {
+    let s = TestServer::start_at(1, 50, 50);
+    let mut b = s.bot("Coleccionista");
+    give_and_use(&s, &mut b, 64);
+    b.wait_until("en la coleccion", |b| b.console().any(|l| l.contains("(1/10)")));
+    assert!(slot_of(&b, 64).is_none(), "the card is spent");
+    b.say("/cartas");
+    b.wait_until("lista", |b| b.console().any(|l| l.starts_with("Colección de cartas:") && l.contains("1/10")));
+}
+
 #[test]
 fn an_empty_bottle_is_filled_next_to_water_only() {
     // A dry tile with water within two tiles, on the first maps.

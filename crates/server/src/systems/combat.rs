@@ -117,6 +117,9 @@ impl World {
             self.console(pid, "Has rechazado el ataque con el escudo.", Tone::Combat);
         }
         if hit {
+            // GetCardDamageReductionForNpc: the victim's cards of this creature.
+            let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or(0, |n| n.def);
+            let damage = (damage as f32 * self.card_bonus(pid, def, super::cards::CardBonus::Reduction)) as i32;
             self.hurt_player(pid, damage, Source::Npc(map, nid));
             // NpcEnvenenarUser.
             self.npc_poison_on_hit(map, nid, pid);
@@ -334,6 +337,9 @@ impl World {
             self.npc_attacked_by(map, nid, attacker);
             self.pets_assist(attacker, map, nid);
         }
+        // GetCardDamageBonusForNpc: the attacker's cards of this creature.
+        let card_npc = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or(0, |n| n.def);
+        let amount = (amount as f32 * self.card_bonus(attacker, card_npc, super::cards::CardBonus::Damage)) as i32;
         let amount = self.eot_on_damaged(super::eot::Who::Npc(map, nid), amount);
         let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&nid)) else { return false };
         let before = n.hp;
@@ -342,6 +348,8 @@ impl World {
         self.console(attacker, format!("Le has causado {amount} de dano a {name}."), Tone::Combat);
         // CalcularDarExp: share of life taken, then `ExpMult`.
         let exp = rules::exp_for_damage(exp_total, max_hp, before, hp) * self.cfg.world.exp_mult.max(1);
+        // GetCardExpBonusForNpc.
+        let exp = (exp as f32 * self.card_bonus(attacker, card_npc, super::cards::CardBonus::Exp)) as u32;
         let exp = self.exp_with_items(attacker, exp);
         if exp > 0 && self.player(attacker).is_some() {
             self.share_exp(attacker, exp, map, npc_level);

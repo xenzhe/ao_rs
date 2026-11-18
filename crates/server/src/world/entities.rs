@@ -30,6 +30,8 @@ pub struct Player {
     pub mounted: Option<u8>,
     /// `Stats.JineteLevel` (1..9): the rider's speed bonus on a mount.
     pub rider_level: u8,
+    /// The account's collectible cards: card index -> quantity (0..10).
+    pub cards: std::collections::HashMap<u16, u8>,
     pub race: u8,
     pub class: u8,
     pub gender: u8,

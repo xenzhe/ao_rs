@@ -87,8 +87,10 @@ impl World {
         }
         // NpcDropObj: each drop falls with probability 1 in (DropChance / DropMult).
         let drop_mult = self.cfg.world.drop_mult.max(1) as i32;
+        // GetCardDropBonusForNpc: the killer's cards make drops more likely.
+        let card = self.card_bonus(killer, dat as u16, super::cards::CardBonus::Drop);
         for d in &def.drops {
-            let one_in = (d.chance / drop_mult).max(1);
+            let one_in = (((d.chance / drop_mult) as f32 / card) as i32).max(1);
             if d.chance <= 0 || d.obj <= 0 || ao.objs.get(d.obj as u32).is_none() {
                 continue;
             }
@@ -623,6 +625,7 @@ impl World {
             ObjType::Potions => self.use_potion(id, slot, o, free),
             ObjType::Keys => self.use_key(id, slot),
             ObjType::Saddles => self.use_saddle(id, slot),
+            ObjType::CollectibleCard => self.use_card(id, slot, o),
             // The dagger on a pile of wood (UseInvItem otWeapon: TratarDeHacerFogata).
             ObjType::Weapon if item.obj == super::campfire::DAGGER && self.try_make_campfire(id) => {}
             ObjType::EmptyBottle => self.fill_bottle(id, slot, o),

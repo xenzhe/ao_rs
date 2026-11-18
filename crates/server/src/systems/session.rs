@@ -152,6 +152,7 @@ impl World {
             speed: 1.0,
             mounted: None,
             rider_level: 1,
+            cards: Default::default(),
             race: c.race,
             class: c.class,
             gender: c.gender,
