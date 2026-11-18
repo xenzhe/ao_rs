@@ -21,6 +21,9 @@ pub struct DevTools {
     shot_at: f64,
     walk: Option<Dir>,
     fx_demo: bool,
+    /// `AO_FXDEMO=dart,lightning`: these effects at once, around the player.
+    fx_list: Vec<SpellEffect>,
+    fx_delay: f64,
     demo_step: u8,
     entered_at: Option<f64>,
     opened: bool,
@@ -43,6 +46,8 @@ impl DevTools {
                 _ => None,
             }),
             fx_demo: var("AO_FXDEMO").is_some(),
+            fx_list: var("AO_FXDEMO").unwrap_or_default().split(',').filter_map(SpellEffect::parse).collect(),
+            fx_delay: var("AO_FXDEMO_DELAY").and_then(|s| s.parse().ok()).unwrap_or(0.25),
             demo_step: 0,
             entered_at: None,
             opened: false,
@@ -87,6 +92,18 @@ impl DevTools {
             let Some(me) = game.me() else { return };
             let c = v(me.world_pos()) - vec2(0.0, 24.0);
             let fx = &mut renderer.fx;
+            if !self.fx_list.is_empty() {
+                if self.demo_step == 0 && t > 1.6 {
+                    let n = self.fx_list.len() as f32;
+                    for (i, e) in self.fx_list.iter().enumerate() {
+                        let a = i as f32 / n * std::f32::consts::TAU;
+                        fx.cast(*e, c, c + vec2(a.cos() * 190.0, a.sin() * 120.0));
+                    }
+                    self.demo_step = 3;
+                    self.entered_at = Some(now - 1.6);
+                }
+                return;
+            }
             match self.demo_step {
                 0 if t > 1.6 => {
                     fx.cast(SpellEffect::Fireball, c, c + vec2(170.0, -50.0));
@@ -110,7 +127,7 @@ impl DevTools {
     pub fn maybe_capture(&mut self, now: f64) -> bool {
         let Some(path) = &self.shot else { return false };
         let t = self.entered_at.map(|e| now - e).unwrap_or(0.0);
-        let due = if self.fx_demo { self.demo_step == 3 && t > 2.0 } else { t > self.shot_at };
+        let due = if self.fx_demo { self.demo_step == 3 && t > if self.fx_list.is_empty() { 2.0 } else { 1.6 + self.fx_delay } } else { t > self.shot_at };
         if due || now > 25.0 {
             get_screen_data().export_png(path);
             return true;

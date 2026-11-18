@@ -28,7 +28,18 @@ fn lore(s: &SpellDef) -> (Color, Icon, &'static str, &'static str) {
         // not about a particular spell (it has to read right for every spell that shares it).
         SpellEffect::Heal => (Color::new(0.30, 0.68, 0.42, 1.0), Icon::Leaf, "Magia de sanación", "Concentra tu maná y la energía fluye hacia el objetivo, restaurándolo."),
         SpellEffect::Fireball => (Color::new(0.92, 0.46, 0.12, 1.0), Icon::Flame, "Magia ofensiva", "Concentra tu maná en un proyectil que brota de tu mano y hiere a quien alcance."),
-        SpellEffect::Lightning => (Color::new(0.45, 0.66, 1.0, 1.0), Icon::Bolt, "Magia de choque", "Concentra tu maná en un chasquido de energía que cae sobre el objetivo."),
+        SpellEffect::Lightning => (Color::new(0.45, 0.66, 1.0, 1.0), Icon::Bolt, "Magia de choque", "Un rayo cae del cielo sobre el objetivo."),
+        SpellEffect::Dart => (Color::new(0.75, 0.6, 1.0, 1.0), Icon::Star, "Magia arcana", "Un proyectil de energía pura sale disparado hacia el objetivo."),
+        SpellEffect::ElectricDart | SpellEffect::Electric => (Color::new(0.45, 0.66, 1.0, 1.0), Icon::Bolt, "Magia de choque", "La energía chisporrotea y descarga sobre el objetivo."),
+        SpellEffect::FireStorm => (Color::new(0.92, 0.36, 0.1, 1.0), Icon::Flame, "Magia ígnea", "Una lluvia de fuego cae sobre el objetivo."),
+        SpellEffect::Wind => (Color::new(0.65, 0.82, 0.85, 1.0), Icon::Feather, "Magia del viento", "Un torbellino envuelve y golpea al objetivo."),
+        SpellEffect::Paralyze => (Color::new(0.55, 0.78, 0.95, 1.0), Icon::Hourglass, "Magia de control", "Cadenas de escarcha atan al objetivo."),
+        SpellEffect::Holy => (Color::new(0.95, 0.8, 0.35, 1.0), Icon::Crown, "Magia divina", "La luz de los dioses desciende sobre el objetivo."),
+        SpellEffect::Dark => (Color::new(0.55, 0.35, 0.75, 1.0), Icon::Skull, "Magia oscura", "Sombras y humo oscuro consumen al objetivo."),
+        SpellEffect::Cure | SpellEffect::Resurrect => (Color::new(0.75, 0.85, 0.95, 1.0), Icon::Leaf, "Magia de sanación", "Una luz suave limpia al objetivo de sus males."),
+        SpellEffect::Buff => (Color::new(0.9, 0.75, 0.3, 1.0), Icon::Star, "Magia de apoyo", "Una chispa dorada fortalece al objetivo."),
+        SpellEffect::Invisibility | SpellEffect::Teleport => (Color::new(0.65, 0.7, 0.9, 1.0), Icon::Eye, "Magia de ilusión", "El aire tiembla y el objetivo se desvanece."),
+        SpellEffect::Summon => (Color::new(0.65, 0.45, 0.85, 1.0), Icon::Book, "Invocación", "Un portal se abre y algo responde a tu llamada."),
     }
 }
 

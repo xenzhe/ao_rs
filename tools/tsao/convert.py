@@ -441,6 +441,12 @@ def main(src, dst):
             "[Creation]", "Races=1,2,3,4,5", "Classes=1,2,3,4,5,6,7,8", "Hp=21", "Mana1=100,3", "Mana2=50,0", "Mana4=50,0", "Mana5=50,0", "Mana6=50,0", "",
             # Login / character screens: the meadow north of Tanaris, a tour of the town, a campfire (obj 63 Fogata).
             "[Scene]", "Map=28", "Fire=40,19", "TownPath=32,48;45,48;58,50;70,50;62,62;45,62", "Folk=40,47;46,49;52,50;36,52;60,52;66,48", "BonfireGrh=1521", ""]
+    # Client particle look per TSAO spell (Hechizos.dat names: dardo -> dart, descarga -> lightning...).
+    spell_fx = {"cure": [1, 10, 38, 41, 43], "dart": [2, 6, 37], "heal": [3, 5, 40, 59], "wind": [4, 19], "electric_dart": [7], "fireball": [8, 34, 56],
+                "paralyze": [9, 24, 29, 39], "resurrect": [11], "lightning": [12, 50], "buff": [13, 18, 20, 46, 47, 65], "invisibility": [14, 42],
+                "fire_storm": [15, 16, 25, 35, 45, 57, 58], "summon": [17, 26, 27, 28, 51, 52, 53, 54, 55], "holy": [21, 22, 60, 61, 62, 63, 64],
+                "electric": [23, 44], "dark": [30, 31, 32, 33, 36], "teleport": [48, 49]}
+    prof += ["[SpellFx]"] + [f"{i}={n}" for i, n in sorted((i, n) for n, ids in spell_fx.items() for i in ids)] + [""]
     open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",

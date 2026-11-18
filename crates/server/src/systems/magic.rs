@@ -120,9 +120,12 @@ fn eot_table(recursos: &Path) -> EotTable {
 /// expensive (>= 100 mana) or strong (max HP >= 40) -> lightning, the rest -> fireball.
 /// `cooldown_ms` includes the global cast interval so the client never sends a cast the
 /// server would refuse; `range` is the vertical vision range (the tighter one).
-pub fn client_spell_def(id: u16, s: &Spell) -> SpellDef {
+pub fn client_spell_def(id: u16, s: &Spell, fx: Option<SpellEffect>) -> SpellDef {
     let positive = s.effects.contains(Fx::DO_HEAL) || s.target_effect == TargetEffect::Positive;
-    let effect = if positive {
+    // The resource profile names the effect of each spell; the guess below is the fallback.
+    let effect = if let Some(e) = fx {
+        e
+    } else if positive {
         SpellEffect::Heal
     } else if s.mana_required >= 100 || s.hp.max >= 40 {
         SpellEffect::Lightning
@@ -184,7 +187,7 @@ impl World {
             .iter()
             .filter(|s| **s != 0)
             .filter(|s| if seen.contains(*s) { false } else { seen.push(**s); true })
-            .filter_map(|s| self.ao.spells.get(*s as u32).map(|d| client_spell_def(*s, d)))
+            .filter_map(|s| self.ao.spells.get(*s as u32).map(|d| client_spell_def(*s, d, ao_formats::profile::for_recursos(&self.recursos).spell_fx.get(&(*s as u32)).and_then(|n| SpellEffect::parse(n)))))
             .collect();
         self.send(id, &S2C::SpellBook { spells: defs });
         self.send(id, &S2C::SpellSlots { slots: p.spells.slots.clone() });

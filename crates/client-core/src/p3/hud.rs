@@ -90,6 +90,12 @@ pub fn spell_lines(s: &SpellDef, level: u32) -> Vec<String> {
         (SpellEffect::Heal, _) => format!("Cura unos {amount} puntos de vida (±15%)."),
         (SpellEffect::Fireball, _) => format!("Bola de fuego: unos {amount} de daño (±15%)."),
         (SpellEffect::Lightning, _) => format!("Rayo: unos {amount} de daño (±15%)."),
+        (e, _) => match e.family() {
+            ao_rules::spells::SpellFamily::Damage if amount > 0 => format!("Unos {amount} de daño (±15%)."),
+            ao_rules::spells::SpellFamily::Healing if amount > 0 => format!("Cura unos {amount} puntos de vida (±15%)."),
+            ao_rules::spells::SpellFamily::Control => "Afecta el estado del objetivo.".to_string(),
+            _ => "Efecto de apoyo.".to_string(),
+        },
     };
     let target = match s.target {
         SpellTarget::Enemy => "Objetivo: criaturas.",

@@ -77,6 +77,17 @@ struct Proj {
     t: f32,
     dur: f32,
     emit: f32,
+    /// Core and trail colours; arc height; what happens on arrival.
+    core: Color,
+    trail: (Color, Color),
+    arc: f32,
+    hit: Hit,
+}
+
+#[derive(Clone, Copy)]
+enum Hit {
+    Explode,
+    Spark(Color),
 }
 
 struct Bolt {
@@ -199,7 +210,108 @@ impl Fx {
         match effect {
             SpellEffect::Fireball => {
                 let dur = (from.distance(to) / 430.0).max(0.12);
-                self.projs.push(Proj { from, to, t: 0.0, dur, emit: 0.0 });
+                let trail = (Color::new(1.0, 0.8, 0.3, 0.9), Color::new(0.9, 0.15, 0.0, 0.0));
+                self.projs.push(Proj { from, to, t: 0.0, dur, emit: 0.0, core: Color::new(1.0, 0.9, 0.5, 1.0), trail, arc: 18.0, hit: Hit::Explode });
+            }
+            SpellEffect::Dart | SpellEffect::ElectricDart => {
+                // Fast and straight: a magic missile, not a fireball.
+                let (core, c0, c1, spark) = if effect == SpellEffect::Dart {
+                    (Color::new(0.95, 0.9, 1.0, 1.0), Color::new(0.85, 0.75, 1.0, 0.9), Color::new(0.45, 0.25, 1.0, 0.0), Color::new(0.8, 0.65, 1.0, 1.0))
+                } else {
+                    (Color::new(0.9, 0.95, 1.0, 1.0), Color::new(0.7, 0.85, 1.0, 0.9), Color::new(0.2, 0.4, 1.0, 0.0), Color::new(0.5, 0.75, 1.0, 1.0))
+                };
+                let dur = (from.distance(to) / 900.0).max(0.08);
+                self.projs.push(Proj { from, to, t: 0.0, dur, emit: 0.0, core, trail: (c0, c1), arc: 0.0, hit: Hit::Spark(spark) });
+            }
+            SpellEffect::FireStorm => {
+                for i in 0..14 {
+                    let land = to + vec2(gen_range(-40.0, 40.0), gen_range(-18.0, 18.0));
+                    let sky = land + vec2(gen_range(-60.0, -20.0), -220.0);
+                    let trail = (Color::new(1.0, 0.75, 0.25, 0.9), Color::new(0.8, 0.1, 0.0, 0.0));
+                    self.projs.push(Proj { from: sky, to: land, t: -(i as f32) * 0.25, dur: 0.35, emit: 0.0, core: Color::new(1.0, 0.85, 0.4, 1.0), trail, arc: 0.0, hit: Hit::Explode });
+                }
+            }
+            SpellEffect::Wind => {
+                for k in 0..90 {
+                    let a = k as f32 * 0.35;
+                    let r = 6.0 + k as f32 * 0.35;
+                    let p = to + vec2(a.cos() * r, a.sin() * r * 0.45 - k as f32 * 0.5);
+                    let v = vec2(-a.sin(), a.cos() * 0.45) * 120.0 + vec2(0.0, -40.0);
+                    self.emit(p, v, gen_range(0.4, 0.8), 3.0, 1.0, Color::new(0.85, 0.95, 1.0, 0.7), Color::new(0.6, 0.8, 0.9, 0.0), true, -30.0, 1.5, 0.0);
+                }
+            }
+            SpellEffect::Electric => {
+                for _ in 0..4 {
+                    let a = to + vec2(gen_range(-30.0, 30.0), gen_range(-50.0, -10.0));
+                    let mut pts = vec![a];
+                    for i in 1..6 {
+                        pts.push(a.lerp(to, i as f32 / 6.0) + vec2(gen_range(-8.0, 8.0), gen_range(-5.0, 5.0)));
+                    }
+                    pts.push(to);
+                    self.bolts.push(Bolt { pts, life: 0.25 });
+                }
+                for _ in 0..40 {
+                    self.emit(to, rv(200.0), gen_range(0.15, 0.4), 2.0, 0.5, Color::new(0.8, 0.9, 1.0, 1.0), Color::new(0.3, 0.5, 1.0, 0.0), true, 0.0, 3.0, 0.0);
+                }
+            }
+            SpellEffect::Paralyze => {
+                for _ in 0..40 {
+                    let p = to + vec2(gen_range(-16.0, 16.0), gen_range(-30.0, 10.0));
+                    self.emit(p, rv(10.0), gen_range(0.8, 1.4), gen_range(3.0, 5.0), 1.0, Color::new(0.8, 0.95, 1.0, 1.0), Color::new(0.4, 0.7, 1.0, 0.0), true, 0.0, 4.0, 0.0);
+                }
+                self.rings.push(Ring { pos: to + vec2(0.0, 12.0), life: 0.8, color: Color::new(0.6, 0.85, 1.0, 1.0) });
+            }
+            SpellEffect::Holy => {
+                for _ in 0..70 {
+                    let p = to + vec2(gen_range(-10.0, 10.0), gen_range(-200.0, 0.0));
+                    self.emit(p, vec2(0.0, gen_range(80.0, 160.0)), gen_range(0.3, 0.6), gen_range(3.0, 6.0), 1.0, Color::new(1.0, 0.95, 0.7, 1.0), Color::new(1.0, 0.75, 0.2, 0.0), true, 0.0, 1.0, 1.0);
+                }
+                self.rings.push(Ring { pos: to + vec2(0.0, 12.0), life: 0.6, color: Color::new(1.0, 0.85, 0.4, 1.0) });
+            }
+            SpellEffect::Dark => {
+                for _ in 0..45 {
+                    let p = to + vec2(gen_range(-14.0, 14.0), gen_range(-20.0, 10.0));
+                    self.emit(p, rv(30.0) + vec2(0.0, -25.0), gen_range(0.8, 1.4), 6.0, 16.0, Color::new(0.35, 0.15, 0.5, 0.7), Color::new(0.1, 0.0, 0.15, 0.0), false, -20.0, 1.0, 0.0);
+                }
+                self.rings.push(Ring { pos: to + vec2(0.0, 12.0), life: 0.5, color: Color::new(0.5, 0.2, 0.7, 1.0) });
+            }
+            SpellEffect::Cure => {
+                for _ in 0..35 {
+                    let p = to + vec2(gen_range(-14.0, 14.0), gen_range(-20.0, 16.0));
+                    self.emit(p, vec2(gen_range(-6.0, 6.0), gen_range(-50.0, -20.0)), gen_range(0.6, 1.1), gen_range(2.0, 3.5), 0.5, Color::new(0.95, 1.0, 1.0, 1.0), Color::new(0.6, 0.85, 1.0, 0.0), true, -10.0, 0.5, 0.0);
+                }
+            }
+            SpellEffect::Buff => {
+                for _ in 0..40 {
+                    let a = gen_range(0.0, std::f32::consts::TAU);
+                    let p = to + vec2(a.cos() * 16.0, a.sin() * 6.0 + 10.0);
+                    self.emit(p, vec2(0.0, gen_range(-90.0, -50.0)), gen_range(0.6, 1.0), gen_range(2.0, 3.5), 0.5, Color::new(1.0, 0.9, 0.5, 1.0), Color::new(1.0, 0.6, 0.1, 0.0), true, -10.0, 0.5, 0.0);
+                }
+                self.rings.push(Ring { pos: to + vec2(0.0, 12.0), life: 0.6, color: Color::new(1.0, 0.85, 0.35, 1.0) });
+            }
+            SpellEffect::Invisibility | SpellEffect::Teleport => {
+                for _ in 0..50 {
+                    let p = to + vec2(gen_range(-14.0, 14.0), gen_range(-30.0, 14.0));
+                    self.emit(p, rv(40.0), gen_range(0.4, 0.9), 2.5, 0.5, Color::new(0.8, 0.85, 1.0, 0.9), Color::new(0.5, 0.5, 1.0, 0.0), true, -20.0, 2.0, 0.0);
+                }
+                if effect == SpellEffect::Teleport {
+                    self.flash = 0.35;
+                }
+            }
+            SpellEffect::Resurrect => {
+                for _ in 0..80 {
+                    let p = to + vec2(gen_range(-8.0, 8.0), gen_range(-10.0, 14.0));
+                    self.emit(p, vec2(gen_range(-5.0, 5.0), gen_range(-160.0, -80.0)), gen_range(0.6, 1.2), gen_range(3.0, 5.0), 1.0, Color::new(1.0, 1.0, 0.85, 1.0), Color::new(1.0, 0.85, 0.4, 0.0), true, 0.0, 0.5, 1.0);
+                }
+                self.rings.push(Ring { pos: to + vec2(0.0, 12.0), life: 0.9, color: Color::new(1.0, 0.95, 0.6, 1.0) });
+            }
+            SpellEffect::Summon => {
+                for k in 0..60 {
+                    let a = k as f32 / 60.0 * std::f32::consts::TAU;
+                    let p = to + vec2(a.cos() * 22.0, a.sin() * 9.0 + 12.0);
+                    self.emit(p, vec2(0.0, gen_range(-40.0, -10.0)), gen_range(0.6, 1.2), 3.0, 1.0, Color::new(0.75, 0.5, 1.0, 1.0), Color::new(0.3, 0.1, 0.6, 0.0), true, 0.0, 0.5, 0.0);
+                }
+                self.rings.push(Ring { pos: to + vec2(0.0, 12.0), life: 0.9, color: Color::new(0.7, 0.45, 1.0, 1.0) });
             }
             SpellEffect::Lightning => {
                 let top = to + vec2(gen_range(-30.0, 30.0), -260.0);
@@ -279,22 +391,33 @@ impl Fx {
         let mut trail = Vec::new();
         for p in &mut self.projs {
             p.t += dt / p.dur;
+            if p.t < 0.0 {
+                continue; // staggered start (fire rain)
+            }
             p.emit += dt;
-            let pos = p.from.lerp(p.to, p.t.min(1.0)) - vec2(0.0, (p.t.min(1.0) * std::f32::consts::PI).sin() * 18.0);
+            let pos = p.from.lerp(p.to, p.t.min(1.0)) - vec2(0.0, (p.t.min(1.0) * std::f32::consts::PI).sin() * p.arc);
             while p.emit > 0.006 {
                 p.emit -= 0.006;
-                trail.push(pos);
+                trail.push((pos, p.trail));
             }
             if p.t >= 1.0 {
-                arrived.push(p.to);
+                arrived.push((p.to, p.hit));
             }
         }
         self.projs.retain(|p| p.t < 1.0);
-        for pos in trail {
-            self.emit(pos + rv(3.0), rv(25.0) + vec2(0.0, -15.0), gen_range(0.18, 0.4), gen_range(5.0, 8.0), 1.0, Color::new(1.0, 0.8, 0.3, 0.9), Color::new(0.9, 0.15, 0.0, 0.0), true, -60.0, 1.0, 0.0);
+        for (pos, (c0, c1)) in trail {
+            self.emit(pos + rv(3.0), rv(25.0) + vec2(0.0, -15.0), gen_range(0.18, 0.4), gen_range(5.0, 8.0), 1.0, c0, c1, true, -60.0, 1.0, 0.0);
         }
-        for at in arrived {
-            self.explode(at);
+        for (at, hit) in arrived {
+            match hit {
+                Hit::Explode => self.explode(at),
+                Hit::Spark(c) => {
+                    for _ in 0..30 {
+                        self.emit(at, rv(160.0), gen_range(0.15, 0.4), 3.0, 0.5, c, Color::new(c.r, c.g, c.b, 0.0), true, 0.0, 3.0, 0.0);
+                    }
+                    self.rings.push(Ring { pos: at, life: 0.3, color: c });
+                }
+            }
         }
 
         for p in &mut self.parts {
@@ -339,10 +462,10 @@ impl Fx {
         for p in self.parts.iter().filter(|p| p.add) {
             self.draw_part(p, off);
         }
-        for pr in &self.projs {
+        for pr in self.projs.iter().filter(|p| p.t >= 0.0) {
             let t = pr.t.min(1.0);
-            let pos = pr.from.lerp(pr.to, t) - vec2(0.0, (t * std::f32::consts::PI).sin() * 18.0) - off;
-            draw_texture_ex(&self.soft, pos.x - 12.0, pos.y - 12.0, Color::new(1.0, 0.9, 0.5, 1.0), DrawTextureParams { dest_size: Some(vec2(24.0, 24.0)), ..Default::default() });
+            let pos = pr.from.lerp(pr.to, t) - vec2(0.0, (t * std::f32::consts::PI).sin() * pr.arc) - off;
+            draw_texture_ex(&self.soft, pos.x - 12.0, pos.y - 12.0, pr.core, DrawTextureParams { dest_size: Some(vec2(24.0, 24.0)), ..Default::default() });
             draw_texture_ex(&self.soft, pos.x - 5.0, pos.y - 5.0, WHITE, DrawTextureParams { dest_size: Some(vec2(10.0, 10.0)), ..Default::default() });
         }
         for r in &self.rings {
@@ -391,9 +514,9 @@ impl Fx {
     /// Light emitters for the light map (world pixels, radius, color).
     pub fn lights(&self) -> Vec<(Vec2, f32, Color)> {
         let mut out = Vec::new();
-        for p in &self.projs {
+        for p in self.projs.iter().filter(|p| p.t >= 0.0) {
             let t = p.t.min(1.0);
-            out.push((p.from.lerp(p.to, t), 90.0, Color::new(1.0, 0.6, 0.25, 1.0)));
+            out.push((p.from.lerp(p.to, t), 90.0, p.core));
         }
         for b in &self.bolts {
             out.push((*b.pts.last().unwrap(), 220.0, Color::new(0.6, 0.7, 1.0, b.life / 0.35)));

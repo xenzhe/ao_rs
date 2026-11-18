@@ -44,6 +44,9 @@ pub struct Profile {
     pub start_mana: HashMap<u8, (i32, i32)>,
     /// `[Scene]`: where the login / character screens are staged (None = AO20 map 1).
     pub scene: Option<SceneCfg>,
+    /// `[SpellFx] 12=lightning`: the particle effect of each spell (names of
+    /// `ao_rules::spells::SpellEffect::parse`); spells not listed use the engine guess.
+    pub spell_fx: HashMap<u32, String>,
 }
 
 /// `[Scene] Map=28 Fire=40,19 TownPath=32,48;45,48 Folk=40,47;46,49 BonfireGrh=123`.
@@ -76,7 +79,7 @@ const AO20_WATER: [(u32, u32); 9] = [(1505, 1520), (124, 139), (24223, 24238), (
 
 impl Default for Profile {
     fn default() -> Self {
-        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new(), creation_races: Vec::new(), creation_classes: Vec::new(), start_hp: None, start_mana: HashMap::new(), scene: None }
+        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new(), creation_races: Vec::new(), creation_classes: Vec::new(), start_hp: None, start_mana: HashMap::new(), scene: None, spell_fx: HashMap::new() }
     }
 }
 
@@ -147,6 +150,9 @@ impl Profile {
                     bonfire_grh: s.get("bonfiregrh").and_then(|v| v.trim().parse().ok()).unwrap_or(0),
                 });
             }
+        }
+        if let Some(s) = ini.section("spellfx") {
+            p.spell_fx = s.iter().filter_map(|(k, v)| Some((k.trim().parse().ok()?, v.trim().to_string()))).collect();
         }
         p.tsao_combat = ini.section("combat").and_then(|c| c.get("rules")).is_some_and(|v| v.trim().eq_ignore_ascii_case("tsao"));
         if let Some(v) = ini.section("meditate").and_then(|m| m.get("fxbylevel")) {

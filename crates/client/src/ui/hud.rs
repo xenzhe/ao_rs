@@ -1039,7 +1039,17 @@ fn spell_look(effect: SpellEffect, target: ao_rules::spells::SpellTarget) -> (Co
         SpellEffect::Heal if target == ao_rules::spells::SpellTarget::Ally => (Color::new(0.45, 0.95, 0.5, 1.0), Icon::Cross),
         SpellEffect::Heal => (Color::new(0.45, 0.95, 0.5, 1.0), Icon::Cross),
         SpellEffect::Fireball => (Color::new(1.0, 0.55, 0.15, 1.0), Icon::Fire),
-        SpellEffect::Lightning => (Color::new(0.55, 0.75, 1.0, 1.0), Icon::Bolt),
+        SpellEffect::Lightning | SpellEffect::Electric | SpellEffect::ElectricDart => (Color::new(0.55, 0.75, 1.0, 1.0), Icon::Bolt),
+        SpellEffect::FireStorm => (Color::new(1.0, 0.4, 0.1, 1.0), Icon::Fire),
+        SpellEffect::Dart => (Color::new(0.85, 0.75, 1.0, 1.0), Icon::Bolt),
+        SpellEffect::Wind => (Color::new(0.75, 0.9, 0.95, 1.0), Icon::Compass),
+        SpellEffect::Paralyze => (Color::new(0.6, 0.85, 1.0, 1.0), Icon::Lock(true)),
+        SpellEffect::Holy => (Color::new(1.0, 0.88, 0.45, 1.0), Icon::Crown),
+        SpellEffect::Dark => (Color::new(0.65, 0.4, 0.85, 1.0), Icon::Swords),
+        SpellEffect::Cure | SpellEffect::Resurrect => (Color::new(0.9, 0.95, 1.0, 1.0), Icon::Cross),
+        SpellEffect::Buff => (Color::new(0.95, 0.8, 0.35, 1.0), Icon::Shield),
+        SpellEffect::Invisibility | SpellEffect::Teleport => (Color::new(0.7, 0.75, 0.95, 1.0), Icon::Lotus),
+        SpellEffect::Summon => (Color::new(0.75, 0.55, 0.95, 1.0), Icon::Book),
     }
 }
 
