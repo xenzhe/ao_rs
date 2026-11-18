@@ -46,6 +46,9 @@ pub struct QuestPiece {
     /// `flags.TargetNPC` as far as quests care: (map, NPC entity id) of the quest NPC the
     /// player last talked to. `Accept` only works against it.
     pub target: Option<(u16, u32)>,
+    /// `flags.QuestOpenByObj` / `QuestItemSlot`: a quest object read from this inventory
+    /// slot offered this quest; accepting it spends the object.
+    pub obj_offer: Option<(u8, u16)>,
 }
 
 impl QuestPiece {

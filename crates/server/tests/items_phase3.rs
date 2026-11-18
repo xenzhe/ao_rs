@@ -68,6 +68,25 @@ fn a_chest_gives_its_items_and_is_spent() {
     b.wait_until("abierto", |b| slot_of(b, 206).is_none() && b.game.local.inventory.iter().flatten().count() > before);
 }
 
+/// `OtQuest`: "Mensaje embotellado" (obj 509) offers quest 417 without an NPC; the quest
+/// rules still apply (level 25) and the object is only spent when the quest starts.
+#[test]
+fn a_quest_object_offers_its_quest() {
+    use ao_protocol::social::quest::{QuestC2S, QuestS2C};
+    let s = TestServer::start();
+    let mut b = s.bot("Lector");
+    give_and_use(&s, &mut b, 509);
+    b.wait_until("oferta", |b| b.log().iter().any(|m| matches!(m, ao_protocol::S2C::Quest(QuestS2C::Offer { quests, .. }) if quests.iter().any(|q| q.info.id == 417))));
+    // It asks for level 25: a new character is told so and keeps the object.
+    b.send(&C2S::Quest(QuestC2S::Accept { quest: 417 }));
+    b.wait_until("rechazada", |b| b.console().any(|l| l.contains("nivel 25")));
+    assert!(slot_of(&b, 509).is_some(), "the object is only spent when the quest starts");
+    // A forged accept for a quest the object did not offer does nothing.
+    b.send(&C2S::Quest(QuestC2S::Accept { quest: 418 }));
+    b.sync();
+    assert!(!b.console().any(|l| l.contains("Has aceptado")));
+}
+
 #[test]
 fn an_empty_bottle_is_filled_next_to_water_only() {
     // A dry tile with water within two tiles, on the first maps.

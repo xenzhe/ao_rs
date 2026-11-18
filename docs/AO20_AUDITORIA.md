@@ -62,10 +62,11 @@ restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
 - **Botella vacía**: se llena a dos casillas del agua. **Instrumentos y cuernos de facción**
   suenan (cuernos solo para su ejército y fuera de zona segura). Mensaje nuevo `S2C::Sound`.
 - **`/hogar`**: un fantasma vuelve a Ullathorpe tras `HomeTimer` (150 s; GMs 5 s).
+- **Objetos de misión** (`QuestOpenByObj`): ofrecen su misión sin NPC; se gastan al aceptarla.
 - No había nada que portar en pasajes de barco ni runas de regreso: los datos oficiales no tienen
   ninguno.
 - **Pendiente**: monturas (necesitan el sistema de velocidad: muertos, barcos, monturas,
-  hechizos), fogatas, objetos de misión (`QuestOpenByObj`), cartas coleccionables y aspectos
+  hechizos), fogatas, cartas coleccionables y aspectos
   (skins, unos 430 objetos estéticos).
 
 ## Hallazgo importante: datos del servidor desfasados

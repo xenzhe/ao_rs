@@ -582,6 +582,7 @@ impl World {
             _ if o.tsao_type == super::tsao_progress::TSAO_OCTARINE_GEM => self.tsao_upgrades(id),
             ObjType::Chest if o.chest_kind > 0 => self.open_chest(id, slot, o.chest_kind as u32, o.chest_key),
             ObjType::Chest => self.open_ao20_chest(id, slot, o),
+            ObjType::Quest if o.quest_id > 0 => self.quest_from_object(id, slot, o.quest_id as u16),
             ObjType::UseOnce => {
                 let s = &mut self.player_mut(id).stats;
                 s.food = (s.food + o.min_hunger).min(MAX_FOOD);

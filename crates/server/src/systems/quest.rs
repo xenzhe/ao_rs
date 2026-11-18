@@ -224,7 +224,61 @@ impl World {
     }
 
     /// HandleQuestAccept (by NPC; the item path is not ported).
+    /// `UseInvItem` for `OtQuest`: the object's quest is offered (no NPC); accepting it
+    /// spends the object (`HandleQuestAccept` with `QuestOpenByObj`).
+    pub(crate) fn quest_from_object(&mut self, id: u32, slot: u8, qid: u16) {
+        let data = self.quest_data();
+        let Some(q) = data.quest(qid as u32) else { return };
+        let p = self.player(id).unwrap();
+        let state = quest::offer_state(q, p.level, p.quest.is_active(qid), p.quest.has_done(qid as u32), p.quest.has_done(q.required_quest.max(0) as u32), false);
+        let quests = vec![OfferedQuest { info: self.quest_info(qid as u32, q), state: state as u8 }];
+        self.player_mut(id).quest.obj_offer = Some((slot, qid));
+        self.send(id, &S2C::Quest(QuestS2C::Offer { npc: 0, quests }));
+    }
+
+    /// Accepting the quest a quest object offered.
+    fn quest_accept_from_object(&mut self, id: u32, qid: u16) -> bool {
+        let Some((slot, offered)) = self.player(id).and_then(|p| p.quest.obj_offer) else { return false };
+        self.player_mut(id).quest.obj_offer = None;
+        if offered != qid {
+            return false;
+        }
+        let ao = self.ao.clone();
+        let still_there = self.player(id).and_then(|p| p.inv.get(slot)).and_then(|it| ao.objs.get(it.obj as u32)).is_some_and(|o| o.obj_type == ao_formats::dat::obj::ObjType::Quest && o.quest_id == qid as i32);
+        if !still_there {
+            return true;
+        }
+        let data = self.quest_data();
+        let Some(q) = data.quest(qid as u32) else { return true };
+        let p = self.player(id).unwrap();
+        if p.hp <= 0 {
+            self.console(id, DEAD, Tone::Warn);
+            return true;
+        }
+        let who = Candidate { level: p.level, class: p.class, skills: &p.stats.skills, faction_bit: self.quest_faction_bit(id) };
+        if let Err(r) = quest::can_accept(q, &who, p.quest.is_active(qid), |n| p.quest.has_done(n), qid as u32, false) {
+            let text = self.quest_refusal_text(&data, r);
+            self.console(id, text, Tone::Warn);
+            return true;
+        }
+        let Some(qslot) = p.quest.free_slot() else {
+            self.console(id, "Debes completar las misiones en curso para poder aceptar más misiones.", Tone::Warn);
+            return true;
+        };
+        let name = q.name.clone();
+        self.player_mut(id).quest.slots[qslot] = Some(ActiveQuest::new(qid, q));
+        self.remove_from_slot(id, slot, 1);
+        self.console(id, format!("Has aceptado la misión {name}."), Tone::Good);
+        self.send_quest_list(id);
+        self.send_quest_details(id, qslot);
+        self.quest_save(id);
+        true
+    }
+
     fn quest_accept(&mut self, id: u32, qid: u16) {
+        if self.quest_accept_from_object(id, qid) {
+            return;
+        }
         let Some((nid, number, npos)) = self.quest_target(id) else { return };
         let data = self.quest_data();
         let offered = data.offered_by(number);
