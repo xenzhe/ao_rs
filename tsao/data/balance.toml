@@ -16,6 +16,8 @@ home = [28, 54, 36]
 
 # Barcos: desde nivel 30 (InvUsuario.bas otBarcos).
 boat_min_level = 30
+# Hostile creatures never enter this many tiles around the start point (newbie dungeon ants).
+start_sanctuary = 10
 
 # Cárcel y libertad (General.bas Prision/Libertad).
 jail = [78, 50, 50]

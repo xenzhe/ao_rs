@@ -13,6 +13,11 @@ pub struct Balance {
     /// `/regresar` destination (TSAO: Tanaris 54,36). None = the command is off.
     #[serde(default)]
     pub home: Option<(u16, i32, i32)>,
+    /// Tiles around the start point that hostile creatures never step into (0 = off).
+    /// TSAO starts new characters in the newbie dungeon with 400-life giant ants 11 tiles
+    /// away, which killed level-1 characters on arrival.
+    #[serde(default)]
+    pub start_sanctuary: i32,
     /// Lowest level allowed to sail (TSAO 30).
     #[serde(default)]
     pub boat_min_level: u32,
@@ -59,6 +64,7 @@ impl Default for Balance {
             newbie_max_level: 12,
             home: None,
             boat_min_level: 0,
+            start_sanctuary: 0,
             jail: default_jail(),
             freedom: default_freedom(),
             start_map: 1,

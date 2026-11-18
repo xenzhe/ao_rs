@@ -95,7 +95,17 @@ impl World {
             if d.name.is_empty() {
                 continue;
             }
-            let npc = self.new_npc(e.npc, d, e.x, e.y, now);
+            // Hostile creatures placed inside the start sanctuary move out of it.
+            let (x, y) = if d.hostile != 0 && self.in_start_sanctuary(map, e.x, e.y) {
+                let b = &self.data.balance;
+                match self.closest_spawn_pos(map, d, e.x, e.y, b.start_sanctuary + 6) {
+                    Some(p) => p,
+                    None => continue,
+                }
+            } else {
+                (e.x, e.y)
+            };
+            let npc = self.new_npc(e.npc, d, x, y, now);
             let id = self.next_npc;
             self.next_npc += 1;
             let msg = npc.spawn_msg(id);
@@ -301,7 +311,7 @@ impl World {
             return false;
         }
         let t = m.trigger(x, y);
-        if !(t < 1 || (t > 3 && t < 12)) || self.occupied(map, x, y) {
+        if !(t < 1 || (t > 3 && t < 12)) || self.occupied(map, x, y) || (d.hostile != 0 && self.in_start_sanctuary(map, x, y)) {
             return false;
         }
         !inst.players.iter().filter_map(|p| self.player(*p)).any(|p| (p.x - x).abs() <= VISION_X && (p.y - y).abs() <= VISION_Y)
@@ -648,7 +658,14 @@ impl World {
             || (water && d.water_valid != 1)
             || (!water && d.land_invalid != 0)
             || m.trigger(x, y) == TRIGGER_INVALID_POS
-            || b & dir.block_bit() != 0)
+            || b & dir.block_bit() != 0
+            || (d.hostile != 0 && self.in_start_sanctuary(map, x, y)))
+    }
+
+    /// Inside the creature-free area around the start point (`balance.start_sanctuary`).
+    pub(crate) fn in_start_sanctuary(&self, map: u16, x: i32, y: i32) -> bool {
+        let b = &self.data.balance;
+        b.start_sanctuary > 0 && map == b.start_map && (x - b.start_x).abs().max((y - b.start_y).abs()) <= b.start_sanctuary
     }
 
     /// `MoveNPCChar`: one step if `LegalWalkNPC` allows it (living users and NPCs block).
