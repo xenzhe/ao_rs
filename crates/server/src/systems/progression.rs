@@ -11,7 +11,7 @@ use crate::world::World;
 use ao_formats::dat::balance::{Class, Race};
 use ao_protocol::{Tone, S2C};
 use ao_rules::character::{self, StartEquipment, START_FOOD_WATER, START_SKILL_POINTS};
-use ao_rules::progression::{self as rules, AssignError, MAX_LEVEL, MAX_SKILL};
+use ao_rules::progression::{self as rules, AssignError, MAX_SKILL};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -77,7 +77,7 @@ impl World {
         let (race, class_id) = (Race::from_id(race as i32)?, Class::from_id(class as i32)?);
         let attributes = character::initial_attributes(&self.ao.balance, race);
         let sta = character::initial_stamina(stamina_roll.clamp(1, character::stamina_dice(&attributes)));
-        let (inventory, spells) = start_equipment(&self.recursos).loadout_for(class_id.id(), race.id() as u8, MAX_INVENTORY_SLOTS);
+        let (inventory, spells) = start_equipment(&self.recursos).loadout_for(class_id.id(), race.id(), MAX_INVENTORY_SLOTS);
         Some(CharacterState {
             attributes,
             skills: vec![self.data.balance.start_skills.min(100); 24],
@@ -100,6 +100,9 @@ impl World {
     pub(crate) fn new_character_vitals(&self, race: u8, class: u8) -> Option<StartVitals> {
         let attributes = character::initial_attributes(&self.ao.balance, Race::from_id(race as i32)?);
         let class = Class::from_id(class as i32)?;
+        if let Some(s) = self.data.levels.as_ref().and_then(|t| t.start.as_ref()) {
+            return Some(StartVitals { hp: s.hp, mana: s.mana_for(class.spanish_name(), attributes[character::ATTR_INTELLIGENCE]) });
+        }
         Some(StartVitals { hp: character::initial_hp(&attributes), mana: character::initial_mana(&self.ao.balance, class, &attributes) })
     }
 
@@ -121,7 +124,7 @@ impl World {
         let Some(class) = Class::from_id(p.class as i32) else { return };
         let ao = self.ao.clone();
         let bal = &ao.balance;
-        let new_level = p.level.min(MAX_LEVEL);
+        let new_level = p.level.min(bal.max_level());
         let levels = levels.min(new_level.saturating_sub(1));
         if levels == 0 {
             return;
@@ -130,12 +133,22 @@ impl World {
         let (constitution, intelligence) = (p.stats.attributes[character::ATTR_CONSTITUTION], p.stats.attributes[character::ATTR_INTELLIGENCE]);
         let (mut max_hp, mut max_mana, mut max_sta) = (p.max_hp, p.max_mana, p.stats.max_sta);
         let mut lines: Vec<(String, Tone)> = Vec::new();
-        let mut rnd = || self.rng.next_u32() as f64 / 4_294_967_296.0;
+        // TSAO table (data/levels.toml) for this class and race, if the data has one.
+        let race_name = Race::from_id(p.race as i32).map(|r| r.spanish_name()).unwrap_or("");
+        let table = self.data.levels.as_ref().and_then(|t| t.class(class.spanish_name())).and_then(|c| Some((c.clone(), c.race(race_name)?.clone())));
+        let rng = &mut self.rng;
         for level in first..=new_level {
             let (old_sta, old_mana) = (max_sta, max_mana);
-            max_mana = rules::max_mana(bal, class, intelligence, level);
-            max_sta = rules::max_stamina(bal, class, level);
-            let gain = rules::hp_gain(bal, class, constitution, level, max_hp, &mut rnd);
+            let gain = if let Some((c, r)) = &table {
+                max_mana = max_mana.saturating_add(c.mana_gain(intelligence));
+                max_sta = (max_sta + c.sta).min(30_000);
+                r.hp_gain(level, max_hp, &mut |lo, hi| if hi <= lo { lo } else { rng.range(lo, hi) })
+            } else {
+                let mut rnd = || rng.next_u32() as f64 / 4_294_967_296.0;
+                max_mana = rules::max_mana(bal, class, intelligence, level);
+                max_sta = rules::max_stamina(bal, class, level);
+                rules::hp_gain(bal, class, constitution, level, max_hp, &mut rnd)
+            };
             max_hp += gain;
             let (hit_min, hit_max) = rules::hit_range(bal, class, level);
             let (old_min, _) = rules::hit_range(bal, class, level - 1);
@@ -426,5 +439,49 @@ mod tests {
     #[test]
     fn attribute_order_is_the_official_one() {
         assert_eq!((ATTR_INTELLIGENCE, ATTR_CONSTITUTION), (2, 3));
+    }
+
+    /// The TSAO data (X:\dev\tsao_rec + tsao/data/levels.toml; skipped without them):
+    /// 70 levels, TSAO curve, life from the class/race table, TSAO start values, gold from
+    /// GiveGLDMin/Max straight to the purse, the TSAO meditation FX.
+    #[test]
+    fn tsao_progression_gold_and_meditation() {
+        let rec = std::path::PathBuf::from("X:/dev/tsao_rec");
+        let table = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tsao/data/levels.toml");
+        let (true, Ok(text)) = (rec.join("Dat").is_dir(), std::fs::read_to_string(&table)) else { return };
+        let mut s = crate::Settings::defaults();
+        s.recursos = rec;
+        s.data.levels = Some(ao_rules::level_table::LevelTable::parse(&text).unwrap());
+        s.start = Some((28, 50, 50));
+        let mut w = World::new(s);
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        w.on_event(crate::net::Event::Connected { id: 1, addr: "127.0.0.1:1".parse().unwrap(), tx });
+        w.handle(1, ao_protocol::C2S::Login { name: "Tsao".into(), version: ao_protocol::PROTOCOL_VERSION });
+        assert_eq!(w.ao.balance.max_level(), 70);
+        // Start values: 21 life; a mage 100 + INT/6.
+        let v = w.new_character_vitals(1, Class::Mage as u8).unwrap();
+        assert_eq!(v.hp, 21);
+        assert!(v.mana > 100);
+        // Level 1 -> 2 needs 150 (Experiencia.dat Nivel1).
+        let p = w.player_mut(1);
+        (p.level, p.exp, p.max_hp, p.class, p.race) = (1, 0, 21, Class::Mage as u8, 1);
+        w.give_exp(1, 149);
+        assert_eq!(w.player(1).unwrap().level, 1);
+        w.give_exp(1, 1);
+        let p = w.player(1).unwrap();
+        // Human mage, level 2: 21 + 19*7 < 155 -> RandomVeinteMax 8.
+        assert_eq!((p.level, p.max_hp), (2, 29));
+        // Gold: a TSAO creature with GiveGLDMin/Max pays into the purse.
+        let (num, npc) = w.ao.npcs.iter().find(|(_, n)| n.gold_range.0 > 0 && n.gold_range.1 >= n.gold_range.0).map(|(i, n)| (i, n.gold_range)).expect("a creature with gold");
+        let before = w.player(1).unwrap().inv.gold;
+        assert!(w.ensure_map(28));
+        w.drop_creature_loot(28, 50, 52, num, 1);
+        let got = w.player(1).unwrap().inv.gold - before;
+        assert!((npc.0 as u32..=npc.1 as u32).contains(&got), "{got} in {npc:?}");
+        // Meditation: TSAO FX 4 below level 15.
+        let p = w.player_mut(1);
+        (p.max_mana, p.mana) = (100, 10);
+        w.on_meditate(1);
+        assert_eq!(w.player(1).unwrap().status.meditate_fx, 4);
     }
 }

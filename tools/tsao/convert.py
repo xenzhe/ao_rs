@@ -172,7 +172,8 @@ def convert_map(num, maps_dir, info):
     out += struct.pack("<6i", len(triggers), len(lights), len(particles), len(npcs), len(objs), len(exits))
     out += struct.pack("<ii", 0, 0)  # tMapSize
     out += vb_string(info.get("name", f"Mapa {num}"))
-    out += b"\x00" + vb_string("") + struct.pack("<ii", int(info.get("musicnum", "0") or 0), 0)
+    # tMapDat music_numberHi, music_numberLow: the client plays the Low one.
+    out += b"\x00" + vb_string("") + struct.pack("<ii", 0, int(info.get("musicnum", "0") or 0))
     # FileIO.bas: `Pk=0` -> MapInfo.Pk = True (PvP allowed); `Pk=1` -> safe map.
     out += bytes([1 if info.get("pk", "0").strip() == "1" else 0])
     out += vb_string(info.get("zona", "")) + vb_string(info.get("terreno", "")) + vb_string("")
@@ -238,6 +239,36 @@ def remap_obj_classes(m):
             cps.append(c)
     body = re.sub(r"(?im)^CP\d+=[^\n]*\n?", "", body)
     return head + "".join(f"CP{i + 1}={c}\n" for i, c in enumerate(cps)) + body
+
+
+def set_section(text, name, lines):
+    """Replaces `[name]` of an INI text (or appends it)."""
+    body = "\n".join(lines) + "\n\n"
+    pat = re.compile(r"(?ims)^\[" + re.escape(name) + r"\][^\n]*\n.*?(?=^\[|\Z)")
+    if pat.search(text):
+        return pat.sub(lambda _: f"[{name}]\n" + body, text, count=1)
+    return text + f"\n[{name}]\n" + body
+
+
+def convert_balance(experiencia, ddat):
+    """AO20 Balance.dat keeps the class/combat modifiers the engine reads; TSAO replaces
+    the experience curve (Experiencia.dat, cap 70), the race bonuses (TCP.bas
+    ConnectNewUser) and the hit gained per level (CheckUserLevel AumentoHIT)."""
+    path = os.path.join(ddat, "Balance.dat")
+    text = open(path, encoding="latin-1").read().replace("\r\n", "\n")
+    exp = {int(m.group(1)): int(m.group(2)) for m in re.finditer(r"(?im)^Nivel(\d+)=(\d+)", experiencia)}
+    cap = max(exp) + 1
+    text = set_section(text, "EXP", [f"{i}={exp.get(i, 0)}" for i in range(1, cap)] + [f"{cap}=0"])
+    races = {"Humano": (2, 0, 0, 3, 2), "Elfo": (-1, 2, 2, 2, 0), "ElfoOscuro": (1, 1, 2, 1, 1), "Enano": (3, -1, -2, -1, 4), "Gnomo": (-4, 3, 3, 1, -1), "Orco": (0, 0, 0, 0, 0)}
+    lines = []
+    for r, (f, a, i, c, con) in races.items():
+        lines += [f"{r}Fuerza={f}", f"{r}Agilidad={a}", f"{r}Inteligencia={i}", f"{r}Carisma={c}", f"{r}Constitucion={con}"]
+    text = set_section(text, "MODRAZA", lines)
+    pre = {"Guerrero": 3, "Cazador": 3, "Paladin": 3, "Bandido": 3, "Asesino": 3, "Pirata": 3, "Ladron": 3, "Clerigo": 2, "Bardo": 2, "Mago": 1, "Druida": 2, "Trabajador": 2}
+    post = {"Guerrero": 2, "Cazador": 2, "Paladin": 1, "Bandido": 2, "Asesino": 1, "Pirata": 2, "Ladron": 2, "Clerigo": 2, "Bardo": 2, "Mago": 1, "Druida": 2, "Trabajador": 2}
+    text = set_section(text, "GOLPE_PRE_36", [f"{k}={v}" for k, v in pre.items()])
+    text = set_section(text, "GOLPE_POST_36", [f"{k}={v}" for k, v in post.items()])
+    open(path, "w", encoding="latin-1", newline="\r\n").write(text)
 
 
 QUEST_NPC = 160  # "Quests" (TSAO type 11): offers every quest of QUESTS.DAT
@@ -309,6 +340,7 @@ def convert_dats(src, dst):
             os.remove(os.path.join(ddat, f))
     open(os.path.join(ddat, "npcs.dat"), "w", encoding="latin-1", newline="\r\n").write(npcs.replace("\r\n", "\n"))
     convert_quests(read("QUESTS.DAT"), ddat)
+    convert_balance(read("Experiencia.dat"), ddat)
     # AO20 files that name AO20 objects or maps: wrong things in a TSAO world. TSAO's own
     # version where it has one, else an empty set until that system is ported.
     for f in ("ArmasHerrero.dat", "ArmadurasHerrero.dat", "Ciudades.Dat", "Invokar.dat", "Tesoros.dat", "Map.dat", "Help.dat", "Motd.ini", "NombresInvalidos.txt"):
@@ -357,7 +389,9 @@ def main(src, dst):
     # Resource-set numbers (ao_formats::profile): General.bas DarCuerpoDesnudo (elves fall
     # in its `Case Else`), Declares.bas iCuerpoMuertoN/iCabezaMuertoN, General.bas HayAgua.
     naked = {(1, 1): 21, (2, 1): 39, (1, 2): 21, (2, 2): 39, (1, 3): 32, (2, 3): 40, (1, 4): 53, (2, 4): 60, (1, 5): 53, (2, 5): 60}
-    prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", ""]
+    prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", "",
+                                                                                                                            # TCP_HandleData2.bas /MEDITAR: FXMEDITARCHICO 4 (<15), MEDIANO 5 (<30), GRANDE 6 (<50), XGRANDE 43 (<60), CIUDA 44.
+                                                                                                                            "[Meditate]", "FxByLevel=15:4,30:5,50:6,60:43,255:44", ""]
     open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",

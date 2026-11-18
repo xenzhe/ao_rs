@@ -3,5 +3,6 @@ pub mod account;
 pub mod items;
 pub mod social;
 pub mod hud;
+pub mod keys;
 pub mod world;
 pub mod fx;

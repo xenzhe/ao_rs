@@ -1,0 +1,91 @@
+# TSAO level-up table, extracted by tools/tsao/levels.py from CheckUserLevel.
+
+# ConnectNewUser: 21 life; mage 100 + RandomNumber(1, INT) / 3, other casters 50.
+[start]
+hp = 21
+[start.mana]
+Mago = [100, 3]
+Clerigo = [50, 0]
+Druida = [50, 0]
+Bardo = [50, 0]
+Asesino = [50, 0]
+
+[class."Guerrero"]
+hit = [3, 2]
+mana_per_int = 0.0
+sta = 15
+race."Humano" = { VidaMinima = 555, VidaMaxima = 565, RandomVeinteMin = 10, RandomVeinteMax = 11, VidaVeinte = 225, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }
+race."Elfo" = { VidaMinima = 520, VidaMaxima = 530, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 190, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }
+race."Elfo Oscuro" = { VidaMinima = 525, VidaMaxima = 535, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 195, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }
+race."Gnomo" = { VidaMinima = 495, VidaMaxima = 505, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 205, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 10 }
+race."Enano" = { VidaMinima = 575, VidaMaxima = 595, RandomVeinteMin = 11, RandomVeinteMax = 12, VidaVeinte = 245, DefineRandomMin = 11, DefineRandomMax = 13, RandomFinal = 11 }
+
+[class."Cazador"]
+hit = [3, 2]
+mana_per_int = 0.0
+sta = 15
+race."Humano" = { VidaMinima = 485, VidaMaxima = 505, RandomVeinteMin = 9, RandomVeinteMax = 11, VidaVeinte = 195, DefineRandomMin = 9, DefineRandomMax = 11, RandomFinal = 10 }
+race."Elfo" = { VidaMinima = 465, VidaMaxima = 475, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 205, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 9 }
+race."Elfo Oscuro" = { VidaMinima = 475, VidaMaxima = 485, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 205, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 9 }
+race."Gnomo" = { VidaMinima = 445, VidaMaxima = 455, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 185, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 9 }
+race."Enano" = { VidaMinima = 525, VidaMaxima = 535, RandomVeinteMin = 10, RandomVeinteMax = 11, VidaVeinte = 225, DefineRandomMin = 10, DefineRandomMax = 11, RandomFinal = 10 }
+
+[class."Paladin"]
+hit = [3, 1]
+mana_per_int = 1.0
+sta = 15
+race."Humano" = { VidaMinima = 505, VidaMaxima = 515, RandomVeinteMin = 9, RandomVeinteMax = 11, VidaVeinte = 205, DefineRandomMin = 10, DefineRandomMax = 11, RandomFinal = 10 }
+race."Elfo" = { VidaMinima = 485, VidaMaxima = 495, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 195, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 10 }
+race."Elfo Oscuro" = { VidaMinima = 490, VidaMaxima = 500, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 200, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 10 }
+race."Gnomo" = { VidaMinima = 475, VidaMaxima = 485, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 195, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 10 }
+race."Enano" = { VidaMinima = 515, VidaMaxima = 525, RandomVeinteMin = 10, RandomVeinteMax = 11, VidaVeinte = 215, DefineRandomMin = 10, DefineRandomMax = 11, RandomFinal = 10 }
+
+[class."Mago"]
+hit = [1, 1]
+mana_per_int = 3.0
+sta = 14
+race."Humano" = { VidaMinima = 385, VidaMaxima = 395, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 155, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 8 }
+race."Elfo" = { VidaMinima = 365, VidaMaxima = 385, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 155, DefineRandomMin = 7, DefineRandomMax = 9, RandomFinal = 7 }
+race."Gnomo" = { VidaMinima = 335, VidaMaxima = 345, RandomVeinteMin = 6, RandomVeinteMax = 6, VidaVeinte = 135, DefineRandomMin = 6, DefineRandomMax = 7, RandomFinal = 7 }
+race."Elfo Oscuro" = { VidaMinima = 370, VidaMaxima = 380, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 160, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 7 }
+race."Enano" = { VidaMinima = 395, VidaMaxima = 405, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 155, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 8 }
+
+[class."Clerigo"]
+hit = [2, 2]
+mana_per_int = 2.0
+sta = 15
+race."Humano" = { VidaMinima = 445, VidaMaxima = 455, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 175, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 9 }
+race."Elfo" = { VidaMinima = 415, VidaMaxima = 425, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 175, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 8 }
+race."Elfo Oscuro" = { VidaMinima = 420, VidaMaxima = 430, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 180, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 8 }
+race."Gnomo" = { VidaMinima = 390, VidaMaxima = 400, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 170, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 8 }
+race."Enano" = { VidaMinima = 460, VidaMaxima = 470, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 190, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 9 }
+
+[class."Druida"]
+hit = [2, 2]
+mana_per_int = 2.1
+sta = 15
+race."Humano" = { VidaMinima = 425, VidaMaxima = 435, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 185, DefineRandomMin = 8, DefineRandomMax = 10, RandomFinal = 8 }
+race."Elfo" = { VidaMinima = 395, VidaMaxima = 405, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 165, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 8 }
+race."Elfo Oscuro" = { VidaMinima = 405, VidaMaxima = 415, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 175, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 8 }
+race."Gnomo" = { VidaMinima = 370, VidaMaxima = 380, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 170, DefineRandomMin = 6, DefineRandomMax = 7, RandomFinal = 7 }
+race."Enano" = { VidaMinima = 430, VidaMaxima = 440, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 190, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 8 }
+
+[class."Asesino"]
+hit = [3, 1]
+mana_per_int = 1.0
+sta = 15
+race."Humano" = { VidaMinima = 415, VidaMaxima = 425, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 175, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 8 }
+race."Elfo" = { VidaMinima = 395, VidaMaxima = 405, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 165, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 8 }
+race."Elfo Oscuro" = { VidaMinima = 400, VidaMaxima = 410, RandomVeinteMin = 7, RandomVeinteMax = 8, VidaVeinte = 170, DefineRandomMin = 7, DefineRandomMax = 8, RandomFinal = 8 }
+race."Gnomo" = { VidaMinima = 375, VidaMaxima = 385, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 175, DefineRandomMin = 6, DefineRandomMax = 7, RandomFinal = 7 }
+race."Enano" = { VidaMinima = 425, VidaMaxima = 435, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 185, DefineRandomMin = 8, DefineRandomMax = 9, RandomFinal = 8 }
+
+[class."Bardo"]
+hit = [3, 2]
+mana_per_int = 2.1
+sta = 15
+race."Humano" = { VidaMinima = 555, VidaMaxima = 565, RandomVeinteMin = 10, RandomVeinteMax = 11, VidaVeinte = 225, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }
+race."Elfo" = { VidaMinima = 520, VidaMaxima = 530, RandomVeinteMin = 8, RandomVeinteMax = 9, VidaVeinte = 190, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }
+race."Elfo Oscuro" = { VidaMinima = 525, VidaMaxima = 535, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 195, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }
+race."Gnomo" = { VidaMinima = 495, VidaMaxima = 505, RandomVeinteMin = 9, RandomVeinteMax = 10, VidaVeinte = 205, DefineRandomMin = 9, DefineRandomMax = 10, RandomFinal = 10 }
+race."Enano" = { VidaMinima = 575, VidaMaxima = 585, RandomVeinteMin = 11, RandomVeinteMax = 12, VidaVeinte = 245, DefineRandomMin = 11, DefineRandomMax = 12, RandomFinal = 11 }

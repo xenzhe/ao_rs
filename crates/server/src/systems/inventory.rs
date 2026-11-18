@@ -37,6 +37,38 @@ impl World {
     pub(crate) fn drop_creature_loot(&mut self, map: u16, x: i32, y: i32, dat: u32, killer: u32) {
         let ao = self.ao.clone();
         let Some(def) = ao.npcs.get(dat) else { return };
+        // TSAO NPCTirarOro: RandomNumber(GiveGLDMin, GiveGLDMax) * OroMult, straight into the
+        // killer's purse.
+        let (gmin, gmax) = def.gold_range;
+        if self.player(killer).is_some() && gmin > 0 && gmax > 0 {
+            let mult = self.cfg.world.gold_mult.max(1) as i32;
+            let gold = self.roll(gmin.saturating_mul(mult), gmax.saturating_mul(mult)).max(0) as u32;
+            let p = self.player_mut(killer);
+            p.inv.gold = p.inv.gold.saturating_add(gold);
+            self.send_inventory_vitals(killer);
+            self.console(killer, format!("Has ganado {gold} monedas de oro."), Tone::Good);
+        }
+        // TSAO NPC_TIRAR_ITEMS: each `ObjN=obj-amount-prob` of a creature falls with chance
+        // `prob * (2 + DropMult)` in 200, moved by the killer's charisma (18 or less -1,
+        // 20 +1, 21 +2, 22+ +(CHA - 21)). The VB drew that many distinct numbers and
+        // compared one roll against them; the chance is the same.
+        if def.trades != 1 && self.player(killer).is_some() {
+            let cha = self.player(killer).map_or(18, |p| p.stats.attributes[ao_rules::character::ATTR_CHARISMA] as i32);
+            let mult = self.cfg.world.drop_mult.max(1) as i32;
+            for it in def.inventory.iter().filter(|i| i.drop_prob > 0 && i.obj > 0 && i.amount > 0) {
+                let mut n = (it.drop_prob * 2 + it.drop_prob * mult).min(200);
+                n += match cha {
+                    c if c <= 18 => -1,
+                    19 => 0,
+                    20 => 1,
+                    21 => 2,
+                    c => c - 21,
+                };
+                if ao.objs.get(it.obj as u32).is_some() && self.roll(1, 200) <= n.clamp(0, 200) {
+                    self.drop_to_floor(map, x, y, InvItem { obj: it.obj as u16, amount: it.amount as u32 }, false);
+                }
+            }
+        }
         // NPCTirarOro: only when a player killed it; stacks of MaxInventoryObjs.
         if self.player(killer).is_some() && def.gold > 0 {
             let mut gold = def.gold as u64 * self.cfg.world.gold_mult.max(1) as u64;

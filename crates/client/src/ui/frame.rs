@@ -83,20 +83,22 @@ impl WindowId {
 
     /// Hotkey that toggles it (None: opened by the game, e.g. the bank by a banker).
     pub fn hotkey(self) -> Option<KeyCode> {
-        match self {
-            WindowId::Inventory => Some(KeyCode::I),
-            WindowId::Spells => Some(KeyCode::H),
-            WindowId::Character => Some(KeyCode::C),
-            WindowId::Guild => Some(KeyCode::G),
-            WindowId::Party => Some(KeyCode::P),
-            WindowId::Quests => Some(KeyCode::Q),
-            WindowId::WorldMap => Some(KeyCode::M),
-            WindowId::Options => Some(KeyCode::O),
-            WindowId::Events => Some(KeyCode::V),
-            WindowId::Auction => Some(KeyCode::U),
-            WindowId::Gm => Some(KeyCode::F10),
-            _ => None,
-        }
+        use client_core::p3::keys::Action;
+        let a = match self {
+            WindowId::Inventory => Action::Inventory,
+            WindowId::Spells => Action::Spells,
+            WindowId::Character => Action::Character,
+            WindowId::Guild => Action::Guild,
+            WindowId::Party => Action::Party,
+            WindowId::Quests => Action::Quests,
+            WindowId::WorldMap => Action::WorldMap,
+            WindowId::Options => Action::Options,
+            WindowId::Events => Action::Events,
+            WindowId::Auction => Action::Auction,
+            WindowId::Gm => return Some(KeyCode::F10),
+            _ => return None,
+        };
+        crate::keys::code(a)
     }
 
     /// Size of the window in UI units (multiplied by `u`), content included.

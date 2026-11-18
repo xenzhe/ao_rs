@@ -472,7 +472,7 @@ impl World {
         self.player_mut(id).stats.skills[job.skill()] = new;
         self.console(id, format!("¡Has mejorado tu habilidad {} en un punto! Ahora tienes {new} pts.", job.skill_name()), Tone::Good);
         self.send_skills(id);
-        if level < ao_rules::progression::MAX_LEVEL {
+        if level < self.ao.balance.max_level() {
             self.give_exp(id, rules::SKILL_UP_EXP);
         }
     }

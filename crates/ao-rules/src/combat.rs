@@ -2,7 +2,7 @@
 //! functions. Random rolls are made by the caller and passed in, so every formula can be
 //! checked by hand. VB6 assigns `Single`/`Double` results to `Long`/`Integer` with
 //! banker's rounding (`CLng`), at every step: [`vb_round`] reproduces that.
-use ao_formats::dat::balance::{Balance, ClassMods, Skill, WeaponType, MAX_LEVEL};
+use ao_formats::dat::balance::{Balance, ClassMods, Skill, WeaponType};
 use ao_formats::dat::obj::ObjData;
 
 /// `IntervaloUserPuedeAtacar` (intervalos.ini): melee attack interval.
@@ -225,7 +225,7 @@ pub fn exp_for_damage(give_exp: u32, max_hp: i32, hp_before: i32, hp_after: i32)
 
 /// `ExpLevelUp(level)` from Balance.dat `[EXP]`; `None` at `STAT_MAXELV`.
 pub fn exp_to_level_up(b: &Balance, level: u32) -> Option<u32> {
-    if level == 0 || level as usize >= MAX_LEVEL {
+    if level == 0 || level >= b.max_level() {
         return None;
     }
     Some(b.exp_level_up[level as usize - 1].max(1) as u32)

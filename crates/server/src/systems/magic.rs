@@ -393,8 +393,11 @@ impl World {
         if p.status.meditating {
             return self.stop_meditating(id);
         }
+        if p.max_mana <= 0 || !rules::can_meditate(p.class) {
+            return self.console(id, "Tu clase no usa maná: no puede meditar.", Tone::Warn);
+        }
         if p.mana >= p.max_mana {
-            return;
+            return self.console(id, "Tu maná ya está completo.", Tone::Info);
         }
         if !rules::can_meditate(p.class) {
             return self.console(id, "Tu clase no puede meditar.", Tone::Warn);
@@ -403,7 +406,7 @@ impl World {
             return self.console(id, "¡¡Estás muerto!!", Tone::Warn);
         }
         let now = self.now();
-        let fx = rules::meditation_fx(p.level, false);
+        let fx = ao_formats::profile::for_recursos(&self.recursos).meditate_fx(p.level).unwrap_or_else(|| rules::meditation_fx(p.level, false));
         let (map, x, y) = (p.map, p.x, p.y);
         let anchor = (map, x, y, p.combat.last_attack.unwrap_or(GameTime::ZERO));
         let s = &mut self.player_mut(id).status;

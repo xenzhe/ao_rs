@@ -16,6 +16,7 @@ pub struct GameData {
     pub spells: Vec<SpellDef>,
     pub creatures: Vec<CreatureDef>,
     pub balance: Balance,
+    pub levels: Option<ao_rules::level_table::LevelTable>,
 }
 
 #[derive(Deserialize)]
@@ -37,7 +38,12 @@ impl GameData {
         let spells: SpellFile = toml::from_str(&read_or(dir, "spells.toml", DEFAULT_SPELLS)).map_err(|e| format!("spells.toml: {e}"))?;
         let creatures: CreatureFile = toml::from_str(&read_or(dir, "creatures.toml", DEFAULT_CREATURES)).map_err(|e| format!("creatures.toml: {e}"))?;
         let balance: Balance = toml::from_str(&read_or(dir, "balance.toml", DEFAULT_BALANCE)).map_err(|e| format!("balance.toml: {e}"))?;
-        let data = GameData { spells: spells.spell, creatures: creatures.creature, balance };
+        // Optional per-class/race life table (TSAO); absent = AO20 formula.
+        let levels = match std::fs::read_to_string(dir.join("levels.toml")) {
+            Ok(t) => Some(ao_rules::level_table::LevelTable::parse(&t).map_err(|e| format!("levels.toml: {e}"))?),
+            Err(_) => None,
+        };
+        let data = GameData { spells: spells.spell, creatures: creatures.creature, balance, levels };
         data.validate()?;
         Ok(data)
     }

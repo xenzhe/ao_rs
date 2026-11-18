@@ -16,6 +16,8 @@ pub const NUM_RACES: usize = 6;
 pub const NUM_SKILLS: usize = 24;
 /// `STAT_MAXELV`: the experience table has one entry per level up to this one.
 pub const MAX_LEVEL: usize = 47;
+/// Longest experience table read (sanity limit).
+pub const MAX_LEVEL_LIMIT: usize = 255;
 /// `HOME_COST_TIER_COUNT`.
 pub const HOME_COST_TIERS: usize = 6;
 /// `MAX_ELEMENT_TAGS`: side of the elemental matrix.
@@ -438,7 +440,7 @@ pub struct Balance {
     /// `[GUILD]` is missing the `[EXTRA]` value is used (with a warning).
     pub guild_call_cooldown: i32,
     /// `[EXP]`: experience needed at level `n` is `exp_level_up[n - 1]`.
-    pub exp_level_up: [i32; MAX_LEVEL],
+    pub exp_level_up: Vec<i32>,
     pub home_cost_tiers: [HomeCostTier; HOME_COST_TIERS],
     /// `[ElementalMatrixForNpcs]`: `elemental_matrix[row][column]`.
     pub elemental_matrix: [[f32; ELEMENT_TAGS]; ELEMENT_TAGS],
@@ -453,9 +455,15 @@ impl Balance {
         &self.races[race as usize - 1]
     }
 
-    /// Experience needed to go from `level` to the next one (`None` outside `1..=47`).
+    /// Experience needed to go from `level` to the next one (`None` outside the table).
     pub fn exp_for_level(&self, level: u32) -> Option<i32> {
         self.exp_level_up.get((level as usize).checked_sub(1)?).copied()
+    }
+
+    /// Highest level (`STAT_MAXELV`): one entry per level of `[EXP]`, the last one is the
+    /// cap (AO20 47, TSAO 70).
+    pub fn max_level(&self) -> u32 {
+        self.exp_level_up.len().max(1) as u32
     }
 }
 
@@ -576,11 +584,20 @@ fn parse(ini: &RawIni, w: &mut Vec<Warning>) -> Balance {
         s.int("GuildCallCooldown")
     };
 
-    let mut exp_level_up = [0; MAX_LEVEL];
+    // `[EXP]` 1..n: the table decides the level cap (AO20 47; TSAO 70). Read until the
+    // first missing or empty level (AO20 leaves `32=` and up empty... and they were read
+    // as 0, see `max_level`).
+    let mut exp_level_up = Vec::new();
     {
         let mut s = ini.sec(FILE, "EXP", w);
-        for (i, slot) in exp_level_up.iter_mut().enumerate() {
-            *slot = s.int(&(i + 1).to_string());
+        for i in 1..=MAX_LEVEL_LIMIT {
+            if s.raw(&i.to_string()).is_none() {
+                break;
+            }
+            exp_level_up.push(s.int(&i.to_string()));
+        }
+        if exp_level_up.len() < MAX_LEVEL {
+            exp_level_up.resize(MAX_LEVEL, 0);
         }
     }
 

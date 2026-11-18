@@ -252,6 +252,9 @@ pub struct NpcDrop {
 pub struct InventoryItem {
     pub obj: i32,
     pub amount: i32,
+    /// TSAO third field `ObjN=obj-amount-prob`: a creature drops it on death with chance
+    /// `prob * (2 + DropMult)` in 200 (`NPC_TIRAR_ITEMS`). 0 = merchant stock / no drop.
+    pub drop_prob: i32,
 }
 
 /// `SpN` + `CdN`: a spell the NPC casts and its cooldown.
@@ -463,6 +466,8 @@ pub struct Npc {
     pub clan_exp: i32,
     /// `GiveGLD`.
     pub gold: i32,
+    /// TSAO `GiveGLDMin` / `GiveGLDMax` (0, 0 = not used).
+    pub gold_range: (i32, i32),
     /// `InvReSpawn`.
     pub inventory_respawn: i32,
     /// `DropCount` + `Drop1..n` (at most 12).
@@ -672,8 +677,10 @@ fn read_npc(s: &mut Sec) -> Npc {
     let items = s.count("NROITEMS", MAX_INVENTORY);
     for i in 1..=items {
         let f = s.ints(&format!("Obj{i}"), '-', 2);
-        n.inventory.push(InventoryItem { obj: f[0], amount: f[1] });
+        n.inventory.push(InventoryItem { obj: f[0], amount: f[1], drop_prob: f.get(2).copied().unwrap_or(0) });
     }
+    // TSAO: gold straight to the killer, `RandomNumber(GiveGLDMin, GiveGLDMax)`.
+    n.gold_range = (s.int("GiveGLDMin"), s.int("GiveGLDMax"));
     n.humanoid = s.int("Humanoide");
     let spells = s.count("LanzaSpells", MAX_LIST);
     if spells > 0 {
@@ -818,7 +825,7 @@ DropCount=99
         assert_eq!(wolf.path_vision, 0, "present but empty reads as 0, not the default");
         let trainer = t.get(501).unwrap();
         assert_eq!(trainer.creatures, vec![Creature { npc: 500, name: "Lobo".into() }]);
-        assert_eq!(trainer.inventory, vec![InventoryItem { obj: 12, amount: 100 }]);
+        assert_eq!(trainer.inventory, vec![InventoryItem { obj: 12, amount: 100, drop_prob: 0 }]);
         assert_eq!(trainer.spells, vec![NpcSpell { spell: 5, cooldown: 30 }]);
         assert_eq!(trainer.spell_range, 9);
         assert_eq!(trainer.path_vision, DEFAULT_VISION);

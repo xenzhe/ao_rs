@@ -15,8 +15,33 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
             renderer.pixel_perfect = !renderer.pixel_perfect;
         }
         // Keys 1-9 arm spells in the HUD (player-assigned, config/spellkeys.ini).
-        // Ctrl: melee attack on the tile in front (AO), at the server's attack pace while held.
-        if is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl) {
+        // Action keys (config/keys.ini, Options window): the item ones act on the slot
+        // selected in the inventory.
+        use client_core::p3::keys::Action;
+        let sel = crate::ui::inventory::selected_inv();
+        let item = (sel > 0).then(|| game.local.inventory.get(sel as usize - 1).copied().flatten()).flatten();
+        if crate::keys::pressed(Action::Meditate) {
+            game.toggle_meditation();
+        }
+        if crate::keys::pressed(Action::PickUp) {
+            game.send(&ao_protocol::C2S::PickUp);
+        }
+        if crate::keys::pressed(Action::Safe) {
+            game.toggle_safe();
+        }
+        if let Some(it) = item {
+            if crate::keys::pressed(Action::Use) {
+                game.send(&ao_protocol::C2S::UseItem { slot: sel });
+            }
+            if crate::keys::pressed(Action::Equip) {
+                game.send(&ao_protocol::C2S::EquipItem { slot: sel });
+            }
+            if crate::keys::pressed(Action::Drop) && !it.equipped {
+                game.send(&ao_protocol::C2S::DropItem { slot: sel, amount: 1 });
+            }
+        }
+        // Attack (Ctrl by default): melee on the tile in front, at the server's pace while held.
+        if crate::keys::down(Action::Attack) {
             thread_local! {
                 static LAST: std::cell::Cell<f64> = const { std::cell::Cell::new(-10.0) };
             }
@@ -57,9 +82,10 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
     if ui.keyboard_captured {
         return None;
     }
-    let dir = [(KeyCode::Up, Dir::Up), (KeyCode::Down, Dir::Down), (KeyCode::Left, Dir::Left), (KeyCode::Right, Dir::Right)]
+    use client_core::p3::keys::Action;
+    let dir = [(Action::MoveUp, Dir::Up), (Action::MoveDown, Dir::Down), (Action::MoveLeft, Dir::Left), (Action::MoveRight, Dir::Right)]
         .into_iter()
-        .find(|(k, _)| is_key_down(*k))
+        .find(|(a, _)| crate::keys::down(*a))
         .map(|(_, d)| d);
     if let Some(d) = dir {
         game.try_step(d, now);

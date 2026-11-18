@@ -7,3 +7,4 @@ description = "Pure game rules shared by client and server: walking, line of sig
 [dependencies]
 ao-formats.workspace = true
 serde.workspace = true
+toml.workspace = true

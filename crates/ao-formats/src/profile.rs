@@ -23,6 +23,9 @@ pub struct Profile {
     pub dead_head: u16,
     pub water: Vec<(u32, u32)>,
     pub water_needs_empty_layer2: bool,
+    /// `[Meditate] FxByLevel=15:4,30:5`: below level 15 FX 4, below 30 FX 5... (empty =
+    /// the AO20 table of the engine).
+    pub meditate_fx: Vec<(u32, u16)>,
 }
 
 /// AO20 `HayAgua` layer-1 ranges.
@@ -30,7 +33,7 @@ const AO20_WATER: [(u32, u32); 9] = [(1505, 1520), (124, 139), (24223, 24238), (
 
 impl Default for Profile {
     fn default() -> Self {
-        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false }
+        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new() }
     }
 }
 
@@ -62,7 +65,15 @@ impl Profile {
             }
             p.water_needs_empty_layer2 = w.get("emptylayer2").is_some_and(|v| v.trim() == "1");
         }
+        if let Some(v) = ini.section("meditate").and_then(|m| m.get("fxbylevel")) {
+            p.meditate_fx = v.split(',').filter_map(|p| p.split_once(':')).filter_map(|(l, f)| Some((l.trim().parse().ok()?, f.trim().parse().ok()?))).collect();
+        }
         p
+    }
+
+    /// Meditation FX for `level` from the profile (`None` = use the engine's table).
+    pub fn meditate_fx(&self, level: u32) -> Option<u16> {
+        self.meditate_fx.iter().find(|(below, _)| level < *below).or(self.meditate_fx.last()).map(|(_, fx)| *fx)
     }
 
     pub fn load(recursos: &Path) -> Profile {

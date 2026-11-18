@@ -20,7 +20,6 @@ use ao_formats::dat::balance::Skill;
 use ao_formats::dat::quests::{Quest, PLAYER_KILLS};
 use ao_protocol::social::quest::{OfferedQuest, QuestInfo};
 use ao_protocol::{QuestC2S, QuestS2C, Tone, S2C};
-use ao_rules::progression::MAX_LEVEL;
 use ao_rules::quest::{self, Candidate, GoldReward, Progress, Refusal, Standing, Unmet};
 use std::sync::Arc;
 use tracing::warn;
@@ -543,7 +542,7 @@ impl World {
         }
         let exp = quest::exp_reward(q.reward_exp, self.cfg.world.exp_mult);
         if exp > 0 {
-            if self.player(id).unwrap().level < MAX_LEVEL {
+            if self.player(id).unwrap().level < self.ao.balance.max_level() {
                 self.give_exp(id, exp);
                 self.console(id, format!("Has ganado {exp} puntos de experiencia."), Tone::Good);
             } else {

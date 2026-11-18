@@ -15,6 +15,7 @@ mod config;
 mod devtools;
 mod game;
 mod input;
+mod keys;
 mod render;
 mod ui;
 

@@ -56,6 +56,51 @@ fn keycap(x: f32, y: f32, key: &str, u: f32) -> f32 {
     w
 }
 
+thread_local! {
+    /// The action waiting for its new key.
+    static REBINDING: Cell<Option<client_core::p3::keys::Action>> = const { Cell::new(None) };
+}
+
+/// Every rebindable action with its keycap (click, then press the new key) and the two
+/// movement presets.
+fn key_editor(ui: &mut Ui, r: Rect, u: f32) {
+    use client_core::p3::keys::{Action, KeyBinds};
+    let mut binds = crate::keys::binds();
+    let waiting = REBINDING.with(Cell::get);
+    if let Some(a) = waiting {
+        ui.keyboard_captured = true;
+        if is_key_pressed(KeyCode::Escape) {
+            REBINDING.with(|c| c.set(None));
+        } else if let Some(k) = crate::keys::any_pressed() {
+            binds.set(a, &crate::keys::name(k));
+            crate::keys::set_binds(binds.clone());
+            REBINDING.with(|c| c.set(None));
+        }
+    }
+    // Presets.
+    let bw = 110.0 * u;
+    for (i, (label, preset)) in [("Flechas", KeyBinds::arrows()), ("WASD", KeyBinds::wasd())].into_iter().enumerate() {
+        let b = Rect::new(r.right() - (2 - i) as f32 * (bw + 8.0 * u), r.y - 30.0 * u, bw, 26.0 * u);
+        let on = binds.key(Action::MoveUp) == preset.key(Action::MoveUp);
+        if super::widgets::button_kind(b, label, if on { super::widgets::Kind::Primary } else { super::widgets::Kind::Secondary }, true, u) {
+            crate::keys::set_binds(preset);
+        }
+    }
+    let cols = 3;
+    let colw = r.w / cols as f32;
+    let m: Vec2 = mouse_position().into();
+    for (i, a) in Action::ALL.iter().enumerate() {
+        let (cx, cy) = (r.x + (i % cols) as f32 * colw, r.y + 4.0 * u + (i / cols) as f32 * 30.0 * u);
+        let label = if waiting == Some(*a) { "…".to_string() } else { crate::keys::label(binds.key(*a)) };
+        let w = keycap(cx + 6.0 * u, cy, &label, u);
+        let cap = Rect::new(cx + 6.0 * u, cy, w, 24.0 * u);
+        if cap.contains(m) && is_mouse_button_pressed(MouseButton::Left) {
+            REBINDING.with(|c| c.set(Some(*a)));
+        }
+        text_with(FontKind::Body, a.label(), cx + 6.0 * u + w + 10.0 * u, cy + 17.0 * u, 14.0 * u, if waiting == Some(*a) { GOLD_BRIGHT } else { TEXT });
+    }
+}
+
 /// Draws the content of the window inside `r` (the frame is already drawn).
 pub fn draw(ui: &mut Ui, _game: &mut Game, _assets: &mut Assets, r: Rect) {
     let u = ui.u;
@@ -100,16 +145,8 @@ pub fn draw(ui: &mut Ui, _game: &mut Game, _assets: &mut Assets, r: Rect) {
 
     // ---- keys
     let ky = kit::section("Teclas", r.x, (y + 44.0 * u).max(sy + 56.0 * u), r.w, u);
-    let mut keys: Vec<(String, &str)> = WindowId::ALL.iter().filter_map(|w| w.hotkey().map(|k| (format!("{k:?}"), if *w == WindowId::WorldMap { "Mapa" } else { w.title() }))).collect();
-    keys.extend([("Enter".into(), "Hablar"), ("Flechas".into(), "Caminar"), ("1-9".into(), "Lanzar"), ("Esc".into(), "Cancelar")]);
-    let cols = 3;
-    let colw = r.w / cols as f32;
-    for (i, (k, what)) in keys.iter().enumerate() {
-        let (cx, cy) = (r.x + (i % cols) as f32 * colw, ky + 4.0 * u + (i / cols) as f32 * 32.0 * u);
-        let w = keycap(cx + 6.0 * u, cy, k, u);
-        text_with(FontKind::Body, what, cx + 6.0 * u + w + 10.0 * u, cy + 17.0 * u, 15.0 * u, TEXT);
-    }
-    text_with(FontKind::NarrativeItalic, "Los ajustes se guardan solos", r.x + 6.0 * u, r.bottom() - 2.0 * u, 13.0 * u, TEXT_FAINT);
+    key_editor(ui, Rect::new(r.x, ky, r.w, r.bottom() - ky - 20.0 * u), u);
+    text_with(FontKind::NarrativeItalic, "Clic en una tecla y pulsa la nueva · Esc cancela · se guarda solo", r.x + 6.0 * u, r.bottom() - 2.0 * u, 13.0 * u, TEXT_FAINT);
     let _ = (GOLD, MUTED);
 
     // While a slider is dragged only memory changes; the file is written when it is released.

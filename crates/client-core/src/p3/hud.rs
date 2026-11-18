@@ -321,7 +321,7 @@ pub fn config_dir() -> PathBuf {
     std::env::var("AO_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("config"))
 }
 
-fn write_config(path: &Path, text: &str) -> bool {
+pub(crate) fn write_config(path: &Path, text: &str) -> bool {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
