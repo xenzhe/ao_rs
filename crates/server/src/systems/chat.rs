@@ -175,6 +175,16 @@ impl World {
                 }
                 true
             }
+            // TCP_HandleData2.bas /QUITARMASCOTA and TCP_HandleData1.bas ENTR (systems/pets.rs).
+            "/quitarmascota" => {
+                self.pets_dismiss(id);
+                true
+            }
+            "/entrenar" => {
+                let arg = line.split_whitespace().nth(1).map(str::to_string);
+                self.trainer_command(id, arg.as_deref());
+                true
+            }
             "/desenterrar" => {
                 self.on_skill(id, ao_protocol::p4::skill::SkillC2S::Dig);
                 true
@@ -213,7 +223,7 @@ impl World {
                 }
                 true
             }
-            _ => false,
+            _ => self.dev_test_command(id, line),
         }
     }
 }

@@ -114,7 +114,7 @@ impl World {
     }
 
     /// `OpenNPC`: live state from the npcs.dat definition.
-    fn new_npc(&mut self, number: u16, d: &NpcData, x: i32, y: i32, now: GameTime) -> Npc {
+    pub(crate) fn new_npc(&mut self, number: u16, d: &NpcData, x: i32, y: i32, now: GameTime) -> Npc {
         let respawn_secs = self.rng.range(d.respawn_interval_min.max(0), d.respawn_interval_max.max(d.respawn_interval_min).max(0)) as u32;
         let vision = if d.path_vision > 0 { d.path_vision } else { VISION_X };
         Npc {
@@ -149,6 +149,8 @@ impl World {
             walk_step: 0,
             respawn_secs,
             respawn_at: None,
+            pet: Default::default(),
+            status: Default::default(),
         }
     }
 
@@ -165,6 +167,7 @@ impl World {
                 self.populate_map(map);
             }
             self.tick_respawns(map, now);
+            self.tick_pets(map, now);
             let inst = self.instance(map);
             // NpcRequiresAiUpdate: only maps with users.
             if inst.players.is_empty() || now < inst.next_ai {
@@ -181,6 +184,10 @@ impl World {
                 // IntervaloPermiteMoverse
                 let step = ms(d.move_interval, DEFAULT_MOVE_MS);
                 self.npc_mut(map, nid).next_move = now.after_ms(step);
+                // TIMER_AI_Timer: a paralysed creature does nothing at all.
+                if self.npc_paralyzed(map, nid) {
+                    continue;
+                }
                 self.npc_ai(map, nid, now);
             }
         }
@@ -210,7 +217,8 @@ impl World {
             }
             match n.respawn_at {
                 None => {
-                    let respawns = self.ao.npcs.get(n.def as u32).is_some_and(|d| d.respawn == 0);
+                    // Summons, companions and trainer creatures were made for someone: gone.
+                    let respawns = !n.pet.no_respawn && self.ao.npcs.get(n.def as u32).is_some_and(|d| d.respawn == 0);
                     let (x, y, secs) = (n.x, n.y, n.respawn_secs);
                     let inst = self.maps.get_mut(&map).unwrap();
                     inst.unplace(nid, x, y);
@@ -301,11 +309,15 @@ impl World {
 
     // ------------------------------------------------------------ AI
 
-    /// `NpcAI`: dispatch on `Movement`. Not ported yet (they stand still): `SigueAmo`
-    /// (pets/summons), `NpcAtacaNpc`, `GuardiaPersigueNpc` (6 `GuardiaNpc` in the maps),
+    /// `NpcAI`: dispatch on `Movement`; creatures with an owner (`SigueAmo`, `NpcAtacaNpc`)
+    /// run `pet_ai` (systems/pets.rs). Not ported yet (they stand still): `GuardiaPersigueNpc` (6 `GuardiaNpc` in the maps),
     /// `SupportAndAttack`, the `BG*` battleground behaviours, `Invasion`, cross-map routes,
     /// `TryGuardAttackHostileNpc`, `NpcDummyUpdate` and `AI_RangeAttack` kiting.
     fn npc_ai(&mut self, map: u16, nid: u32, now: GameTime) {
+        // NPCAI: a creature with a master follows/fights for it (systems/pets.rs).
+        if self.instance(map).npcs[&nid].pet.owner.is_some() {
+            return self.pet_ai(map, nid, now);
+        }
         let n = &self.instance(map).npcs[&nid];
         let ao = self.ao.clone();
         let Some(d) = ao.npcs.get(n.def as u32) else { return };
@@ -536,7 +548,7 @@ impl World {
     /// `AI_CaminarConRumbo`: follows the cached path, recomputing it (`SeekPath` with
     /// `Closest`) when the destination changed, at most every 250 ms. A failed search
     /// widens a hostile chaser's vision by `PATH_VISION_DELTA`.
-    fn walk_towards(&mut self, map: u16, nid: u32, dest: (i32, i32), now: GameTime) {
+    pub(crate) fn walk_towards(&mut self, map: u16, nid: u32, dest: (i32, i32), now: GameTime) {
         let n = &self.instance(map).npcs[&nid];
         let pos = (n.x, n.y);
         if pos == dest {
@@ -641,7 +653,11 @@ impl World {
 
     /// `MoveNPCChar`: one step if `LegalWalkNPC` allows it (living users and NPCs block).
     /// Broadcasts `Moved` only when it actually moved or turned.
-    fn npc_move(&mut self, map: u16, nid: u32, dir: Dir) -> bool {
+    pub(crate) fn npc_move(&mut self, map: u16, nid: u32, dir: Dir) -> bool {
+        // AI_NPC.bas: `If flags.Inmovilizado = 1 Then Exit Function` before every step.
+        if self.npc_rooted(map, nid) {
+            return false;
+        }
         let n = &self.instance(map).npcs[&nid];
         let (dx, dy) = dir.delta();
         let (tx, ty) = (n.x + dx, n.y + dy);
@@ -658,7 +674,7 @@ impl World {
     }
 
     /// `ChangeNPCChar` (heading only): sent only when it changes.
-    fn npc_face(&mut self, map: u16, nid: u32, dir: Dir) {
+    pub(crate) fn npc_face(&mut self, map: u16, nid: u32, dir: Dir) {
         let n = self.npc_mut(map, nid);
         if n.dir == dir {
             return;
@@ -733,7 +749,7 @@ impl World {
         }
     }
 
-    fn npc_mut(&mut self, map: u16, nid: u32) -> &mut Npc {
+    pub(crate) fn npc_mut(&mut self, map: u16, nid: u32) -> &mut Npc {
         self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap()
     }
 }

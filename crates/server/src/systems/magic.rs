@@ -502,13 +502,22 @@ impl World {
         self.stop_meditating(id);
         self.reveal(id);
         self.player_mut(id).spells.next_cast = now.after_ms(rules::CAST_INTERVAL_MS);
+        // HandleHechizoTerreno: uInvocacion (4) and TSAO uInvocaMascota (7) act on the tile
+        // (systems/pets.rs); costs and presentation as any spell, on the caster.
+        let companion = spell.spell_type == SpellType::Unknown(7);
+        if spell.spell_type == SpellType::Summon || companion {
+            if self.can_cast(id, spell_id, &spell, Target::User(id)) && self.cast_summon(id, &spell, tx, ty, companion) {
+                self.after_cast(id, spell_id, &spell, Target::User(id));
+            }
+            return;
+        }
         let Some(target) = self.resolve_target(id, &spell, tx, ty) else { return };
         if !self.can_cast(id, spell_id, &spell, target) {
             return;
         }
         let ok = match target {
             Target::User(t) => self.cast_on_user(id, spell_id, &spell, t),
-            Target::Npc(n) => self.cast_on_npc(id, &spell, n),
+            Target::Npc(n) => self.cast_on_npc(id, spell_id, &spell, n),
         };
         if ok {
             self.after_cast(id, spell_id, &spell, target);
@@ -747,6 +756,12 @@ impl World {
                 warn(self, m);
                 return false;
             }
+            // HechizoEstadoUsuario: the ring of immunity resists (the spell is spent).
+            if self.resists_paralysis(t, false) {
+                self.console(t, "¡Tu anillo ha resistido la parálisis!", Tone::Good);
+                warn(self, "El objetivo ha resistido el hechizo.");
+                return true;
+            }
             let class = self.player(t).unwrap().class;
             let until = Some(now.after_secs(rules::paralysis_secs(s.duration, class).max(0) as u64));
             let st = &mut self.player_mut(t).status;
@@ -911,12 +926,14 @@ impl World {
 
     /// `HandleHechizoNPC` -> `HechizoPropNPC`. Status spells on creatures (paralysis...)
     /// need fields on `Npc` (NPC system): not in P1.
-    fn cast_on_npc(&mut self, id: u32, s: &Spell, nid: u32) -> bool {
+    fn cast_on_npc(&mut self, id: u32, spell_id: u16, s: &Spell, nid: u32) -> bool {
         let map = self.player(id).unwrap().map;
         let Some(n) = self.instance(map).npcs.get(&nid) else { return false };
         let (hp, max_hp, name) = (n.hp, n.max_hp, n.name.clone());
         match s.spell_type {
             SpellType::Properties | SpellType::Combined => {}
+            // HechizoEstadoNPC: paralysis on creatures (systems/creatures.rs).
+            SpellType::Status => return self.status_on_npc(id, s, map, nid),
             _ => {
                 self.console(id, "Ese hechizo todavía no afecta a las criaturas.", Tone::Warn);
                 return false;
@@ -939,7 +956,9 @@ impl World {
             let r = roll(self, s.hp.min, s.hp.max);
             let level = self.player(id).unwrap().level;
             let dmg = if self.tsao_rules() {
-                self.tsao_spell_damage(id, s.staff_affected, r, None)
+                // HechizoPropNPC: criticals, pets, x1.4, immune creatures (creatures.rs).
+                let Some(d) = self.tsao_spell_vs_npc(id, spell_id, s, map, nid, r) else { return false };
+                d
             } else {
                 let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
                 // npcs.dat MagicResistance/MagicDef/DefM are not on `Npc` yet (NPC system).
@@ -1037,8 +1056,16 @@ impl World {
                 self.heal_player(pid, amount);
             }
         } else if s.effects.contains(Fx::DO_DAMAGE) {
-            // Npc MagicBonus and GetUserMRForNpc are not modelled yet: base roll.
-            let dmg = roll(self, s.hp.min, s.hp.max).max(0);
+            // Npc MagicBonus and GetUserMRForNpc are not modelled yet: base roll, or the
+            // creature's own `SpellDamage` (TSAO: the fire elemental's 70..90).
+            let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or(0, |n| n.def);
+            let (lo, hi) = self.ao.npcs.get(def as u32).and_then(|d| d.special.spell_damage).unwrap_or((s.hp.min, s.hp.max));
+            let mut dmg = roll(self, lo, hi).max(0);
+            if self.tsao_rules() {
+                // NpcLanzaSpellSobreUser: helmet, armour and ring take their DefensaMagica.
+                dmg = (dmg - self.tsao_npc_spell_absorb(pid)).max(0);
+            }
+            self.pets_defend(pid, map, nid);
             self.damage_player(pid, dmg, &name);
         }
         if self.player(pid).is_none_or(|p| p.combat.dead || p.hp <= 0) {
@@ -1055,13 +1082,18 @@ impl World {
             self.send_stats(pid);
         }
         let fx = s.effects;
-        // NpcLanzaSpellSobreUser: creatures paralyse/immobilise for Duration / 2.
+        // NpcLanzaSpellSobreUser: creatures paralyse/immobilise for Duration / 2; the ring of
+        // immunity resists 1 in 8.
         let half = Some(now.after_secs(rules::vb_round(s.duration as f64 / 2.0).max(0) as u64));
+        let resisted = (fx.contains(Fx::PARALYZE) || fx.contains(Fx::IMMOBILIZE)) && self.resists_paralysis(pid, true);
+        if resisted {
+            self.console(pid, "¡Tu anillo ha resistido la parálisis!", Tone::Good);
+        }
         let st = &mut self.player_mut(pid).status;
-        if fx.contains(Fx::PARALYZE) && st.paralyzed_until.is_none_or(|u| now >= u) {
+        if !resisted && fx.contains(Fx::PARALYZE) && st.paralyzed_until.is_none_or(|u| now >= u) {
             st.paralyzed_until = half;
         }
-        if fx.contains(Fx::IMMOBILIZE) && st.immobilized_until.is_none_or(|u| now >= u) {
+        if !resisted && fx.contains(Fx::IMMOBILIZE) && st.immobilized_until.is_none_or(|u| now >= u) {
             st.immobilized_until = half;
         }
         if fx.contains(Fx::REMOVE_PARALYSIS) {

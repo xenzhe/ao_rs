@@ -69,6 +69,7 @@ impl World {
             return;
         }
         let Some(f) = self.fighter(pid) else { return };
+        self.pets_defend(pid, map, nid);
         let ao = self.ao.clone();
         let obj = |o: Option<u16>| o.and_then(|o| ao.objs.get(o as u32));
 
@@ -89,7 +90,11 @@ impl World {
 
         // NpcDamage
         let mut damage = 0;
-        if hit {
+        if hit && self.tsao_rules() {
+            // TSAO NpcDaño: helmet or armour (never the shield), at least 1 (creatures.rs).
+            let r = self.roll(npc.min_hit, npc.max_hit);
+            damage = self.tsao_npc_blow(pid, r);
+        } else if hit {
             let mut absorbed = 0;
             if self.roll(1, 6) == rules::BODY_HEAD {
                 if let Some(h) = obj(f.helmet) {
@@ -220,6 +225,7 @@ impl World {
         // the resurrection is the naked one, then the ghost.
         self.close_bank(id);
         self.close_trades(id);
+        self.pets_on_owner_death(id);
         if !self.event_keeps_items_on_death(id) {
             self.drop_inventory_on_death(id);
         }
@@ -289,7 +295,9 @@ impl World {
         if !c.attackable {
             return false;
         }
-        let exp_total = c.exp;
+        // Fixes over TSAO: summons kept their GiveEXP (the 2 zombies of "Invokar Zombies" give
+        // 1000 each) and an owner could farm their own pets; neither gives experience here.
+        let exp_total = if self.pet_gives_no_exp(map, nid, attacker) { 0 } else { c.exp };
         if self.player(attacker).is_some() {
             let number = self.maps[&map].npcs[&nid].def;
             if let Some(why) = self.faction_npc_attack_refusal(attacker, number) {
@@ -298,6 +306,7 @@ impl World {
             }
             self.faction_on_npc_attacked(attacker, number);
             self.npc_attacked_by(map, nid, attacker);
+            self.pets_assist(attacker, map, nid);
         }
         let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&nid)) else { return false };
         let before = n.hp;
@@ -306,6 +315,7 @@ impl World {
         self.console(attacker, format!("Le has causado {amount} de dano a {name}."), Tone::Combat);
         // CalcularDarExp: share of life taken, then `ExpMult`.
         let exp = rules::exp_for_damage(exp_total, max_hp, before, hp) * self.cfg.world.exp_mult.max(1);
+        let exp = self.exp_with_items(attacker, exp);
         if exp > 0 && self.player(attacker).is_some() {
             self.share_exp(attacker, exp, map);
         }
@@ -318,15 +328,19 @@ impl World {
         }
     }
 
-    fn kill_npc(&mut self, map: u16, nid: u32, killer: u32) {
+    pub(crate) fn kill_npc(&mut self, map: u16, nid: u32, killer: u32) {
         let now = self.now();
         // The NPC system takes it off its tile and schedules the respawn (tick_respawns).
         let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
         n.dead_until = Some(now);
-        let (name, number) = (n.name.clone(), n.def);
+        let (name, number, kind, pet) = (n.name.clone(), n.def, n.kind, n.pet.owner.is_some());
         self.broadcast(map, &S2C::Despawn { id: nid }, None);
         self.console(killer, format!("Has matado a {name}!"), Tone::Good);
-        self.drop_npc_loot(map, nid, killer);
+        // MuereNpc: `If MiNPC.MaestroUser = 0` -> only creatures without a master drop loot.
+        if !pet {
+            self.drop_npc_loot(map, nid, killer);
+        }
+        self.creature_on_killed(map, kind, killer);
         if self.player(killer).is_some() {
             self.quest_on_npc_killed(killer, number, map);
             self.faction_on_npc_killed(killer, number);

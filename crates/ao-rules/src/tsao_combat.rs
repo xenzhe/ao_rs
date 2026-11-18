@@ -63,6 +63,16 @@ pub fn staff_scaled(damage: i64, mage: bool, druid: bool, weapon_staff_bonus: Op
     }
 }
 
+/// `DoApuñalar` (Trabajo.bas): the top of the `RandomNumber(0, Suerte)` stab roll (a stab
+/// is a roll under 15): 200 up to 10 points of skill, 10 less every 10 points, 100 at 100.
+pub fn stab_luck(skill: u8) -> i32 {
+    match skill {
+        0..=10 => 200,
+        100.. => 100,
+        s => 200 - 10 * ((s as i32 - 1) / 10),
+    }
+}
+
 /// TSAO `Balance.dat` player-versus-player layer (modBalance.bas): percents by class for
 /// physical / ranged / magic attack and physical / magic defence, plus a flat bonus by
 /// attacker class against victim class (`[PALADIN] AFGuerrero=28`).
@@ -170,6 +180,7 @@ mod tests {
         assert_eq!(staff_scaled(100, true, false, Some(20)), 90);
         assert_eq!(staff_scaled(100, false, true, None), 73);
         assert_eq!(staff_scaled(100, false, false, None), 100);
+        assert_eq!((stab_luck(0), stab_luck(10), stab_luck(11), stab_luck(20), stab_luck(55), stab_luck(91), stab_luck(99), stab_luck(100)), (200, 200, 190, 190, 150, 110, 110, 100));
     }
 
     #[test]

@@ -43,6 +43,8 @@ impl World {
         if self.player(killer).is_some() && gmin > 0 && gmax > 0 {
             let mult = self.cfg.world.gold_mult.max(1) as i32;
             let gold = self.roll(gmin.saturating_mul(mult), gmax.saturating_mul(mult)).max(0) as u32;
+            // The tunics of wealth (`GoldBonusPct`, systems/creatures.rs).
+            let gold = self.gold_with_items(killer, gold);
             let p = self.player_mut(killer);
             p.inv.gold = p.inv.gold.saturating_add(gold);
             self.send_inventory_vitals(killer);
@@ -55,6 +57,7 @@ impl World {
         if def.trades != 1 && self.player(killer).is_some() {
             let cha = self.player(killer).map_or(18, |p| p.stats.attributes[ao_rules::character::ATTR_CHARISMA] as i32);
             let mult = self.cfg.world.drop_mult.max(1) as i32;
+            let luck = self.drop_luck(killer);
             for it in def.inventory.iter().filter(|i| i.drop_prob > 0 && i.obj > 0 && i.amount > 0) {
                 let mut n = (it.drop_prob * 2 + it.drop_prob * mult).min(200);
                 n += match cha {
@@ -64,6 +67,10 @@ impl World {
                     21 => 2,
                     c => c - 21,
                 };
+                // The tunics of luck (`DropLuck`): `If NumerosUsados < 200 Then + 3`.
+                if n < 200 {
+                    n += luck;
+                }
                 if ao.objs.get(it.obj as u32).is_some() && self.roll(1, 200) <= n.clamp(0, 200) {
                     self.drop_to_floor(map, x, y, InvItem { obj: it.obj as u16, amount: it.amount as u32 }, false);
                 }

@@ -28,7 +28,10 @@ impl World {
         let def = |o: Option<u16>| o.and_then(|o| ao.objs.get(o as u32)).map(|d| d.tsao_magic_def).filter(|(a, b)| *a > 0 || *b > 0);
         let mut total = 0i64;
         for o in [f.helmet, f.tool] {
-            if let Some((lo, hi)) = def(o) {
+            // calcularDefCasco / calcularDefAnillo: the golden tiara and the ring of immunity
+            // have a fixed value by class (`MagicDefByClass`) instead of their range.
+            let fixed = self.class_magic_def(o, f.class.spanish_name());
+            if let Some((lo, hi)) = fixed.map(|v| (v, v)).or_else(|| def(o)) {
                 let d = self.roll(lo, hi);
                 let d = self.roll(d - 2, d);
                 total += self.roll(d - 3, d) as i64;
@@ -52,6 +55,9 @@ impl World {
             d = ao_rules::tsao_combat::staff_scaled(d, fa.class == Class::Mage, fa.class == Class::Druid, weapon.as_ref().map(|w| w.staff_damage_bonus));
         }
         if let Some(v) = victim.and_then(|v| self.fighter(v)) {
+            // HechizoPropUsuario: the magic lute (`SpellDamagePct`) before the balance layer.
+            let pct = self.spell_damage_pct(id) as f64;
+            d = ao_rules::combat::vb_round(d as f64 + d as f64 * pct / 100.0);
             d = self.pvp_balance().magic(d, fa.class.spanish_name(), v.class.spanish_name());
             d -= self.tsao_magic_absorb(&v);
             // Class bonuses (modHechizos.bas `Bon2`/`Bon3`): caster's magic damage, victim's resistance.

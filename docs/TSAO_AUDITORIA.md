@@ -40,10 +40,19 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Hechizos exclusivos de clase | ✅ | |
 | Robar (/UK Robar) | ✅ | Tecla J y clic |
 | Ocultarse | ✅ | Tecla B |
-| Apuñalar / críticos | 🟡 | Versión AO20 |
-| Mascotas e invocaciones (Invokar.dat, /QUITARMASCOTA, entrenador) | ❌ | Siguiente: necesitan IA de mascota |
-| Golpe crítico mágico contra criaturas | ❌ | |
-| Objetos especiales por número (matadragones, túnicas, anillos) | ❌ | Pasarlos a datos |
+| Apuñalar / críticos | ✅ | `DoApuñalar` de TSAO (x1.5 a jugadores, x2 a criaturas, asesino por la espalda siempre); crítico 2 de 5 x2 contra criaturas |
+| Golpe de criatura (`NpcDaño`) y hechizos de criaturas | ✅ | Casco o armadura (sin escudo), mínimo 1; defensa mágica contra hechizos de criaturas |
+| **Mascotas: domar, invocar, acompañantes** | ✅ | `systems/pets.rs`: domar (`UK Domar`), elementales (uno de cada), zombies, mascotas de Tipo 7, `/quitarmascota`, máximo 3, 120 s de vida; mueren o se sueltan al morir o salir el dueño; las domadas viajan con él; defienden al dueño |
+| Entrenador (NpcType 3) | 🟡 | `/entrenar` y `/entrenar N` (máx. 7); sin ventana en el cliente. Sus criaturas venían con números viejos (traía dragones de 160000 de vida): el conversor las busca por nombre |
+| Mascotas guardadas con el personaje | ❌ | TSAO las guardaba en el .chr; aquí vuelven a lo salvaje al salir |
+| **Criatura contra criatura** (`NpcAtacaNpc`, hechizos de elementales) | ✅ | La experiencia y el botín son del dueño |
+| **Golpe crítico mágico contra criaturas** | ✅ | Más x1.4, x1.3 a mascotas; inmunes a Relámpago por datos |
+| **Parálisis e inmovilizar criaturas** | ✅ | 50 s; inmunes por `AfectaParalisis` |
+| **Objetos especiales por número** (matadragones, túnicas, tiara, anillo, laúd) | ✅ | Claves nuevas en obj.dat que escribe el conversor |
+| Manoplas que inmovilizan | ✅ | Manopla con Púas (1543): 12 % de los golpes a jugadores, siempre en la cabeza, 20 s |
+| IA: TSAO `Movement=3/10` (perseguir) | ✅ | 177 criaturas hostiles (dragones incluidos) quedaban quietas: el conversor lo pasa a perseguir |
+| Rey del Castillo, arietes, dioses, ARAM, evento faccionario, Gran Poder, InvocoBicho (jefe que invocan 4 jugadores) | ❌ | Son de eventos: van con su sistema |
+| Venganza del elemental de fuego contra jugadores (`AllMascotasAtacanUser`) | ❌ | Las mascotas solo pelean con criaturas |
 
 ## 4. Economía e inventario
 
