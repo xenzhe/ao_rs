@@ -22,6 +22,14 @@ pub struct Player {
     pub target_door: Option<(u16, i32, i32)>,
     /// Last floor stack clicked (wood for the dagger, campfires).
     pub target_floor: Option<(u16, i32, i32)>,
+    /// Last tile clicked (`flags.TargetMap/X/Y`): castle relics, `/TELEPLOC`.
+    pub target_tile: Option<(u16, i32, i32)>,
+    /// Last creature clicked (`flags.TargetNPC`): `/SEGUIR`, `/TALKAS`, `/RMATA`.
+    pub target_npc: Option<u32>,
+    /// Last player clicked (`flags.TargetUser`): `/SETDESC`.
+    pub target_user: Option<u32>,
+    /// `DescRM`: a description a GM set (`/SETDESC`), shown when clicked.
+    pub gm_desc: Option<String>,
     /// `/hogar`: when the ghost arrives home (`Accion.TipoAccion = Hogar`).
     pub going_home: Option<crate::clock::GameTime>,
     /// Walking speed multiplier (`Char.speeding`), kept by `systems::speed`.

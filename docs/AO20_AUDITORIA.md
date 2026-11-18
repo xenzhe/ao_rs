@@ -192,6 +192,84 @@ reiniciar; el cliente no mueve al azar a un jugador estúpido (solo lo marca); s
   de mano tira `MinHIT..MaxHIT` del objeto en vez de `GetUserDamageWithItem`; el arpón y la
   reliquia de resurrección; encantamientos elementales por objeto del inventario; la
   velocidad (otra sesión).
+## Fase 6 hecha (18/11): eventos y comandos GM restantes
+
+Código en `crates/server/src/systems/{lobby,capture,world_events,castle,gm_event}.rs`, reglas
+puras en `crates/ao-rules/src/events.rs`, BD en `db/phase6.rs` + migración
+`0016_phase6_events.sql` (renumerada al integrar), protocolo **21** tras integrar (`S2C::Music`, para `/FORCEMIDI`). Pruebas:
+`systems/phase6_tests.rs` (mundo con reloj virtual) y `tests/p6_events.rs` (bots).
+
+- **Lobby y escenarios** (`ModLobby`, `CustomScenarios`, `IBaseScenario`, `ScoreBoard`,
+  `ScenarioDeathMatch`, `ScenarioHuntNpc`): `/CREAREVENTO LOBBY|DEATHMATCH|CACERIA
+  participantes nivel_min nivel_max [precio] [equipo]` (SemiDios), anuncio oficial, 5 min de
+  inscripción con recordatorio cada 30 s, arranque al llenarse o al tiempo con mínimo (si no,
+  se cancela y se devuelve la inscripción), `/PARTICIPAR [sala clave]` (líder de grupo si los
+  equipos son armados), `/SALAS` y el NPC EventMaster listan las salas, `/CONFIGLOBBY`
+  completo (SPAWN, MAXLVL, MINLVL, CLASS, SUMPLAYER, SUMALL, RETURNPLAYER, RETALL, OPEN, START,
+  END, LIST, KICK, FORCERESET, SETTEAMSIZE, ADDPLAYER, SETPRICE), `/CANCELAREVENTO`. Equipos al
+  azar por nivel en ida y vuelta (`SortTeams`), premios 55/35 o 40/30/20 del pozo, marcador
+  cada 20/30 s, reconexión (vuelve a su sitio al desconectarse y regresa al volver).
+  Deathmatch: ring de postes que crece con los jugadores, pociones prohibidas guardadas y
+  devueltas, pociones que aparecen, +3 matar / +1 asistencia (8 s) / -1 morir, reaparición a
+  los 2 s, 5 min, sin facciones ni pérdida de objetos. Cacería: hace falta un garrote, solo
+  suman las muertes a garrotazo, las criaturas reaparecen.
+- **Eventos por hora** (`ModEventos`): tabla `[events] hourly` (hora -> `tipo-duración-multi`,
+  vacía por defecto: los datos oficiales no la traen), `/CREAREVENTO tipo@duración@multi`
+  (Admin, límites del VB), `/FINALIZAREVENTO`, `/EVENTO`; multiplicadores de experiencia, oro,
+  drop y recolección (nuevo `gather_mult` en minería, tala y pesca). Evento automático del día
+  (`Automatic_Event_Timer`): `[events] auto_hour` + `auto_days`.
+- **Quests globales** (`ModGlobalQuests`): `GlobalQuests.dat`, fechas en hora local
+  (`utc_offset_hours`), contador común y aportes en BD, oleada de jefes cada
+  `GatheringInitialInstallments`, no se entrega con el jefe vivo, recompensas bloqueadas por
+  umbral (`GlobalQuestThresholdNeeded`), fin por fecha o por umbral. Enganchado a `quest.rs`.
+- **Castillo del emperador** (`ModCastle`): reliquias 6362-6381 sobre un cartel de fundación
+  (trigger 41, 21 mapas oficiales), muros, puerta al interior (758-772), triggers de entrada
+  21-40 con lista blanca (`/CASTLE ADD|REMOVE nick`), mudanza cada 7 días, clic en la maqueta,
+  20 castillos sembrados en la BD. Fundar exige Patreon Noble en AO20: aquí
+  `events.castle_without_patreon` (apagado por defecto).
+- **Captura de la bandera** (`ModCaptura`, `clsCaptura*`): `/CREAREVENTO CAPTURA participantes
+  rondas nivel_min nivel_max precio`, 90 s de inscripción (una prórroga), equipos por nivel,
+  sala de espera 278, bases 275/277, 7 s con la bandera enemiga en la base, espera 5 s + 2 por
+  muerte, al mejor de N, premio = inscripción x2; sin fuego amigo.
+- **Invasiones** (`ModInvasion`): portadas (avisos, oleadas, marcha a la muralla, daño, top 10,
+  premio), pero `Eventos.dat` trae `Cantidad=0` y quedan apagadas igual que en AO20 (`/CE` no
+  las arranca mientras los datos no las activen).
+- **Comandos GM** (`gm_event.rs`): `/TELEPLOC`, `/SLOT`, `/SEGUIR`, `/CC` + `/SPAWN n`,
+  `/TALKAS`, `/TRABAJANDO`, `/OCULTANDO`, `/LLUVIA`, `/NIEVE`, `/NIEBLA`, `/RESETINV`,
+  `/MASSDEST`, `/RMATA`, `/MASSKILL`, `/CE`, `/EVENTOFACCIONARIO`, `/ANAME`, `/FORCEMIDI`,
+  `/FORCEMIDIMAP`, `/FORCEWAV`, `/FORCEWAVMAP`, `/SETDESC`, `/GENIO`, `/DOBACKUP`,
+  `/CERRARCLIENTE`; de jugador `/UPTIME`, `/AYUDA` (Help.dat), `/EST`.
+
+**Bugs del VB corregidos**: `OpenLobby` rechazaba toda sala con punto de invocación;
+`/PARTICIPAR` sin sala global leía `LobbyList(-1)`; `HandleStartEvent` no miraba el rango; un
+segundo evento pisaba al que corría; `/CONFIGLOBBY KICK` no hacía nada; el deathmatch invocaba
+a todos en la misma casilla; `RespawnItems` usaba la cantidad del ítem 0 para todos; los
+muertos volvían a casa como fantasmas; el lobby genérico sin punto mandaba al mapa -1; el
+marcador se perdía al reconectar; el cliente tenía `/CREAREVENTO` dos veces (el multiplicador
+era inalcanzable); el temporizador que terminaba el evento por hora ya no existía (no terminaba
+nunca); `FinalizarEvento` pisaba los `/EXP` del GM; `/EVENTO` describía el evento equivocado;
+el dueño de un castillo entraba en todos (`IsEmperorCastleCreated` con `Or`); los triggers
+21-40 de techo de los mapas 776/782/795 se tomaban como entradas de castillo; el castillo solo
+se guardaba con el guardado general; `SumarScoreInvasion` duplicaba jugadores y no ordenaba;
+la captura dejaba la bandera en el inventario de quien se desconectaba; `/GENIO` lo podía usar
+un Consejero; `/SLOT` medía el inventario del GM; `/LLUVIA` cambiaba también la nieve.
+
+**Decisiones**: sin instancias de mapa (el cliente carga el mapa por número): cada escenario
+usa su mapa y solo uno a la vez por mapa. La cacería lee `NpcHunt.ini` y, como no viene en
+los datos, `snakes.ini`. La lista de salas va por consola (`/SALAS` y el EventMaster), sin
+ventana nueva. `/CERRARCLIENTE` echa al jugador (no hay "cerrar el cliente" en el protocolo).
+
+**Falta**: la **batalla naval** (`ScenarioNavalBoarding`, 1.183 líneas: barcos, bodega, fuego,
+waypoints de NPC) porque necesita la navegación y la IA por waypoints de `npc_ai.rs`, que
+lleva otra sesión; `/SHOWNAME` (el cliente no tiene cómo ocultar un nombre), y del resto de
+`Protocol_GmCommands` siguen fuera `RequestUserList`, `PossUser`, `SetSpeed`, `Ignored`,
+`ShowServerForm`, `FeatureToggle`, `DebugRequest`, `RoleMasterRequest`, `Gamble`,
+`MapPriceEntrance`, `BusquedaTesoro`, `MarcaDeGM`, `CancelarExit`, `AskTrigger`,
+`ChangeMapSetting` y `ChangeMapInfoBackup/NoResu` (herramientas del formulario del servidor,
+sistemas no portados o datos que no existen aquí). Las salas del deathmatch y la cacería no se
+ven como "bandera" sobre el personaje (el VB mandaba `UpdateFlag`). Con el `npcs.dat`
+público, varios objetivos de `snakes.ini` son NPCs no atacables (ver el hallazgo de abajo).
+Nada probado aún con el cliente gráfico.
 
 ## Hallazgo importante: datos del servidor desfasados
 

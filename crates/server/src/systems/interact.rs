@@ -30,9 +30,19 @@ impl World {
         if !self.instance(map).populated {
             self.populate_map(map);
         }
-        let Some(nid) = self.instance(map).npc_at(tx, ty) else {
+        // LookatTile: flags.TargetMap/X/Y, TargetNPC, TargetUser.
+        let npc_here = self.instance(map).npc_at(tx, ty);
+        let user_here = self.player_at(map, tx, ty);
+        let p = self.player_mut(id);
+        p.target_tile = Some((map, tx, ty));
+        p.target_npc = npc_here;
+        p.target_user = user_here;
+        if let Some(desc) = user_here.and_then(|u| self.player(u)).and_then(|u| u.gm_desc.clone()) {
+            self.console(id, desc, Tone::Info);
+        }
+        let Some(nid) = npc_here else {
             // Map objects with an action: the anvil opens the blacksmith (craft system).
-            if self.door_click(id, tx, ty) || self.craft_click_tile(id, tx, ty) || self.floor_click(id, map, tx, ty) || self.tsao_click_player(id, map, tx, ty) {
+            if self.castle_click(id, map, tx, ty) || self.door_click(id, tx, ty) || self.craft_click_tile(id, tx, ty) || self.floor_click(id, map, tx, ty) || self.tsao_click_player(id, map, tx, ty) {
                 return;
             }
             self.console(id, "No hay nada con que interactuar ahi.", Tone::Info);
@@ -98,6 +108,8 @@ impl World {
             if self.npc_alive_and_near(id, dead, dist, 5) {
                 self.surgeon_open(id, nid);
             }
+        } else if self.lobby_event_master(id, kind) {
+            // EventMaster: the open lobbies (`WriteUpdateLobbyList`).
         } else if kind == NpcType::Auctioneer && !dead {
             // Auctions run from anywhere (event system, window U); no official map places one.
             self.console(id, "Las subastas están abiertas: pulsa U para verlas.", Tone::Info);

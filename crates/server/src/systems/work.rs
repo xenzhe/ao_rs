@@ -347,6 +347,8 @@ impl World {
                 _ if pine == 1 => rules::PINE_WOOD,
                 _ => rules::WOOD,
             };
+            // RecoleccionMult (ModEventos): what is given, not what the resource loses.
+            let amount = amount * self.cfg.world.gather_mult.max(1);
             self.work_give_or_drop(id, InvItem { obj, amount });
             self.send(id, &S2C::Work(WorkS2C::Gathered { obj, amount }));
             if job == Job::Mine {
@@ -410,6 +412,7 @@ impl World {
         if amount == 0 {
             return;
         }
+        let amount = amount * self.cfg.world.gather_mult.max(1);
         if !self.add_item(id, InvItem { obj: fish, amount }) {
             return self.work_cancel(id);
         }

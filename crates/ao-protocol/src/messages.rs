@@ -189,6 +189,9 @@ pub enum S2C {
     WorldTime { elapsed_ms: u64, day_ms: u64 },
     /// Thunder flash and sound when the precipitation starts.
     Thunder,
+    /// A GM forced a music track (`PlayMidi`, `/FORCEMIDI`): official OGG/MP3 number; 0 =
+    /// back to the map's own music.
+    Music { midi: u16 },
 
     // P2 (docs/P2_CONTRATO.md)
     Trade(crate::social::TradeS2C),

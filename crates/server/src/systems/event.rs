@@ -124,7 +124,7 @@ impl World {
     /// HOOK (combat): does `id` keep its items when dying (duels, tournaments, arenas)?
     /// Duels here never drop items (`CaenItems = False`, the default of `/RETO`).
     pub(crate) fn event_keeps_items_on_death(&self, id: u32) -> bool {
-        self.player(id).is_some_and(|p| p.event.room.is_some())
+        self.player(id).is_some_and(|p| p.event.room.is_some()) || self.lobby_keeps_items(id) || self.capture_has(id)
     }
 
     /// HOOK (combat): `killer` (a player, or None) killed the player `victim`, after the
@@ -157,6 +157,7 @@ impl World {
         self.deliver_mailbox(id);
         self.send_event_state(id);
         self.send_lots(id);
+        self.lobby_on_enter(id);
     }
 
     /// Right before the player leaves the world, still present: requests are cancelled, a
@@ -181,6 +182,8 @@ impl World {
         if self.player(id).unwrap().event.in_tournament {
             self.tournament_leave(id, false);
         }
+        self.lobby_on_leave(id);
+        self.capture_on_leave(id);
     }
 
     /// For the integrator: chat commands of AO20 (`/RETO`, `/ACEPTAR`, `/CANCELAR`,
@@ -202,7 +205,18 @@ impl World {
             "/CANCELAR" => EventC2S::DuelCancel,
             "/ABANDONAR" => EventC2S::DuelQuit,
             "/OFERTAR" if rest.len() == 2 => EventC2S::AuctionBid { lot: rest[0].parse().unwrap_or(0), amount: rest[1].parse().unwrap_or(0) },
-            "/PARTICIPAR" => EventC2S::TournamentJoin,
+            // HandleParticipar: the capture, then a lobby (by id, with its password), then
+            // the tournament.
+            "/PARTICIPAR" => {
+                if rest.is_empty() && self.capture_join(id) {
+                    return true;
+                }
+                let lobby = rest.first().and_then(|s| s.parse::<u32>().ok());
+                if self.lobby_join(id, lobby, rest.get(1).copied().unwrap_or("")) {
+                    return true;
+                }
+                EventC2S::TournamentJoin
+            }
             _ => return false,
         };
         self.on_game_event(id, msg);

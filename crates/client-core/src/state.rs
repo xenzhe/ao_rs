@@ -288,6 +288,7 @@ impl Game {
                     e.speed = speed.max(0.1);
                 }
             }
+            S2C::Music { midi } => self.events.push(ClientEvent::Music { midi }),
             S2C::SpellBook { spells } => {
                 self.spells = spells;
                 self.selected = self.selected.min(self.spells.len().saturating_sub(1));

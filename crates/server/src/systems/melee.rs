@@ -319,7 +319,10 @@ impl World {
         }
         let total = (damage + extra.max(0)) as i32;
         self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 || tsao_crit }, None);
-        if !self.damage_npc(map, nid, total, id) && ranged {
+        self.melee_blow = true;
+        let killed = self.damage_npc(map, nid, total, id);
+        self.melee_blow = false;
+        if !killed && ranged {
             // UserDañoNpc: stun arrows (Subtipo 2) may stun a creature that survives.
             self.try_ranged_stun(id, Who::Npc(map, nid));
         }

@@ -44,4 +44,6 @@ pub enum ClientEvent {
     Effect { effect: SpellEffect, from: Pt, to: Pt },
     /// A positional sound (`wav` of the official sounds) at a tile.
     Sound { wav: u16, at: (i32, i32) },
+    /// A GM forced a music track (0 = the map's own again).
+    Music { midi: u16 },
 }

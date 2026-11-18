@@ -19,6 +19,8 @@ mod mail;
 mod clan_vault;
 mod cards;
 pub(crate) mod tsao;
+mod phase6;
+pub use phase6::CastleRow;
 
 pub use mail::MailLetter;
 pub use accounts::{Account, CharacterRecord, CharacterState, NewCharacter};
@@ -43,6 +45,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0013_tsao_progress.sql"),
     include_str!("../../migrations/0014_gm_moderation.sql"),
     include_str!("../../migrations/0015_collectible_cards.sql"),
+    include_str!("../../migrations/0016_phase6_events.sql"),
 ];
 
 #[derive(Debug, PartialEq)]

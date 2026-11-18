@@ -93,6 +93,9 @@ impl World {
         p.dir = dir;
         self.broadcast(map, &S2C::Moved { id, x: nx, y: ny, dir }, Some(id));
         self.thief_on_move(id);
+        if self.castle_on_step(id, map, nx, ny) {
+            return;
+        }
         let trigger = self.instance(map).map.trigger(nx, ny);
         if trigger == TRIGGER_AUTO_RESURRECT {
             self.auto_resurrect(id);

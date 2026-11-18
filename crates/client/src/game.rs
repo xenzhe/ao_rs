@@ -74,6 +74,12 @@ pub fn poll(game: &mut Game, assets: &mut Assets, fx: &mut Fx) {
                     a.play(wav, volume_at(me, Some(at)), Channel::Effects);
                 }
             }
+            ClientEvent::Music { midi } => {
+                let n = if midi == 0 { game.map.as_ref().and_then(|m| map_music(&assets.root, m.number)).unwrap_or(0) } else { midi as i32 };
+                if let Some(a) = &mut fx.audio {
+                    a.music(n);
+                }
+            }
         }
     }
 

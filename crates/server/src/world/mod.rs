@@ -119,6 +119,16 @@ pub struct World {
     pub events: event::EventWorld,
     /// TSAO progression (systems/tsao_progress.rs).
     pub tsao: crate::systems::tsao_progress::TsaoWorld,
+    /// Phase 6: lobbies and scenarios, hourly events / global quests / invasions, emperor
+    /// castles, capture the flag.
+    pub lobbies: crate::systems::lobby::LobbyWorld,
+    pub wevents: crate::systems::world_events::WorldEvents,
+    pub castles: crate::systems::castle::Castles,
+    pub capture: Option<crate::systems::capture::Capture>,
+    /// Set by melee while its blow is applied (the hunt only scores weapon kills).
+    pub melee_blow: bool,
+    /// Game time the world started (`/UPTIME`).
+    pub started_at: Option<GameTime>,
 }
 
 impl World {
@@ -161,6 +171,12 @@ impl World {
             gms: Default::default(),
             events: Default::default(),
             tsao: Default::default(),
+            lobbies: Default::default(),
+            wevents: Default::default(),
+            castles: Default::default(),
+            capture: None,
+            melee_blow: false,
+            started_at: None,
         }
     }
 
@@ -334,6 +350,11 @@ impl World {
         self.tick_craft(now);
         self.tick_gm(now);
         self.tick_event(now);
+        self.started_at.get_or_insert(now);
+        self.tick_castles();
+        self.tick_lobbies(now);
+        self.tick_capture(now);
+        self.tick_world_events(now);
         self.tick_magic(now);
         self.tick_thief(now);
         self.tick_floor_cleanup(now);
