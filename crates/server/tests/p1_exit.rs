@@ -139,10 +139,14 @@ fn warrior_and_mage_hunt_level_up_and_store_the_loot() {
     assert!(!loot.is_empty(), "las criaturas sueltan su botin oficial");
     let gold0 = war.game.local.gold;
     for (tile, (obj, _)) in &loot {
+        // Respawned Ratas Gigantes would kill the warrior on the way.
+        war.say("/quitarnpc 584");
+        war.sync();
         // A drop can lie where nobody stands (under a creature that stays): skip it.
         if !try_go(&s, &mut war, *tile, 0) {
             continue;
         }
+        assert!(war.hp() > 0, "muere recogiendo: {:?}", war.console().filter(|t| t.contains("pegado") || t.contains("matado")).collect::<Vec<_>>());
         s.advance(300);
         war.send(&C2S::PickUp);
         war.wait_until("recoge", |b| !b.game.local.ground.contains_key(tile) || b.game.local.count_of(*obj) > 0);

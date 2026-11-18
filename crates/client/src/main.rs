@@ -41,6 +41,7 @@ async fn main() {
 
     let mut assets = Assets::load(cfg.recursos_path());
     let mut dev = DevTools::from_env();
+    let fixed_hour = std::env::var("AO_HOUR").is_ok();
     let hour = std::env::var("AO_HOUR").ok().and_then(|h| h.parse().ok()).unwrap_or(12.0);
     let mut renderer = Renderer::new(cfg.video.pixel_perfect, hour);
     let mut ui = ui::Ui::new(ui::theme::Theme::load(&assets.root));
@@ -60,6 +61,9 @@ async fn main() {
         clear_background(Color::new(0.05, 0.04, 0.03, 1.0));
 
         game.now = now;
+        if !fixed_hour {
+            renderer.world_clock = game.world_time;
+        }
         game::poll(&mut game, &mut assets, &mut renderer.fx);
         // Window hotkeys only in the world and never while typing in the chat.
         ui.in_game = game.screen == Screen::Game && game.chat.is_none();

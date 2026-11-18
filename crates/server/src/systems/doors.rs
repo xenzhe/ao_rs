@@ -32,6 +32,7 @@ impl World {
         let Some(p) = self.player(id) else { return false };
         let (map, px, py) = (p.map, p.x, p.y);
         let Some((dx, dy, _)) = self.door_at(map, x, y) else { return false };
+        self.player_mut(id).target_door = Some((map, dx, dy));
         let dist = (((px - dx).pow(2) + (py - dy).pow(2)) as f64).sqrt();
         if dist > DOOR_REACH as f64 {
             self.console(id, "Estas demasiado lejos.", Tone::Warn);
@@ -65,6 +66,45 @@ impl World {
         // A lever (Subtipo 1) works the door three tiles left and one down.
         if sub == 1 && !by_lever {
             self.toggle_door(id, map, x - 3, y + 1, true);
+        }
+    }
+
+    /// `UseInvItem` for `otKeys` on the last door clicked: with the matching `Clave`, a door
+    /// locked with a key is unlocked (it stays closed; the key is spent, `EliminarLlaves`)
+    /// and a closed one is locked. Keys under 1000 belong to the keyring (houses), not here.
+    pub(crate) fn use_key(&mut self, id: u32, slot: u8) {
+        let ao = self.ao.clone();
+        let Some(key) = self.player(id).and_then(|p| p.inv.get(slot)).and_then(|it| ao.objs.get(it.obj as u32)) else { return };
+        let Some((map, x, y)) = self.player(id).and_then(|p| p.target_door).filter(|(m, ..)| self.player(id).is_some_and(|p| p.map == *m)) else {
+            return self.console(id, "Primero hacé clic en la puerta.", Tone::Info);
+        };
+        let (px, py) = self.player(id).map(|p| (p.x, p.y)).unwrap();
+        let dist = ((px - x) * (px - x) + (py - y) * (py - y)) as f64;
+        if dist.sqrt() > DOOR_REACH as f64 {
+            return self.console(id, "Estas demasiado lejos.", Tone::Warn);
+        }
+        let Some(obj) = self.map_object_at(map, x, y) else { return };
+        let Some(door) = ao.objs.get(obj as u32).filter(|d| d.obj_type == ObjType::Doors) else { return };
+        if door.key_code < 1000 {
+            return self.console(id, "Las llaves en el inventario están desactivadas. Sólo se permiten en el llavero.", Tone::Warn);
+        }
+        if door.locked != 1 {
+            return self.console(id, "La puerta tiene que estar cerrada.", Tone::Info);
+        }
+        if door.key_code != key.key_code {
+            return self.console(id, "La llave no sirve.", Tone::Warn);
+        }
+        let unlocking = door.key_obj > 0;
+        let (new, msg) = if unlocking { (door.closed_index, "Has abierto la puerta.") } else { (door.locked_index, "Has cerrado con llave la puerta.") };
+        if new <= 0 || ao.objs.get(new as u32).is_none() {
+            return;
+        }
+        let new = new as u16;
+        self.maps.get_mut(&map).expect("map loaded").doors.insert((x, y), new);
+        self.broadcast(map, &S2C::MapObject { x, y, obj: new }, None);
+        self.console(id, msg, Tone::Good);
+        if unlocking {
+            self.remove_from_slot(id, slot, 1);
         }
     }
 

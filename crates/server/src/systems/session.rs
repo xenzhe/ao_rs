@@ -144,6 +144,8 @@ impl World {
         let sec = &self.cfg.security;
         let player = Player {
             char_id,
+            last_refusal: None,
+            target_door: None,
             race: c.race,
             class: c.class,
             gender: c.gender,

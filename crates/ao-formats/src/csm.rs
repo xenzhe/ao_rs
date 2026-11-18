@@ -19,6 +19,25 @@ pub const FLAG_WATER: u8 = 0x20;
 
 pub const TRIGGER_UNDER_ROOF: u16 = 1;
 pub const TRIGGER_SAFE_ZONE: u16 = 4;
+/// `AUTORESU`: stepping on it resurrects the dead and heals the living.
+pub const TRIGGER_AUTO_RESURRECT: u16 = 7;
+/// `WORKERONLY`: only workers may stand on it.
+pub const TRIGGER_WORKER_ONLY: u16 = 13;
+/// `TRANSFER_ONLY_DEAD`: its map exit only takes the dead.
+pub const TRIGGER_EXIT_ONLY_DEAD: u16 = 14;
+/// `ONLY_PATREON_TILE`.
+pub const TRIGGER_PATREON_ONLY: u16 = 20;
+
+/// `AoMap::restrict` bits.
+pub const RESTRICT_NEWBIE: u32 = 1;
+pub const RESTRICT_NO_MAGIC: u32 = 2;
+pub const RESTRICT_NO_CRIMINALS: u32 = 4;
+pub const RESTRICT_NO_CITIZENS: u32 = 8;
+pub const RESTRICT_NO_INVISIBILITY: u32 = 16;
+pub const RESTRICT_CLANS_ONLY: u32 = 32;
+pub const RESTRICT_NO_PETS: u32 = 64;
+pub const RESTRICT_GROUPS_ONLY: u32 = 128;
+pub const RESTRICT_PATREON_ONLY: u32 = 256;
 pub const TRIGGER_SWIM_UNDER_ROOF: u16 = 16;
 pub const FIRST_ROOF_TRIGGER: u16 = 60;
 
@@ -58,6 +77,14 @@ pub struct AoMap {
     pub rain: bool,
     pub snow: bool,
     pub fog: bool,
+    /// `restrict_mode` bits (FileIO.bas): 1 newbie, 2 no magic, 4 no criminals (`NoPKs`),
+    /// 8 no citizens, 16 no invisibility/hiding, 32 clans only, 64 no pets, 128 groups
+    /// only, 256 Patreon only.
+    pub restrict: u32,
+    /// `level` low byte: minimum level to enter (0 = none).
+    pub min_level: u32,
+    /// `level` high byte: players at this level or above cannot enter (0 = none).
+    pub max_level: u32,
     /// Per tile (index `tile(x, y)`): blocked side bits + FLAG_WATER.
     pub blocked: Vec<u8>,
     /// Per layer, per tile GRH index (0 = empty).
@@ -237,14 +264,17 @@ impl AoMap {
         r.take(8, "map size")?;
         let name = r.string("name")?;
         let _backup = r.u8("backup")?;
-        let _restrict = r.string("restrict")?;
+        let restrict = r.string("restrict")?.trim().parse::<u32>().unwrap_or(0);
         let _music_hi = r.i32("music")?;
         let _music_lo = r.i32("music")?;
         let safe = r.u8("safe")? != 0;
         let zone = r.string("zone")?;
         let terrain = r.string("terrain")?;
         let _ambient = r.string("ambient")?;
-        r.take(16, "light/letter/extra")?;
+        let _light = r.i32("light")?;
+        let _letter = r.i32("letter")?;
+        let level = r.i32("level")?;
+        let _extra2 = r.i32("extra2")?;
         let _extra3 = r.string("extra3")?;
         let rain = r.u8("rain")? != 0;
         let snow = r.u8("snow")? != 0;
@@ -260,6 +290,9 @@ impl AoMap {
             rain,
             snow,
             fog,
+            restrict,
+            min_level: (level & 0xFF) as u32,
+            max_level: ((level >> 8) & 0xFF) as u32,
             blocked: vec![0; n],
             layers: Default::default(),
             triggers: vec![0; n],

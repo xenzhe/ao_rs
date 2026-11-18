@@ -16,6 +16,10 @@ pub type EntityId = u32;
 pub struct Player {
     /// Database id when the character belongs to an account (None for dev logins).
     pub char_id: Option<i64>,
+    /// Last map-entry refusal said (`flags.UltimoMensaje`): not repeated while retrying.
+    pub last_refusal: Option<String>,
+    /// Last door clicked (`flags.TargetObjMap/X/Y`), for keys used from the inventory.
+    pub target_door: Option<(u16, i32, i32)>,
     pub race: u8,
     pub class: u8,
     pub gender: u8,

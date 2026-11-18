@@ -77,7 +77,17 @@ impl World {
     }
 
     /// The current weather to a player entering the world (`DetermineInitialWeatherSynchronization`).
+    /// The world clock a player gets on entering (`WriteHora`).
+    pub(crate) fn world_time_message(&self) -> S2C {
+        let day_ms = (self.cfg.world.day_length_minutes.max(1)) * 60_000;
+        // The day starts at 08:00 when the server starts (the official one, at 00:00, puts
+        // every restart in the dark).
+        S2C::WorldTime { elapsed_ms: (self.now().0 + day_ms / 3) % day_ms, day_ms }
+    }
+
     pub(crate) fn weather_on_enter(&mut self, id: u32) {
+        let time = self.world_time_message();
+        self.send(id, &time);
         let msg = self.weather.message();
         self.send(id, &msg);
     }

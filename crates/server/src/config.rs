@@ -73,6 +73,11 @@ pub struct WorldConfig {
     pub gold_mult: u32,
     /// `DropMult`: divides the npcs.dat drop chance "1 in N" (0 = 1).
     pub drop_mult: u32,
+    /// Minutes an object dropped on the floor stays before it vanishes (0 = forever, as in
+    /// the official server, whose cleaner `TLimpiezaItem` is never used).
+    pub floor_cleanup_minutes: u64,
+    /// Real minutes per in-game day (`DuracionDia` of Configuracion.ini, 120 officially).
+    pub day_length_minutes: u64,
 }
 
 impl Default for ServerConfig {
@@ -98,7 +103,7 @@ impl Default for SecurityConfig {
 
 impl Default for WorldConfig {
     fn default() -> Self {
-        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1 }
+        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120 }
     }
 }
 

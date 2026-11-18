@@ -39,6 +39,9 @@ pub struct Renderer {
     pub fades: WorldFades,
     pub pixel_perfect: bool,
     pub hour_offset: f32,
+    /// Server world clock (`Game::world_time`), copied each frame; `AO_HOUR` (tests and
+    /// screenshots) keeps the local clock instead.
+    pub world_clock: Option<(u64, u64, f64)>,
     map_shown: Option<u16>,
     /// Neighbour maps for the continuous world (created with the first map).
     pub continuous: Option<ContinuousWorld>,
@@ -73,6 +76,7 @@ impl Renderer {
             fades: WorldFades::default(),
             pixel_perfect,
             hour_offset,
+            world_clock: None,
             map_shown: None,
             continuous: None,
             last_view: None,
@@ -87,7 +91,13 @@ impl Renderer {
     }
 
     pub fn hour(&self) -> f32 {
-        lighting::hour(self.hour_offset, get_time())
+        match self.world_clock {
+            Some((elapsed, day, at)) => {
+                let ms = elapsed as f64 + (get_time() - at) * 1000.0;
+                (ms.rem_euclid(day as f64) / day as f64 * 24.0) as f32
+            }
+            None => lighting::hour(self.hour_offset, get_time()),
+        }
     }
 
     /// Loads neighbour maps (one per frame) and their textures, and handles map changes.

@@ -50,6 +50,38 @@ fn a_closed_door_blocks_and_a_click_opens_it_for_everyone() {
     c.wait_until("llega", |b| b.map() == 1 && door_msgs(b, DOOR) == 1);
 }
 
+/// Inventory keys (`Clave` >= 1000): the catacombs door of map 40 (obj 3543, locked) opens
+/// with "Llave catas Ullathorpe" (obj 3544), which is spent; the wrong key does nothing.
+#[test]
+fn the_right_inventory_key_unlocks_a_locked_door() {
+    const CATAS: (i32, i32) = (22, 62);
+    let s = TestServer::start();
+    let mut a = s.bot("Llavero");
+    a.say(&format!("/ir 40 {} {}", CATAS.0, CATAS.1 + 2));
+    a.wait_until("en la puerta", |b| b.map() == 40 && b.pos().1 == CATAS.1 + 2);
+    a.send(&C2S::Interact { tx: CATAS.0, ty: CATAS.1 });
+    a.wait_until("cerrada", |b| b.console().any(|l| l.contains("cerrada con llave")));
+
+    let slot_of = |b: &ao_testkit::Bot, obj: u16| b.game.local.inventory.iter().position(|i| i.is_some_and(|i| i.obj == obj)).map(|p| p as u8 + 1);
+    // A key of another door (Gran Consejo de Banderbill).
+    a.say("/dar 302 1");
+    a.wait_until("llave ajena", |b| slot_of(b, 302).is_some());
+    a.send(&C2S::UseItem { slot: slot_of(&a, 302).unwrap() });
+    a.wait_until("no sirve", |b| b.console().any(|l| l.contains("La llave no sirve")));
+    assert_eq!(door_msgs(&a, CATAS), 0);
+
+    a.say("/dar 3544 1");
+    a.wait_until("llave buena", |b| slot_of(b, 3544).is_some());
+    s.advance(500);
+    a.send(&C2S::UseItem { slot: slot_of(&a, 3544).unwrap() });
+    a.wait_until("abierta con llave", |b| b.console().any(|l| l.contains("Has abierto la puerta")));
+    a.wait_until("se gasta", |b| b.game.local.count_of(3544) == 0);
+    assert_eq!(door_msgs(&a, CATAS), 1, "now an ordinary closed door");
+    // And now a plain click opens it.
+    a.send(&C2S::Interact { tx: CATAS.0, ty: CATAS.1 });
+    a.wait_until("se abre", |b| door_msgs(b, CATAS) == 2);
+}
+
 #[test]
 fn a_locked_door_does_not_open_and_far_clicks_do_nothing() {
     let s = TestServer::start();

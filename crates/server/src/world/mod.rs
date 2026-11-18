@@ -73,6 +73,8 @@ pub enum Control {
 }
 
 pub struct World {
+    /// Next floor cleanup pass (`tick_floor_cleanup`).
+    pub(crate) next_floor_cleanup: GameTime,
     /// Arrival time of the frame being handled (None outside frames / in tests).
     pub(crate) frame_at: Option<crate::clock::GameTime>,
     /// Last player each player killed and counted for a quest (anti alt-farming).
@@ -144,6 +146,7 @@ impl World {
             next_autosave: GameTime::ZERO,
             probe,
             frame_at: None,
+            next_floor_cleanup: GameTime::ZERO,
             addrs: HashMap::new(),
             map_npcs: npcs,
             guilds: Default::default(),
@@ -330,6 +333,7 @@ impl World {
         self.tick_event(now);
         self.tick_magic(now);
         self.tick_thief(now);
+        self.tick_floor_cleanup(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);
             self.regen();

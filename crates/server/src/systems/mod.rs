@@ -25,6 +25,7 @@ pub(crate) mod weather;
 mod work;
 mod craft;
 mod doors;
+mod maprules;
 mod gm;
 mod gm_tsao;
 mod event;

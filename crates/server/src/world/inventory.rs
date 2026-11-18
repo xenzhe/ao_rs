@@ -114,6 +114,8 @@ impl Equipped {
 #[derive(Clone, Debug, Default)]
 pub struct GroundItems {
     pub tiles: std::collections::HashMap<(i32, i32), InvItem>,
+    /// When each tile last got something dropped on it (floor cleanup).
+    pub dropped_at: std::collections::HashMap<(i32, i32), crate::clock::GameTime>,
 }
 
 impl GroundItems {

@@ -175,6 +175,9 @@ pub enum S2C {
     /// World weather (ModClimas): clouds/fog intensity (0 = clear) and whether it rains
     /// (snows on snowy maps). Sent to everyone on change and to each player on entering.
     Weather { fog: u8, precipitation: bool },
+    /// World clock (`WorldTime_PrepareHora`): ms into the current day and the day length;
+    /// the client keeps counting from here, so everyone sees the same hour.
+    WorldTime { elapsed_ms: u64, day_ms: u64 },
     /// Thunder flash and sound when the precipitation starts.
     Thunder,
 

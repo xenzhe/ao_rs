@@ -37,6 +37,23 @@ restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
   (por miembro del grupo).
 - **Hechizos con efectos en el tiempo aún no portados**: avisan y no gastan maná.
 
+## Fase 2 hecha (18/11)
+
+- **Restricciones de mapa** (`CheckMapRestrictions`): solo newbies, solo ciudadanos o criminales,
+  solo clanes, solo grupos y rango de niveles, leídos de la cabecera de cada mapa
+  (`restrict_mode`, `level`). Las salidas los paran con su aviso. Los mapas Patreon quedan
+  cerrados (no hay Patreon).
+- **Triggers de casilla**: resurrección automática (7), salida solo para muertos (14), casillas
+  solo de trabajadores (13) y de Patreon (20).
+- **Teleports**: el `Radio` del objeto teleport reparte la llegada. Pendiente: la red de
+  "Transporte dudoso" de las minas (subtipo 2).
+- **Limpieza del suelo** (mejora, el oficial no la tiene): lo tirado desaparece a los 15 minutos
+  (`floor_cleanup_minutes`, 0 = nunca).
+- **Llaves del inventario** (clave ≥ 1000) sobre la última puerta clicada: abren las cerradas con
+  llave (la llave se gasta) o cierran con llave. Pendiente: el llavero de casas (base de datos).
+- **Reloj del mundo**: el servidor manda la hora; día de 120 minutos (`day_length_minutes`),
+  todos ven la misma hora; empieza a las 08:00 al arrancar.
+
 ## Hallazgo importante: datos del servidor desfasados
 
 El servidor lee `Dat/` (npcs.dat, obj.dat, misiones…) del repositorio público, pero los

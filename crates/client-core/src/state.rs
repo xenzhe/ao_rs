@@ -114,6 +114,9 @@ pub struct Game {
     pub net: Option<Net>,
     pub my_id: u32,
     pub map: Option<AoMap>,
+    /// Server world clock: (ms into the day when received, day length in ms, `now` when it
+    /// arrived). None until the server says (`S2C::WorldTime`).
+    pub world_time: Option<(u64, u64, f64)>,
     /// Fixed objects of the map (doors, signs...): the map file plus what the server
     /// changed (`S2C::MapObject`). Tile -> obj.dat index.
     pub map_objects: HashMap<(i32, i32), u16>,
@@ -152,6 +155,7 @@ impl Game {
             net: None,
             my_id: 0,
             map: None,
+            world_time: None,
             map_objects: HashMap::new(),
             objs: None,
             ents: HashMap::new(),
@@ -274,6 +278,7 @@ impl Game {
     pub fn handle(&mut self, msg: S2C) {
         match msg {
             S2C::Welcome { id } => self.my_id = id,
+            S2C::WorldTime { elapsed_ms, day_ms } => self.world_time = Some((elapsed_ms, day_ms.max(1), self.now)),
             S2C::MapObject { x, y, obj } => self.on_map_object(x, y, obj),
             S2C::SpellBook { spells } => {
                 self.spells = spells;

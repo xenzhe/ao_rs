@@ -405,7 +405,31 @@ impl World {
             *cell = item;
         }
         let it = *cell;
+        let now = self.now();
+        self.maps.get_mut(&map).unwrap().ground.dropped_at.insert((x, y), now);
         self.broadcast(map, &S2C::GroundItem { x, y, obj: it.obj, amount: it.amount }, None);
+    }
+
+    /// Floor cleanup (an improvement: the official server keeps everything forever): once a
+    /// minute, stacks dropped more than `floor_cleanup_minutes` ago vanish.
+    pub(crate) fn tick_floor_cleanup(&mut self, now: crate::clock::GameTime) {
+        let minutes = self.cfg.world.floor_cleanup_minutes;
+        if minutes == 0 || now < self.next_floor_cleanup {
+            return;
+        }
+        self.next_floor_cleanup = now.after_secs(60);
+        let ttl = minutes * 60_000;
+        let maps: Vec<u16> = self.maps.keys().copied().collect();
+        for map in maps {
+            let expired: Vec<(i32, i32)> = self.maps[&map].ground.dropped_at.iter().filter(|(_, t)| now.since(**t) >= ttl).map(|(k, _)| *k).collect();
+            for (x, y) in expired {
+                let g = &mut self.maps.get_mut(&map).unwrap().ground;
+                g.dropped_at.remove(&(x, y));
+                if g.tiles.remove(&(x, y)).is_some() {
+                    self.broadcast(map, &S2C::GroundItemRemoved { x, y }, None);
+                }
+            }
+        }
     }
 
     /// EraseObj: takes `amount` from a tile; an emptied tile is removed for everyone.
@@ -418,6 +442,7 @@ impl World {
             self.broadcast(map, &S2C::GroundItem { x, y, obj: it.obj, amount: it.amount }, None);
         } else {
             inst.ground.tiles.remove(&(x, y));
+            inst.ground.dropped_at.remove(&(x, y));
             self.broadcast(map, &S2C::GroundItemRemoved { x, y }, None);
         }
     }
@@ -590,6 +615,7 @@ impl World {
                 self.send_inventory_vitals(id);
             }
             ObjType::Potions => self.use_potion(id, slot, o, free),
+            ObjType::Keys => self.use_key(id, slot),
             ObjType::Parchment => {
                 let p = self.player(id).unwrap();
                 if !items::class_can_use(o, p.class) || !items::race_can_use(o, p.race, p.gender) {
