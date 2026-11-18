@@ -208,6 +208,36 @@ def remap_obj_classes(m):
     return head + "".join(f"CP{i + 1}={c}\n" for i, c in enumerate(cps)) + body
 
 
+QUEST_NPC = 160  # "Quests" (TSAO type 11): offers every quest of QUESTS.DAT
+
+
+def convert_quests(text, ddat):
+    """TSAO QUESTS.DAT (Tipo 1 kill NPC, Tipo 2 kill users) -> engine Quests.DAT.
+    Tournament/TS points and donation credits have no equivalent yet: the gold stays."""
+    secs = {}
+    cur = None
+    for line in text.splitlines():
+        line = line.split("'")[0].strip()
+        if line.startswith("[") and line.endswith("]"):
+            cur = secs.setdefault(line[1:-1].lower(), {})
+        elif "=" in line and cur is not None:
+            k, v = line.split("=", 1)
+            cur[k.strip().lower()] = v.strip()
+    n = int(secs.get("init", {}).get("num", "0"))
+    out = ["[INIT]", f"NumQuests={n}", ""]
+    for i in range(1, n + 1):
+        q = secs.get(f"quest{i}", {})
+        name = q.get("name", f"Misión {i}").strip("¡!¿? ")
+        out += [f"[QUEST{i}]", f"Nombre={name}", "Repetible=1", f"RewardGLD={q.get('oro', '0')}"]
+        if q.get("tipo") == "1":
+            out += [f"Desc=¡{name}! Vuelve conmigo cuando lo hayas hecho.", "RequiredNPCs=1", f"RequiredNPC1={q.get('matanpc', '0')}-{q.get('cant', '1')}"]
+        else:
+            out += [f"Desc=¡{name}! Solo cuentan rivales de nivel 13 o más, fuera de las arenas.", f"RequiredUserKills={q.get('usuarios', '1')}"]
+        out.append("")
+    open(os.path.join(ddat, "Quests.DAT"), "w", encoding="latin-1", newline="\r\n").write("\n".join(out))
+    return n
+
+
 def remap_npc(m):
     head, num, body = m.group(1), int(m.group(2)), m.group(3)
     t = re.search(r"(?im)^NpcType=(\d+)", body)
@@ -216,6 +246,10 @@ def remap_npc(m):
     if t:
         body = body[:t.start()] + f"NpcType={new}" + body[t.end():]
     extra = f"TsaoType={tsao}\n" if tsao not in NPC_TYPE else ""
+    if num == QUEST_NPC:
+        extra += "NumQuest=31\n" + "".join(f"QuestNumber{i}={i}\n" for i in range(1, 32))
+    if new == 17 and num != QUEST_NPC:
+        body = re.sub(r"(?im)^NpcType=17", "NpcType=0", body)  # 161 "Carcel": jail warden, not quests
     if new == 26:
         extra += f"CityCount={len(TRAVEL)}\n" + "".join(f"City{i + 1}={c}\n" for i, c in enumerate(TRAVEL))
     return head + extra + body
@@ -242,6 +276,7 @@ def convert_dats(src, dst):
         if f.lower() in ("npcs.dat", "obj.dat", "hechizos.dat"):
             os.remove(os.path.join(ddat, f))
     open(os.path.join(ddat, "npcs.dat"), "w", encoding="latin-1", newline="\r\n").write(npcs.replace("\r\n", "\n"))
+    convert_quests(read("QUESTS.DAT"), ddat)
     objs = re.sub(r"(?ims)^(\[OBJ\d+\][^\n]*\n)(.*?)(?=^\[|\Z)", remap_obj_classes, read("Obj.dat"))
     open(os.path.join(ddat, "obj.dat"), "w", encoding="latin-1", newline="\r\n").write(objs.replace("\r\n", "\n"))
     open(os.path.join(ddat, "Hechizos.dat"), "w", encoding="latin-1", newline="\r\n").write(read("Hechizos.dat").replace("\r\n", "\n"))

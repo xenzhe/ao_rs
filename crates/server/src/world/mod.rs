@@ -73,6 +73,8 @@ pub enum Control {
 }
 
 pub struct World {
+    /// Last player each player killed and counted for a quest (anti alt-farming).
+    pub quest_last_victim: HashMap<u32, String>,
     pub cfg: ServerConfig,
     pub data: GameData,
     pub recursos: PathBuf,
@@ -115,6 +117,7 @@ impl World {
         let db = Db::open(&config.database).unwrap_or_else(|e| panic!("no se pudo abrir la base de datos '{}': {e:?}", config.database));
         let ao = ao_data::AoData::shared(&recursos);
         World {
+            quest_last_victim: HashMap::new(),
             db,
             ao,
             cfg: config,

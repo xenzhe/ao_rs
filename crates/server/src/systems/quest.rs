@@ -17,7 +17,7 @@ use crate::world::inventory::{InvItem, Inventory};
 use crate::world::quest::{ActiveQuest, QuestData, QuestPiece};
 use crate::world::World;
 use ao_formats::dat::balance::Skill;
-use ao_formats::dat::quests::Quest;
+use ao_formats::dat::quests::{Quest, PLAYER_KILLS};
 use ao_protocol::social::quest::{OfferedQuest, QuestInfo};
 use ao_protocol::{QuestC2S, QuestS2C, Tone, S2C};
 use ao_rules::progression::MAX_LEVEL;
@@ -82,7 +82,7 @@ impl World {
             limit_level: q.limit_level.clamp(0, 255) as u8,
             required_quest: u16c(q.required_quest),
             classes: q.required_classes.clone(),
-            kill: q.required_npcs.iter().map(|n| (u16c(n.npc), u16c(n.amount))).collect(),
+            kill: q.required_npcs.iter().map(|n| (if n.npc == PLAYER_KILLS { u16::MAX } else { u16c(n.npc) }, u16c(n.amount))).collect(),
             objs: q.required_objs.iter().map(|o| (u16c(o.obj), u16c(o.amount))).collect(),
             spells: q.required_spells.iter().map(|s| u16c(*s)).collect(),
             skill: (q.required_skill.clamp(0, 255) as u8, q.required_skill_value.clamp(0, 255) as u8),
@@ -373,19 +373,45 @@ impl World {
     /// `OnNpcKilledUpdateQuest`.
     pub(crate) fn quest_on_npc_killed(&mut self, killer: u32, npc_number: u16, map: u16) {
         let _ = map;
+        let name = self.ao.npcs.get(npc_number as u32).map(|n| n.name.clone()).unwrap_or_default();
+        self.quest_register_kill(killer, npc_number as i32, &name);
+        self.quest_drop_objects(killer, npc_number);
+    }
+
+    /// HOOK (combat): `killer` killed the player `victim` (TSAO "kill N users" quests).
+    /// Fixes over TSAO `RestarUser`: the same victim twice in a row, newbies and arena
+    /// duels do not count (alt farming), and finishing does not depend on `=` hitting the
+    /// exact number.
+    pub(crate) fn quest_on_player_killed(&mut self, killer: u32, victim: u32) {
+        const NEWBIE_LEVEL: u32 = 12;
+        let (Some(k), Some(v)) = (self.player(killer), self.player(victim)) else { return };
+        if killer == victim || v.level <= NEWBIE_LEVEL || k.quest.slots.iter().all(Option::is_none) {
+            return;
+        }
+        let m = &self.instance(v.map).map;
+        if m.trigger(v.x, v.y) == 6 && m.trigger(k.x, k.y) == 6 {
+            return;
+        }
+        let vname = v.name.clone();
+        if self.quest_last_victim.insert(killer, vname.clone()).as_deref() == Some(vname.as_str()) {
+            return self.console(killer, "Matar al mismo jugador otra vez no cuenta para la misión.", Tone::Info);
+        }
+        self.quest_register_kill(killer, PLAYER_KILLS, "jugadores");
+    }
+
+    fn quest_register_kill(&mut self, killer: u32, npc_number: i32, name: &str) {
         let Some(p) = self.player(killer) else { return };
         if p.quest.slots.iter().all(Option::is_none) {
             return;
         }
         let data = self.quest_data();
-        let name = self.ao.npcs.get(npc_number as u32).map(|n| n.name.clone()).unwrap_or_default();
         let mut lines = Vec::new();
         let mut done = Vec::new();
         let p = self.player_mut(killer);
         for (i, slot) in p.quest.slots.iter_mut().enumerate() {
             let Some(a) = slot else { continue };
             let Some(q) = data.quest(a.quest as u32) else { continue };
-            let steps = quest::register_kill(q, &mut a.killed, npc_number as i32);
+            let steps = quest::register_kill(q, &mut a.killed, npc_number);
             for s in &steps {
                 lines.push((i as u8 + 1, *s));
             }
@@ -400,7 +426,6 @@ impl World {
         for q in done {
             self.console(killer, format!("Ya has matado todas las criaturas que la misión {q} requería."), Tone::Good);
         }
-        self.quest_drop_objects(killer, npc_number);
     }
 
     /// `NpcDropQuestObj` (Modulo_InventANDobj.bas): quest objects that creatures carry

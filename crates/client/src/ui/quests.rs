@@ -66,6 +66,9 @@ pub fn auto_open(ui: &mut Ui, game: &Game) {
 }
 
 fn npc_name(st: &mut State, assets: &Assets, id: u16) -> String {
+    if id == u16::MAX {
+        return "jugadores".into(); // TSAO "kill N users" quests
+    }
     let table = st.npcs.get_or_insert_with(|| ao_formats::dat::npcs::load(&assets.root).map(|l| l.data).unwrap_or_default());
     // npcs.dat names carry a role tag ("Makrom <Quest de Dungeon Newbie>"): keep the name.
     table.get(id as u32).map(|n| n.name.split(" <").next().unwrap_or(&n.name).trim().to_string()).unwrap_or_else(|| format!("criatura {id}"))

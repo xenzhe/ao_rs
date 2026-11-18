@@ -204,6 +204,7 @@ impl World {
         self.user_die(id);
         if let Source::Player(a) = source {
             self.faction_on_player_killed(a, id);
+            self.quest_on_player_killed(a, id);
         }
         let killer = if let Source::Player(a) = source { Some(a) } else { None };
         self.event_on_player_killed(killer, id);

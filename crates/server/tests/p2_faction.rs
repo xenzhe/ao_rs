@@ -355,7 +355,8 @@ fn enlisting_at_the_royal_recruiter() {
     assert_eq!(a.game.local.social.faction.status, rules::ROYAL);
     a.send(&C2S::Faction(FactionC2S::Leave { npc: Some(nid) }));
     a.wait_until("expulsado", |b| b.game.local.social.faction.status == rules::CITIZEN);
-    assert!(says(&a, "Has sido expulsado del Ejército Real."));
+    // The console line may come in a later frame than the status.
+    a.wait_until("aviso de expulsion", |b| says(b, "Has sido expulsado del Ejército Real."));
     a.wait_until("sin uniforme", |b| b.game.local.inventory.iter().flatten().all(|i| i.obj != UNIFORM));
     let objs = ao_formats::dat::obj::load(&recursos_dir()).unwrap().data;
     assert!(a.game.local.inventory.iter().flatten().all(|i| objs.get(i.obj as u32).is_none_or(|o| o.royal != 1)), "faction items are taken away");

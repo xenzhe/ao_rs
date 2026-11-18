@@ -16,6 +16,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 pub const FILE: &str = "Quests.DAT";
+/// `RequiredNPC` id that stands for "players killed" (TSAO quests).
+pub const PLAYER_KILLS: i32 = -1;
 const NPCS_FILE: &str = "npcs.dat";
 /// Sanity limit for the indexed lists (`RequiredNpc1..n`, `RewardObj1..n`...). The official
 /// arrays are `ReDim`ed to whatever the file says; real quests have a handful.
@@ -166,6 +168,11 @@ fn read_quest(s: &mut Sec) -> Quest {
     for j in 1..=n {
         let (npc, amount) = pair(s, &format!("RequiredNPC{j}"));
         q.required_npcs.push(NpcAmount { npc, amount });
+    }
+    // TSAO quest type 2 ("kill N users"), converted as `RequiredUserKills=N`.
+    let users = s.int("RequiredUserKills");
+    if users > 0 {
+        q.required_npcs.push(NpcAmount { npc: PLAYER_KILLS, amount: users });
     }
     q.required_skill = s.int("RequiredSkill");
     q.required_skill_value = s.int("RequiredValue");
