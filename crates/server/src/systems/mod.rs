@@ -29,6 +29,7 @@ mod event;
 mod travel;
 mod mail;
 mod surgeon;
+mod tsao;
 
 use crate::world::World;
 use ao_protocol::C2S;

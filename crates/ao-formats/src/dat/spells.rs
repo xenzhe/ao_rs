@@ -271,6 +271,8 @@ pub struct Spell {
     /// TSAO `ExclusivoClase` / `ExclusivoClase2`: only these classes may learn and cast it
     /// (empty = everyone). Unknown names are dropped.
     pub exclusive_classes: Vec<super::balance::Class>,
+    /// TSAO `StaffAffected`: its damage depends on the caster's staff (mages, druids).
+    pub staff_affected: bool,
     /// `RequireWeaponType`.
     pub require_weapon_type: Option<WeaponType>,
     /// `IsElementalTagsOnly`.
@@ -492,6 +494,7 @@ fn read_spell(s: &mut Sec) -> Spell {
     if p.magic_power_needed == 0 {
         p.magic_power_needed = s.int("NeedStaff");
     }
+    p.staff_affected = s.int("StaffAffected") != 0;
     p.exclusive_classes = ["ExclusivoClase", "ExclusivoClase2"].iter().filter_map(|k| super::balance::Class::from_name(&s.text(k))).collect();
     p.eot_id = s.int("EOTID");
     p.max_level_castable = s.int("MaxLevelCasteable");

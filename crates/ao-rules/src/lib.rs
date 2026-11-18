@@ -15,6 +15,7 @@ pub mod magic;
 pub mod pathfinding;
 pub mod progression;
 pub mod spells;
+pub mod tsao_combat;
 pub mod walk;
 // P2 (docs/P2_CONTRATO.md)
 pub mod faction;

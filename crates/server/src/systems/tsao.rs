@@ -1,0 +1,74 @@
+//! Switch between the AO20 and the Tierras Sagradas combat rules (resource profile
+//! `[Combat] Rules=tsao`) and the TSAO PvP balance (`Dat/pvp_balance.dat`).
+use crate::world::World;
+use ao_rules::tsao_combat::PvpBalance;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+impl World {
+    pub(crate) fn tsao_rules(&self) -> bool {
+        ao_formats::profile::for_recursos(&self.recursos).tsao_combat
+    }
+
+    /// TSAO `PoderEvasion` (+ `PoderEvasionEscudo` with a shield) of a fighter.
+    pub(crate) fn tsao_evasion(&self, f: &super::combat::Fighter) -> i64 {
+        use ao_formats::dat::balance::Skill;
+        let mut e = ao_rules::tsao_combat::evasion_power(f.skill(Skill::Tactics), f.agility, f.level, f.mods.evasion);
+        if let Some(s) = f.shield.and_then(|o| self.ao.objs.get(o as u32)) {
+            e += ao_rules::tsao_combat::shield_evasion(f.agility, s.max_def, f.mods.shield);
+        }
+        e
+    }
+
+    /// Magic damage the victim's helmet, armour and ring absorb (modHechizos.bas: helmet and
+    /// ring `RandomNumber(def - 3, def)` of `calcularDefCasco`, armour its plain range).
+    pub(crate) fn tsao_magic_absorb(&mut self, f: &super::combat::Fighter) -> i64 {
+        let ao = self.ao.clone();
+        let def = |o: Option<u16>| o.and_then(|o| ao.objs.get(o as u32)).map(|d| d.tsao_magic_def).filter(|(a, b)| *a > 0 || *b > 0);
+        let mut total = 0i64;
+        for o in [f.helmet, f.tool] {
+            if let Some((lo, hi)) = def(o) {
+                let d = self.roll(lo, hi);
+                let d = self.roll(d - 2, d);
+                total += self.roll(d - 3, d) as i64;
+            }
+        }
+        if let Some((lo, hi)) = def(f.armor) {
+            total += self.roll(lo, hi) as i64;
+        }
+        total.max(0)
+    }
+
+    /// TSAO spell damage of caster `id` (modHechizos.bas): `roll * 3.1`, the staff of a mage
+    /// or druid on `StaffAffected` spells, then, against a player, the PvP class layer, the
+    /// magic defence of helmet/armour/ring, and the weapon's `DañoMagico`.
+    pub(crate) fn tsao_spell_damage(&mut self, id: u32, staff_affected: bool, roll: i32, victim: Option<u32>) -> i32 {
+        use ao_formats::dat::balance::Class;
+        let Some(fa) = self.fighter(id) else { return 0 };
+        let weapon = fa.weapon.and_then(|o| self.ao.objs.get(o as u32)).cloned();
+        let mut d = ao_rules::tsao_combat::spell_base(roll);
+        if staff_affected {
+            d = ao_rules::tsao_combat::staff_scaled(d, fa.class == Class::Mage, fa.class == Class::Druid, weapon.as_ref().map(|w| w.staff_damage_bonus));
+        }
+        if let Some(v) = victim.and_then(|v| self.fighter(v)) {
+            d = self.pvp_balance().magic(d, fa.class.spanish_name(), v.class.spanish_name());
+            d -= self.tsao_magic_absorb(&v);
+        }
+        if let Some((lo, hi)) = weapon.map(|w| w.tsao_magic_damage).filter(|(lo, _)| *lo > 0) {
+            d += self.roll(lo, hi) as i64;
+        }
+        d.clamp(0, i32::MAX as i64) as i32
+    }
+
+    /// The PvP layer, read once per resource folder (empty without the file).
+    pub(crate) fn pvp_balance(&self) -> &'static PvpBalance {
+        static CACHE: OnceLock<Mutex<HashMap<PathBuf, &'static PvpBalance>>> = OnceLock::new();
+        let mut m = CACHE.get_or_init(Default::default).lock().unwrap();
+        m.entry(self.recursos.clone()).or_insert_with(|| {
+            let bytes = std::fs::read(self.recursos.join("Dat").join("pvp_balance.dat")).unwrap_or_default();
+            let text: String = bytes.iter().map(|&b| b as char).collect();
+            Box::leak(Box::new(PvpBalance::parse(&text)))
+        })
+    }
+}

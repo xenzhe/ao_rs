@@ -483,5 +483,11 @@ mod tests {
         (p.max_mana, p.mana) = (100, 10);
         w.on_meditate(1);
         assert_eq!(w.player(1).unwrap().status.meditate_fx, 4);
+        // Combat rules: TSAO. A mage without a staff: roll 10 -> 31 -> 70% = 22.
+        assert!(w.tsao_rules());
+        assert_eq!(w.tsao_spell_damage(1, true, 10, None), 22);
+        assert_eq!(w.tsao_spell_damage(1, false, 10, None), 31);
+        // The PvP layer of TSAO's Balance.dat: paladin vs warrior +25% then +28 flat.
+        assert_eq!(w.pvp_balance().physical(100, "Paladín", "Guerrero", false), 153);
     }
 }

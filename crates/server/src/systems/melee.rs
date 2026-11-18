@@ -172,8 +172,12 @@ impl World {
 
     /// `GetUserDamage`.
     fn base_damage(&mut self, f: &Fighter, vs_npc: bool) -> i64 {
-        let (weapon_roll, max_weapon) = self.weapon_roll(f, vs_npc);
         let (lo, hi) = rules::user_hit_range(&f.mods, f.level);
+        if f.weapon.is_none() && self.tsao_rules() {
+            // TSAO CalcularDaño with bare hands: CInt(MaxHIT / 5).
+            return rules::vb_round(hi as f64 / 5.0);
+        }
+        let (weapon_roll, max_weapon) = self.weapon_roll(f, vs_npc);
         let user_roll = self.roll(lo, hi);
         let modifier = rules::class_damage_modifier(&f.mods, self.obj(f.weapon));
         rules::user_damage(weapon_roll, max_weapon, f.strength, user_roll, modifier)
@@ -183,6 +187,9 @@ impl World {
     fn attack_power_of(&self, f: &Fighter) -> i64 {
         let w = self.obj(f.weapon);
         let skill = rules::weapon_skill(w);
+        if self.tsao_rules() {
+            return ao_rules::tsao_combat::attack_power(f.skill(skill), f.agility, f.level, rules::attack_skill_modifier(&f.mods, skill));
+        }
         rules::attack_power(f.skill(skill), f.agility, f.level, rules::attack_skill_modifier(&f.mods, skill), rules::weapon_hit_bonus(&f.mods, w))
     }
 
@@ -232,7 +239,9 @@ impl World {
             return false;
         }
         let Some(f) = self.fighter(id) else { return false };
-        let hit = self.chance(rules::user_hit_chance(self.attack_power_of(&f), npc.evasion_power, 0));
+        let attack = self.attack_power_of(&f);
+        let chance = if self.tsao_rules() { ao_rules::tsao_combat::hit_chance(attack, npc.evasion_power) } else { rules::user_hit_chance(attack, npc.evasion_power, 0) };
+        let hit = self.chance(chance);
         if !hit {
             self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: false, damage: 0, critical: false }, None);
             return true;
@@ -330,7 +339,7 @@ impl World {
             }
             _ => 0,
         };
-        let mut chance = rules::user_hit_chance(attack, evasion, weapon_mod);
+        let mut chance = if self.tsao_rules() { ao_rules::tsao_combat::hit_chance(attack, self.tsao_evasion(&fv)) } else { rules::user_hit_chance(attack, evasion, weapon_mod) };
         if fv.meditating {
             chance = rules::meditating_hit_chance(chance);
         }
@@ -366,7 +375,12 @@ impl World {
             }
         }
         let def = (def - self.armor_penetration(&fa, def)).max(0) as i64;
-        let damage = (base - def).max(0);
+        let mut damage = (base - def).max(0);
+        if self.tsao_rules() {
+            // TSAO "BALANCEO": class percents and the flat class-versus-class bonus.
+            let ranged = self.obj(fa.weapon).is_some_and(|w| w.projectile > 0);
+            damage = self.pvp_balance().physical(damage, fa.class.spanish_name(), fv.class.spanish_name(), ranged).max(1);
+        }
         let w = self.obj(fa.weapon).cloned();
         // GetBackHitBonusChanceAgainstUsers: same heading and adjacent.
         let back = if attacker_dir == victim_dir && near { self.ao.balance.backstab.extra_backstab_chance as f64 } else { 0.0 };

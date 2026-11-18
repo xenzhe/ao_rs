@@ -863,9 +863,13 @@ impl World {
             }
             let r = roll(self, s.hp.min, s.hp.max);
             let level = self.player(id).unwrap().level;
-            let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
-            // GetUserMR (magic resistance from items/class) belongs to combat/inventory: 0.
-            let dmg = rules::damage_vs_user(dmg, 0, pen, s.anti_magic_resistance != 0);
+            let dmg = if self.tsao_rules() {
+                self.tsao_spell_damage(id, s.staff_affected, r, Some(t))
+            } else {
+                let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
+                // GetUserMR (magic resistance from items/class) belongs to combat/inventory: 0.
+                rules::damage_vs_user(dmg, 0, pen, s.anti_magic_resistance != 0)
+            };
             let tname = self.player(t).unwrap().name.clone();
             self.console(id, format!("Le has quitado {dmg} puntos de vida a {tname}."), Tone::Combat);
             // As a player hit (not a named source): faction and kill credit apply to spells too.
@@ -928,10 +932,14 @@ impl World {
         if s.effects.contains(Fx::DO_DAMAGE) {
             let r = roll(self, s.hp.min, s.hp.max);
             let level = self.player(id).unwrap().level;
-            let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
-            // npcs.dat MagicResistance/MagicDef/DefM are not on `Npc` yet (NPC system).
-            let skill = self.player(id).unwrap().stats.skills[SKILL_MAGIC] as i32;
-            let dmg = rules::damage_vs_npc(dmg, Default::default(), skill, pen, s.anti_magic_resistance != 0);
+            let dmg = if self.tsao_rules() {
+                self.tsao_spell_damage(id, s.staff_affected, r, None)
+            } else {
+                let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
+                // npcs.dat MagicResistance/MagicDef/DefM are not on `Npc` yet (NPC system).
+                let skill = self.player(id).unwrap().stats.skills[SKILL_MAGIC] as i32;
+                rules::damage_vs_npc(dmg, Default::default(), skill, pen, s.anti_magic_resistance != 0)
+            };
             let _ = name;
             self.damage_npc(map, nid, dmg, id);
             return true;

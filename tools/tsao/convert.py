@@ -266,6 +266,22 @@ def convert_balance(experiencia, ddat):
     text = set_section(text, "MODRAZA", lines)
     pre = {"Guerrero": 3, "Cazador": 3, "Paladin": 3, "Bandido": 3, "Asesino": 3, "Pirata": 3, "Ladron": 3, "Clerigo": 2, "Bardo": 2, "Mago": 1, "Druida": 2, "Trabajador": 2}
     post = {"Guerrero": 2, "Cazador": 2, "Paladin": 1, "Bandido": 2, "Asesino": 1, "Pirata": 2, "Ladron": 2, "Clerigo": 2, "Bardo": 2, "Mago": 1, "Druida": 2, "Trabajador": 2}
+    # The classic class modifiers come from TSAO's own Balance.dat (modBalance.bas reads
+    # them; classes it lacks use its `Case Else` 0.7).
+    tsao_bal = {}
+    cur = None
+    for line in open(TSAO_BALANCE, encoding="latin-1"):
+        line = line.split("'")[0].strip()
+        if line.startswith("["):
+            cur = line[1:-1].lower()
+        elif "=" in line and cur:
+            k, v = line.split("=", 1)
+            tsao_bal.setdefault(cur, {})[k.strip().lower()] = v.strip()
+    ours = {"MODEVASION": "modificadorevasion", "MODATAQUEARMAS": "modificadorpoderataquearmas", "MODATAQUEPROYECTILES": "modificadorpoderataqueproyectiles",
+            "MODDANOARMAS": "modicadordaño" + "clasearmas", "MODDANOPROYECTILES": "modicadordaño" + "claseproyectiles", "MODESCUDO": "modevasiondeescudoclase"}
+    for sec, src in ours.items():
+        vals = tsao_bal.get(src, {})
+        text = set_section(text, sec, [f"{k}={vals.get(k.lower(), '0.7')}" for k in pre])
     text = set_section(text, "GOLPE_PRE_36", [f"{k}={v}" for k, v in pre.items()])
     text = set_section(text, "GOLPE_POST_36", [f"{k}={v}" for k, v in post.items()])
     open(path, "w", encoding="latin-1", newline="\r\n").write(text)
@@ -340,7 +356,11 @@ def convert_dats(src, dst):
             os.remove(os.path.join(ddat, f))
     open(os.path.join(ddat, "npcs.dat"), "w", encoding="latin-1", newline="\r\n").write(npcs.replace("\r\n", "\n"))
     convert_quests(read("QUESTS.DAT"), ddat)
+    global TSAO_BALANCE
+    TSAO_BALANCE = os.path.join(sdat, "Balance.dat")
     convert_balance(read("Experiencia.dat"), ddat)
+    # TSAO's PvP layer (class percents, class versus class), read by the server as is.
+    open(os.path.join(ddat, "pvp_balance.dat"), "w", encoding="latin-1", newline="\r\n").write(read("Balance.dat").replace("\r\n", "\n"))
     # AO20 files that name AO20 objects or maps: wrong things in a TSAO world. TSAO's own
     # version where it has one, else an empty set until that system is ported.
     for f in ("ArmasHerrero.dat", "ArmadurasHerrero.dat", "Ciudades.Dat", "Invokar.dat", "Tesoros.dat", "Map.dat", "Help.dat", "Motd.ini", "NombresInvalidos.txt"):
@@ -391,7 +411,8 @@ def main(src, dst):
     naked = {(1, 1): 21, (2, 1): 39, (1, 2): 21, (2, 2): 39, (1, 3): 32, (2, 3): 40, (1, 4): 53, (2, 4): 60, (1, 5): 53, (2, 5): 60}
     prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", "",
                                                                                                                             # TCP_HandleData2.bas /MEDITAR: FXMEDITARCHICO 4 (<15), MEDIANO 5 (<30), GRANDE 6 (<50), XGRANDE 43 (<60), CIUDA 44.
-                                                                                                                            "[Meditate]", "FxByLevel=15:4,30:5,50:6,60:43,255:44", ""]
+                                                                                                                            "[Meditate]", "FxByLevel=15:4,30:5,50:6,60:43,255:44", "",
+                                                                                                                            "[Combat]", "Rules=tsao", ""]
     open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",

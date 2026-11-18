@@ -78,7 +78,8 @@ impl World {
         if let Some(s) = shield {
             evasion += rules::shield_evasion(f.skill(Skill::ShieldDefense), f.mods.shield, s.percentage);
         }
-        let hit = self.chance(rules::npc_hit_chance(npc.attack_power, evasion));
+        let chance = if self.tsao_rules() { ao_rules::tsao_combat::hit_chance(npc.attack_power, self.tsao_evasion(&f)) } else { rules::npc_hit_chance(npc.attack_power, evasion) };
+        let hit = self.chance(chance);
         let mut blocked = false;
         if !hit && shield.is_some_and(|s| s.percentage > 0) {
             if let Some(c) = rules::npc_block_chance(f.skill(Skill::ShieldDefense), f.skill(Skill::Tactics)) {

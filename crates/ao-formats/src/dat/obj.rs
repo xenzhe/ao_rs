@@ -448,6 +448,14 @@ pub struct ObjData {
     pub magic_absolute_bonus: i32,
     /// `MagicPenetration`.
     pub magic_penetration: i32,
+    /// TSAO `DefensaMagicaMin` / `DefensaMagicaMax` (helmet, armour, ring): magic damage
+    /// absorbed.
+    pub tsao_magic_def: (i32, i32),
+    /// TSAO `DañoMagicoMin` / `DañoMagicoMax` (weapon): extra spell damage.
+    pub tsao_magic_damage: (i32, i32),
+    /// TSAO `StaffDamageBonus`: a mage's or druid's staff raises spell damage to
+    /// `(70 + bonus)%` (65 for druids).
+    pub staff_damage_bonus: i32,
     /// `HechizoIndex`.
     pub spell_index: i32,
     /// `Hechizo` (potion, elemental rune).
@@ -703,7 +711,11 @@ fn read_obj(s: &mut Sec, declared: u32) -> ObjData {
     o.grh = s.int("GrhIndex");
     o.obj_type = ObjType::from_id(s.int("ObjType"));
     o.newbie = s.int("Newbie");
-    o.non_transferable = s.int("Instransferible");
+    // AO20 spells it `Instransferible`, TSAO `Intransferible`.
+    o.non_transferable = s.int("Instransferible").max(s.int("Intransferible"));
+    o.tsao_magic_def = (s.int("DefensaMagicaMin"), s.int("DefensaMagicaMax"));
+    o.tsao_magic_damage = (s.int("DañoMagicoMin"), s.int("DañoMagicoMax"));
+    o.staff_damage_bonus = s.int("StaffDamageBonus");
     o.destroys = s.int("Destruye");
     o.non_droppable = s.int("Intirable");
     o.skill_amount = s.int("CantidadSkill");
