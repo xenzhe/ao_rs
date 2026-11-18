@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 pub mod balance;
 pub mod chests;
 pub mod craft;
+pub mod eots;
 pub mod npcs;
 pub mod obj;
 pub mod quests;

@@ -98,6 +98,9 @@ fn warrior_and_mage_hunt_level_up_and_store_the_loot() {
         (b.start_map, b.start_x, b.start_y) = HUNT;
         st.config.world.exp_mult = mult as u32;
         st.config.world.drop_mult = 1_000_000;
+        // Bats and snakes poison and these newbies carry no antidote: this test is about
+        // levelling and storing the loot, not about poison (tested in systems/npc_owner.rs).
+        st.config.world.creature_poison = false;
     });
     let mut war = character(&s, "Guerrero", WARRIOR);
     let mut mag = character(&s, "Maga", MAGE);

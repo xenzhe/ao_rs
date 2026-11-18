@@ -110,6 +110,48 @@ no se guarda en el mapa (en el VB, `Backup`, `Terreno` y `Zona` iban al `.dat`) 
 reiniciar; el cliente no mueve al azar a un jugador estúpido (solo lo marca); siguen sin portar
 `WarpMeToTarget`, `NPCFollow`, `SpawnCreature`, `TalkAsNPC`, `CerrarCliente`, `AlterName`,
 `Working`/`Hiding`, clima y sonido, y los comandos de eventos y lobby (fase 6).
+## Fase 4 hecha (18/11): magia completa
+
+- **Motor de efectos en el tiempo** (`systems/eot.rs`, lector completo en
+  `ao-formats/dat/eots.rs`, reglas puras en `ao-rules/eot.rs`): efectos sobre jugadores **y
+  criaturas**, límites de `FindEffectOnTarget` (incluido `SharedTypeId`), `Override`,
+  requisitos (arma, escudo, armadura, casco, transformación) comprobados en cada tick.
+  Tipos portados: 1 vida, 9 maná, 2 modificadores (Afilar, Refuerzo, Fervor del Paladín,
+  Rejuvenecimiento, Falange), 4 provocado (como modificadores), 15 escudo (Protección Divina
+  1-3, Protección de Tute, núcleo enano), 17 daño extra (Penitencia), 16 transformación (Forma
+  de Lobo, Oso y Espíritu del Bosque: aspecto, maná por tick, solo hechizos sobre uno mismo,
+  `RequireTransform` de Desgarro), 8 efecto al golpear (Filo de Toxina, Veneno 2/3, Veneno de
+  maná, Desgarro), 14 golpes múltiples (Golpes Rápidos) y 10 canciones de grupo (Serenata
+  Esquiva, Precisión Armónica, Partitura de Regeneración).
+- **Modificadores en el combate**: golpe, evasión, defensa, daño lineal (PvE aparte), daño
+  físico y mágico hecho y recibido, curación recibida y dada; en cuerpo a cuerpo, hechizos de
+  jugador y de criatura, y en lo que pega una criatura. Inmunidad a control (`CCInmunity`).
+- **Hechizos de área** (`HechizoSobreArea`): cuadrado de lado `AreaRadio` centrado en el tile,
+  20 % menos por tile; sin nadie alcanzado no se cobra.
+- **IA de criaturas** (`systems/npc_tactics.rs`): `AI_RangeAttack` (disparo a distancia,
+  distancia preferida, retirada y órbita con los valores de `Server.ini`), `SupportAndAttack`
+  (primero quitar parálisis o curar, luego paralizar o dañar, enfriamiento por hechizo) y
+  `NpcLanzaSpellInmovilizado`.
+- **Dueño de la criatura y veneno** (`systems/npc_owner.rs`): `GetOwnedBy` 10 s,
+  `CanAttackNotOwner`, robar con seguro = rechazado antes de golpear o lanzar (sin gastar),
+  sin seguro = criminal; el área nunca roba ni vuelve criminal; `NpcEnvenenarUser`
+  (`creature_poison` en la configuración, encendido como en AO20).
+- **Bugs del VB corregidos**: Protección Divina 3 sobre la 1 solo renovaba la pequeña; el
+  escudo del núcleo enano (EOT62, "80 segundos") duraba 2 s; los dos golpes extra de Golpes
+  Rápidos salían en frames seguidos; el daño de área usaba otra cuenta de resistencia (ahora
+  la misma que el hechizo de un objetivo). Bug nuestro corregido: los hechizos `IsSkill`
+  subían Magia (en el VB no).
+- **Decisiones**: el efecto al golpear no se aplica en cuerpo a cuerpo PvP (el VB tiene esa
+  llamada comentada) y sí en hechizos de daño contra jugadores y golpes a criaturas; el bonus
+  de curación recibida no llega a las pociones (`inventory.rs`, otra sesión); el reto
+  (`event.rs`) ahora termina los efectos bien (antes un transformado quedaba con el aspecto).
+- **Falta**: provocar (3), trampas (5), borracho (6), empujar y atraer (7, 11), explosión
+  retardada (12), desequipar (13); la velocidad de movimiento (Eco Veloz, Desplazamiento
+  Veloz, Acelerar Mascotas) porque el paso es fijo y el cliente no recibe velocidad. Esos
+  hechizos siguen avisando "todavía no está disponible" sin cobrar. También faltan terreno,
+  materialización y `HandlePetSpell`, los comportamientos BG, y criaturas que atacan a otras
+  criaturas con hechizos de apoyo por equipos. El buff no se ve en el cliente (no hay
+  mensaje de buffs en el protocolo; `PROTOCOL_VERSION` sigue en 16).
 
 ## Hallazgo importante: datos del servidor desfasados
 

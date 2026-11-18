@@ -68,6 +68,9 @@ fn server_with(tag: &str, seeds: &[Seed]) -> TestServer {
     // Written against the public repo maps (Makrom 407 with six quests in Ullathorpe).
     TestServer::with(|st| {
         st.config.database = path.to_string_lossy().into_owned();
+        // Quest tests, not poison ones: a hero without antidotes dies of creature poison
+        // (3-5 % of its life per tick) on the long walks.
+        st.config.world.creature_poison = false;
         if let Some(p) = ao_formats::paths::public_recursos_dir() {
             st.recursos = p;
         }
@@ -383,7 +386,7 @@ fn the_last_kill_and_the_hand_in_pay_once() {
         if tile_distance(b.pos(), (nx, ny)) <= 3 {
             break;
         }
-        assert!(b.hp() > 0, "el heroe no muere de vuelta");
+        assert!(b.hp() > 0, "el heroe no muere de vuelta: {:?}", b.console().filter(|t| t.contains("pegado") || t.contains("matado") || t.contains("envenen") || t.contains("quitado")).collect::<Vec<_>>().iter().rev().take(10).collect::<Vec<_>>());
         if let Some((_, x, y)) = nearest(&b, 1, "") {
             face(&mut b, (x, y));
             let seq = b.game.next_seq();

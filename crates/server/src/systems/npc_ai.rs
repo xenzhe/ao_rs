@@ -334,9 +334,10 @@ impl World {
         let (movement, hostile, kind) = (n.movement, n.hostile, n.kind);
         match movement {
             Movement::Wander => {
-                if hostile {
-                    // AttackRange > 1 uses AI_RangeAttack (ranged kiting) in AO20: not ported,
-                    // those creatures chase like melee ones (their attack is still the hook).
+                if hostile && d.attack_range > 1 {
+                    // AI_RangeAttack: shoots from afar and keeps its PreferedRange.
+                    self.range_attack(map, nid, d, now);
+                } else if hostile {
                     self.chase_nearest_user(map, nid, d, now);
                 } else {
                     self.wander_near_origin(map, nid, now);
@@ -344,7 +345,9 @@ impl World {
             }
             Movement::FixedInPos => {
                 if hostile {
-                    if is_guard(kind) {
+                    if is_guard(kind) && d.attack_range > 1 {
+                        self.range_attack(map, nid, d, now);
+                    } else if is_guard(kind) {
                         self.chase_nearest_user(map, nid, d, now);
                     } else {
                         self.attack_from_pos(map, nid, d, now);
@@ -353,6 +356,7 @@ impl World {
             }
             Movement::Defend => self.follow_aggressor(map, nid, d, now),
             Movement::Walk => self.walk_route(map, nid, d, now),
+            Movement::SupportAndAttack => self.support_and_attack(map, nid, d, now),
             _ => {}
         }
     }
@@ -432,8 +436,11 @@ impl World {
         let heading = heading_to(pos, tp);
         if magic {
             self.npc_mut(map, nid).next_spell = now.after_ms(ms(d.spell_interval, DEFAULT_SPELL_MS));
-            self.npc_face(map, nid, heading);
-            self.npc_cast_one(map, nid, d, t);
+            // NpcLanzaSpellInmovilizado: rooted casters only along the line they face.
+            if self.npc_can_cast_at(map, nid, t) {
+                self.npc_face(map, nid, heading);
+                self.npc_cast_one(map, nid, d, t);
+            }
         } else if melee {
             self.npc_face(map, nid, heading);
             if self.user_in_front(map, nid) == Some(t) && now >= self.instance(map).npcs[&nid].next_attack && self.npc_enemy(map, nid, t) {
@@ -524,7 +531,7 @@ impl World {
 
     /// `AI_CaminarSinRumboCercaDeOrigen`: farther than 4 from `Orig` walks back, else one
     /// time in six takes a random step.
-    fn wander_near_origin(&mut self, map: u16, nid: u32, now: GameTime) {
+    pub(crate) fn wander_near_origin(&mut self, map: u16, nid: u32, now: GameTime) {
         let n = &self.instance(map).npcs[&nid];
         let (pos, home) = ((n.x, n.y), n.home);
         if distancia(pos, home) > 4 {
@@ -651,7 +658,7 @@ impl World {
 
     /// Static part of `LegalWalkNPC` (bounds, exit, water/land, trigger, blocked side).
     /// Doors for guards (`HayPuerta`) are not modelled.
-    fn npc_tile_ok(&self, map: u16, d: &NpcData, x: i32, y: i32, dir: Dir) -> bool {
+    pub(crate) fn npc_tile_ok(&self, map: u16, d: &NpcData, x: i32, y: i32, dir: Dir) -> bool {
         if !walk::in_bounds(x, y) {
             return false;
         }
@@ -706,14 +713,14 @@ impl World {
     }
 
     /// `NPCHasAUserInFront`: living user on the tile it faces.
-    fn user_in_front(&self, map: u16, nid: u32) -> Option<EntityId> {
+    pub(crate) fn user_in_front(&self, map: u16, nid: u32) -> Option<EntityId> {
         let n = &self.instance(map).npcs[&nid];
         let (dx, dy) = n.dir.delta();
         self.player_at(map, n.x + dx, n.y + dy).filter(|u| self.player(*u).is_some_and(|p| p.hp > 0))
     }
 
     /// `EnRangoVision`: rectangle of `Distancia` (npcs.dat) or 15 x 13.
-    fn in_vision(&self, map: u16, nid: u32, d: &NpcData, pid: EntityId) -> bool {
+    pub(crate) fn in_vision(&self, map: u16, nid: u32, d: &NpcData, pid: EntityId) -> bool {
         let n = &self.instance(map).npcs[&nid];
         let (lx, ly) = if d.distance != 0 { (d.distance, d.distance) } else { (VISION_X, VISION_Y) };
         self.player(pid).is_some_and(|p| p.map == map && (p.x - n.x).abs() <= lx && (p.y - n.y).abs() <= ly)
@@ -725,7 +732,7 @@ impl World {
         self.player(pid).is_some_and(|p| p.status.invisible_until.is_some_and(|u| now < u) || p.status.hidden)
     }
 
-    fn valid_target(&self, map: u16, nid: u32, d: &NpcData, pid: EntityId, aggressor: Option<EntityId>) -> bool {
+    pub(crate) fn valid_target(&self, map: u16, nid: u32, d: &NpcData, pid: EntityId, aggressor: Option<EntityId>) -> bool {
         if !self.in_vision(map, nid, d, pid) {
             return false;
         }
@@ -743,12 +750,15 @@ impl World {
     }
 
     /// `EsEnemigo`: the aggressor always; alignment rules for royal/chaos NPCs.
-    fn npc_enemy(&self, map: u16, nid: u32, pid: EntityId) -> bool {
+    pub(crate) fn npc_enemy(&self, map: u16, nid: u32, pid: EntityId) -> bool {
         let n = &self.instance(map).npcs[&nid];
         if n.attacked_by == Some(pid) {
             return true;
         }
-        // `CanAttackNotOwner` (NPC ownership by its first attacker) is P2: anyone may.
+        // CanAttackNotOwner: fighting its owner, only players who could hit it cleanly.
+        if !self.npc_may_attack_not_owner(map, nid, pid) {
+            return false;
+        }
         let status = self.player_faction_status(pid);
         match self.ao.npcs.get(n.def as u32).map_or(0, |d| d.alignment) {
             1 => status % 2 != 1,

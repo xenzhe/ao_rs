@@ -73,8 +73,10 @@ impl World {
         let ao = self.ao.clone();
         let obj = |o: Option<u16>| o.and_then(|o| ao.objs.get(o as u32));
 
-        // NpcImpacto
-        let mut evasion = rules::evasion_power(f.skill(Skill::Tactics), f.agility, f.level, f.mods.evasion, 0);
+        // NpcImpacto, with the EOT modifiers of both (GetHitBonus, GetEvasionBonus...).
+        let (nm, um) = (self.modifiers(super::eot::Who::Npc(map, nid)), self.modifiers(super::eot::Who::User(pid)));
+        let npc = NpcCombat { attack_power: npc.attack_power + nm.hit as i64, ..npc };
+        let mut evasion = rules::evasion_power(f.skill(Skill::Tactics), f.agility, f.level, f.mods.evasion, 0) + um.evasion as i64;
         let shield = obj(f.shield);
         if let Some(s) = shield {
             evasion += rules::shield_evasion(f.skill(Skill::ShieldDefense), f.mods.shield, s.percentage);
@@ -105,7 +107,10 @@ impl World {
                     absorbed += self.roll(o.min_def, o.max_def);
                 }
             }
-            damage = (self.roll(npc.min_hit, npc.max_hit) - absorbed).max(0);
+            // NpcDamage: + GetLinearDamageBonus - GetDefenseBonus, x modifier x reduction.
+            let raw = self.roll(npc.min_hit, npc.max_hit) + nm.linear_bonus(false) - absorbed - um.defense;
+            let raw = ao_rules::eot::scale(ao_rules::eot::scale(raw as i64, nm.physical_factor(false)), um.physical_taken());
+            damage = (raw as i32).max(0);
         }
         self.broadcast(map, &S2C::Attack { attacker: nid, target: pid, hit, damage, critical: false }, None);
         if blocked {
@@ -113,6 +118,8 @@ impl World {
         }
         if hit {
             self.hurt_player(pid, damage, Source::Npc(map, nid));
+            // NpcEnvenenarUser.
+            self.npc_poison_on_hit(map, nid, pid);
         } else if !blocked {
             self.console(pid, format!("{} te ataco y fallo.", npc.name), Tone::Combat);
         }
@@ -193,6 +200,8 @@ impl World {
             // UsuarioAtacadoPorUsuario: every hit, not only the killing one.
             self.faction_on_player_attacked(a, id);
         }
+        // TargetApplyDamageReduction / TargetWasDamaged: shields, damage-bonus debuffs.
+        let dmg = self.eot_on_damaged(super::eot::Who::User(id), dmg);
         // A hit ends the automated work, like the original.
         self.work_cancel(id);
         let p = self.player_mut(id);
@@ -231,6 +240,8 @@ impl World {
         self.close_bank(id);
         self.close_trades(id);
         self.pets_on_owner_death(id);
+        // ClearEffectList(ClearForDeath) before the look is saved: a dead wolf rises human.
+        self.clear_eots(super::eot::Who::User(id));
         if !self.event_keeps_items_on_death(id) {
             self.drop_inventory_on_death(id);
         }
@@ -315,10 +326,15 @@ impl World {
                 self.console(attacker, why, Tone::Warn);
                 return false;
             }
+            // UserCanAttackNpc (owner): another citizen's creature (systems/npc_owner.rs).
+            if !self.npc_owner_on_hit(attacker, map, nid) {
+                return false;
+            }
             self.faction_on_npc_attacked(attacker, number);
             self.npc_attacked_by(map, nid, attacker);
             self.pets_assist(attacker, map, nid);
         }
+        let amount = self.eot_on_damaged(super::eot::Who::Npc(map, nid), amount);
         let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&nid)) else { return false };
         let before = n.hp;
         n.hp = (n.hp - amount.max(0)).max(0);

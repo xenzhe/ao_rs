@@ -39,15 +39,61 @@ impl Spellbook {
     }
 }
 
-/// An `EffectsOverTime.dat` health/mana effect running on a player (`UpdateHpOverTime`,
-/// `UpdateManaOverTime`).
-#[derive(Clone, Debug)]
+/// Who cast an effect over time (`IBaseEffectOverTime.Caster*`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EotCaster {
+    #[default]
+    None,
+    /// Connection id of a player.
+    User(u32),
+    /// A creature: map and NPC id.
+    Npc(u16, u32),
+}
+
+impl EotCaster {
+    /// Opaque key for `eSingleByCaster`.
+    pub fn key(self) -> u64 {
+        match self {
+            EotCaster::None => 0,
+            EotCaster::User(id) => 1 << 32 | id as u64,
+            EotCaster::Npc(map, nid) => 2 << 48 | (map as u64) << 32 | nid as u64,
+        }
+    }
+}
+
+/// An `EffectsOverTime.dat` effect running on a player or a creature (one per
+/// `IBaseEffectOverTime` instance; systems/eot.rs runs them).
+#[derive(Clone, Debug, Default)]
 pub struct ActiveEot {
+    /// `UniqueId`.
+    pub uid: u32,
     pub eot: u16,
-    /// Caster connection id (0: gone / none).
-    pub source: u32,
+    pub caster: EotCaster,
+    /// Ticks still to run (health, mana, party songs, transforms).
     pub ticks_left: u32,
     pub next_tick: GameTime,
+    /// End of the effects that last `TickTime` in total (modifiers, shields...).
+    pub ends: Option<GameTime>,
+    /// `ProtectEffect.DamageProtection` left.
+    pub shield: i32,
+    /// Hits left (`BonusDamageEffect.TickCount`, `ApplyEffectOnHit.HitLimit`,
+    /// `MultipleAttacks.mTicks`); 0 on an on-hit effect = unlimited.
+    pub hits_left: u32,
+    /// `StatModifier.Modifier`: the caster's weapon `MagicDamageBonus` / 100.
+    pub scale: f32,
+    /// `MultipleAttacks`: extra blows still to throw and when the next one goes.
+    pub pending_blows: u8,
+    pub blow_at: GameTime,
+}
+
+/// A player turned into a creature by `TransformEffect` (Forma de Lobo / Oso...).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Transform {
+    /// npcs.dat number whose look is worn (`flags.ActiveTransform`).
+    pub npc: u16,
+    /// Look before the change (saved with the character instead of the creature's).
+    pub body: u16,
+    pub head: u16,
 }
 
 /// Timed and toggled states (paralysis, invisibility, poison, meditation...).
@@ -74,6 +120,8 @@ pub struct StatusEffects {
     /// `Counters.TiempoDeInmunidadParalisisNoMagicas`.
     pub paralysis_immune_until: Option<GameTime>,
     pub eots: Vec<ActiveEot>,
+    /// Active `TransformEffect` (systems/eot.rs).
+    pub transform: Option<Transform>,
     /// TSAO `flags.Oculto` and when it is checked again (`DoPermanecerOculto`, 3 s).
     pub hidden: bool,
     pub hidden_check: GameTime,
