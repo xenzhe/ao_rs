@@ -15,7 +15,7 @@ const RARITY_QUANTITY: [u8; 3] = [1, 3, 5];
 const MAX_CARDS: u8 = 10;
 
 fn step(steps: &[(u8, f32)], have: u8) -> f32 {
-    steps.iter().filter(|(need, _)| have >= *need).map(|(_, m)| *m).last().unwrap_or(1.0)
+    steps.iter().rev().find(|(need, _)| have >= *need).map_or(1.0, |(_, m)| *m)
 }
 
 /// Which bonus of a creature's cards.
