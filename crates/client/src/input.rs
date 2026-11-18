@@ -8,6 +8,11 @@ use ao_protocol::Tone;
 use ao_rules::Dir;
 use macroquad::prelude::*;
 
+thread_local! {
+    /// The steal key was pressed: the next left click picks the victim.
+    static STEALING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Returns the direction held this frame (for movement), if any.
 pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, ui: &Ui, assets: &crate::assets::Assets) -> Option<Dir> {
     if !ui.keyboard_captured {
@@ -28,6 +33,13 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
         }
         if crate::keys::pressed(Action::Safe) {
             game.toggle_safe();
+        }
+        if crate::keys::pressed(Action::Hide) {
+            game.send(&ao_protocol::C2S::Skill(ao_protocol::p4::skill::SkillC2S::Hide));
+        }
+        if crate::keys::pressed(Action::Steal) {
+            STEALING.with(|s| s.set(true));
+            game.say("Haz clic sobre el jugador al que quieres robar.", Tone::Info);
         }
         if let Some(it) = item {
             if crate::keys::pressed(Action::Use) {
@@ -71,7 +83,11 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
                 game.trade_with_tile(tx, ty);
             }
         }
-        if is_mouse_button_pressed(MouseButton::Left) {
+        if is_mouse_button_pressed(MouseButton::Left) && STEALING.with(|s| s.replace(false)) {
+            if let Some((x, y)) = tile_under_mouse(game, lay) {
+                game.send(&ao_protocol::C2S::Skill(ao_protocol::p4::skill::SkillC2S::Steal { x, y }));
+            }
+        } else if is_mouse_button_pressed(MouseButton::Left) {
             if game.local.p4.work.pending.is_some() {
                 work_click(game, lay, assets);
             } else {

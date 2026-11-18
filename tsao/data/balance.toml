@@ -14,6 +14,9 @@ newbie_max_level = 9
 # /regresar: Tanaris (TCP_HandleData2.bas).
 home = [28, 54, 36]
 
+# Barcos: desde nivel 30 (InvUsuario.bas otBarcos).
+boat_min_level = 30
+
 start_hp = 100
 start_mana = 120
 

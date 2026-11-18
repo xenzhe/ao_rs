@@ -176,7 +176,8 @@ impl World {
         p.stats.sta = p.stats.sta.min(max_sta);
         p.stats.skill_points = p.stats.skill_points.saturating_add(skill_points.min(u16::MAX as u32) as u16);
         let (map, hp, free) = (p.map, p.hp, p.stats.skill_points);
-        self.broadcast(map, &S2C::Fx { id, fx: LEVEL_UP_FX, loops: 0 }, None);
+        let fx = ao_formats::profile::for_recursos(&self.recursos).fx.get("levelup").copied().unwrap_or(LEVEL_UP_FX);
+        self.broadcast(map, &S2C::Fx { id, fx, loops: 0 }, None);
         for (text, tone) in lines {
             self.console(id, text, tone);
         }

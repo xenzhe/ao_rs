@@ -250,6 +250,8 @@ impl World {
         set(on(s.immobilized_until), status::IMMOBILIZED);
         set(on(s.blind_until), status::BLIND);
         set(on(s.dumb_until), status::DUMB);
+        set(s.hidden, status::HIDDEN);
+        set(s.sailing.is_some(), status::SAILING);
         f
     }
 
@@ -495,6 +497,7 @@ impl World {
         // HandleWorkLeftClick: meditation ends, then IntervaloPermiteLanzarSpell updates
         // the timer whether or not the spell is finally cast.
         self.stop_meditating(id);
+        self.reveal(id);
         self.player_mut(id).spells.next_cast = now.after_ms(rules::CAST_INTERVAL_MS);
         let Some(target) = self.resolve_target(id, &spell, tx, ty) else { return };
         if !self.can_cast(id, spell_id, &spell, target) {

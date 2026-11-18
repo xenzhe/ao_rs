@@ -20,6 +20,7 @@ enum Target {
 impl World {
     /// `HandleAttack` + `UsuarioAtaca`: hits whatever is on the tile in front.
     pub(crate) fn on_melee(&mut self, id: u32, seq: u32) {
+        self.reveal(id);
         if !self.player_mut(id).seq.accept(seq) {
             return self.strike(id, "paquete repetido (replay)");
         }

@@ -15,6 +15,44 @@ fn tsao() -> Option<PathBuf> {
     p.join("Mapas").join("mapa28.csm").exists().then_some(p)
 }
 
+/// TSAO map exits sit on the 0.11.5 border (x 9/92, y 7/94): walking onto one changes map
+/// (the AO20 border 12..89 used to stop the player one step before them).
+#[test]
+fn walking_off_the_edge_changes_map() {
+    let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };
+    let s = TestServer::with(|st| {
+        st.recursos = rec;
+        st.start = Some((1, 91, 85));
+    });
+    let mut b = s.bot("Caminante");
+    assert_eq!((b.map(), b.pos()), (1, (91, 85)));
+    b.walk(ao_rules::Dir::Right);
+    b.wait_until("pasar al mapa 2", |b| b.map() == 2);
+}
+
+/// Hiding (`UK Ocultarse`) eventually works, and speaking reveals.
+#[test]
+fn hiding_and_revealing() {
+    let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };
+    let s = TestServer::with(|st| {
+        st.recursos = rec;
+        st.start = Some((1, 50, 50));
+    });
+    let mut b = s.bot("Sombra");
+    let hidden = |b: &ao_testkit::Bot| b.me().status & ao_protocol::status::HIDDEN != 0;
+    for _ in 0..200 {
+        b.send(&C2S::Skill(ao_protocol::p4::skill::SkillC2S::Hide));
+        s.advance(1600);
+        b.sync();
+        if hidden(&b) {
+            break;
+        }
+    }
+    assert!(hidden(&b), "hidden after many tries");
+    b.say("hola");
+    b.wait_until("visible", |b| !hidden(b));
+}
+
 #[test]
 fn viajero_charges_before_the_trip_and_checks_level() {
     let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };

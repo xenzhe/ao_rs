@@ -6,6 +6,9 @@ pub mod event;
 pub mod travel;
 pub mod mail;
 pub mod surgeon;
+pub mod skill;
+
+pub use skill::SkillC2S;
 
 pub use surgeon::{SurgeonC2S, SurgeonS2C};
 

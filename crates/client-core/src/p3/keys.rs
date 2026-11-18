@@ -17,6 +17,8 @@ pub enum Action {
     Equip,
     Meditate,
     Safe,
+    Hide,
+    Steal,
     Inventory,
     Spells,
     Character,
@@ -30,7 +32,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 21] = [
+    pub const ALL: [Action; 23] = [
         Action::MoveUp,
         Action::MoveDown,
         Action::MoveLeft,
@@ -42,6 +44,8 @@ impl Action {
         Action::Equip,
         Action::Meditate,
         Action::Safe,
+        Action::Hide,
+        Action::Steal,
         Action::Inventory,
         Action::Spells,
         Action::Character,
@@ -67,6 +71,8 @@ impl Action {
             Action::Equip => "equip",
             Action::Meditate => "meditate",
             Action::Safe => "safe",
+            Action::Hide => "hide",
+            Action::Steal => "steal",
             Action::Inventory => "inventory",
             Action::Spells => "spells",
             Action::Character => "character",
@@ -93,6 +99,8 @@ impl Action {
             Action::Equip => "Equipar objeto",
             Action::Meditate => "Meditar",
             Action::Safe => "Seguro",
+            Action::Hide => "Ocultarse",
+            Action::Steal => "Robar (y clic)",
             Action::Inventory => "Inventario",
             Action::Spells => "Hechizos",
             Action::Character => "Personaje",
@@ -139,6 +147,8 @@ impl KeyBinds {
             (Equip, "E"),
             (Meditate, "F6"),
             (Safe, "S"),
+            (Hide, "B"),
+            (Steal, "J"),
             (Inventory, "I"),
             (Spells, "H"),
             (Character, "C"),

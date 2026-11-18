@@ -13,6 +13,9 @@ pub struct Balance {
     /// `/regresar` destination (TSAO: Tanaris 54,36). None = the command is off.
     #[serde(default)]
     pub home: Option<(u16, i32, i32)>,
+    /// Lowest level allowed to sail (TSAO 30).
+    #[serde(default)]
+    pub boat_min_level: u32,
     pub start_map: u16,
     pub start_x: i32,
     pub start_y: i32,
@@ -41,6 +44,7 @@ impl Default for Balance {
             start_skills: 0,
             newbie_max_level: 12,
             home: None,
+            boat_min_level: 0,
             start_map: 1,
             start_x: 50,
             start_y: 50,

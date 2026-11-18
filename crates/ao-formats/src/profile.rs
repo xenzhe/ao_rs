@@ -29,6 +29,12 @@ pub struct Profile {
     /// `[Combat] Rules=tsao`: Tierras Sagradas hit, evasion and spell formulas plus its PvP
     /// balance (`Dat/pvp_balance.dat`).
     pub tsao_combat: bool,
+    /// `[Walk] Bounds=minx,maxx,miny,maxy`: walkable border (None = the engine's).
+    pub walk_bounds: Option<(i32, i32, i32, i32)>,
+    /// `[Sounds]`: the engine's fixed sound ids for this resource set (None = engine's).
+    pub sounds: HashMap<String, u16>,
+    /// `[Fx]`: the engine's fixed FX ids for this resource set (`levelup`, `ritual`).
+    pub fx: HashMap<String, u16>,
 }
 
 /// AO20 `HayAgua` layer-1 ranges.
@@ -36,7 +42,7 @@ const AO20_WATER: [(u32, u32); 9] = [(1505, 1520), (124, 139), (24223, 24238), (
 
 impl Default for Profile {
     fn default() -> Self {
-        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false }
+        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new() }
     }
 }
 
@@ -67,6 +73,18 @@ impl Profile {
                 p.water = ranges(v);
             }
             p.water_needs_empty_layer2 = w.get("emptylayer2").is_some_and(|v| v.trim() == "1");
+        }
+        if let Some(v) = ini.section("walk").and_then(|w| w.get("bounds")) {
+            let n: Vec<i32> = v.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+            if let [a, b, c, d] = n[..] {
+                p.walk_bounds = Some((a, b, c, d));
+            }
+        }
+        if let Some(s) = ini.section("sounds") {
+            p.sounds = s.iter().filter_map(|(k, v)| Some((k.clone(), v.trim().parse().ok()?))).collect();
+        }
+        if let Some(s) = ini.section("fx") {
+            p.fx = s.iter().filter_map(|(k, v)| Some((k.clone(), v.trim().parse().ok()?))).collect();
         }
         p.tsao_combat = ini.section("combat").and_then(|c| c.get("rules")).is_some_and(|v| v.trim().eq_ignore_ascii_case("tsao"));
         if let Some(v) = ini.section("meditate").and_then(|m| m.get("fxbylevel")) {

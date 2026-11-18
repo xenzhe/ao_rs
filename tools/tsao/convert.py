@@ -430,7 +430,13 @@ def main(src, dst):
     prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", "",
                                                                                                                             # TCP_HandleData2.bas /MEDITAR: FXMEDITARCHICO 4 (<15), MEDIANO 5 (<30), GRANDE 6 (<50), XGRANDE 43 (<60), CIUDA 44.
                                                                                                                             "[Meditate]", "FxByLevel=15:4,30:5,50:6,60:43,255:44", "",
-                                                                                                                            "[Combat]", "Rules=tsao", ""]
+                                                                                                                            "[Combat]", "Rules=tsao", "",
+            # 0.11.5 window 17x13: MinXBorder 9, MaxXBorder 92, MinYBorder 7, MaxYBorder 94 (map exits are there).
+            "[Walk]", "Bounds=9,92,7,94", "",
+            # DoPasosFx: always 23/24 (50 sailing); no meditation sound.
+            "[Sounds]", "StepsSimple=1", "Meditate=0", "",
+            # CheckUserLevel CFF 58; the big meditation (FXMEDITARGRANDE 6) for the creation scene.
+            "[Fx]", "LevelUp=58", "Ritual=6", ""]
     open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",

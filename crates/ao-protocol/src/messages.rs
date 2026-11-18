@@ -99,6 +99,7 @@ pub enum C2S {
     Travel(crate::p4::TravelC2S),
     Mail(crate::p4::MailC2S),
     Surgeon(crate::p4::SurgeonC2S),
+    Skill(crate::p4::SkillC2S),
 }
 
 /// Server -> client.
@@ -202,6 +203,8 @@ pub mod status {
     pub const IMMOBILIZED: u32 = 1 << 6;
     pub const BLIND: u32 = 1 << 7;
     pub const DUMB: u32 = 1 << 8;
+    /// On a boat: moves on water only.
+    pub const SAILING: u32 = 1 << 9;
 }
 
 /// Console message category; the client picks the colour.

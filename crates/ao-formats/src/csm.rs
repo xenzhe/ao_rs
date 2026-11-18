@@ -74,6 +74,8 @@ pub struct AoMap {
     /// AO20 maps use per-building ids (20-59) that the old client constant (>= 60) misses;
     /// a trigger counts when most of its tiles are under a layer-5 roof.
     pub roof_triggers: Vec<u16>,
+    /// Walkable border of its resource set (`init/profile.ini [Walk]`; None = AO20).
+    pub walk_bounds: Option<(i32, i32, i32, i32)>,
 }
 
 /// Triggers whose tiles are mostly (≥ 60 %, at least 4) under a layer-5 roof.
@@ -194,6 +196,7 @@ impl AoMap {
         let mut m = Self::parse(number, &data)?;
         // Which floors are water depends on the resource set (init/profile.ini).
         let p = crate::profile::for_recursos(root);
+        m.walk_bounds = p.walk_bounds;
         for i in 0..m.blocked.len() {
             m.blocked[i] &= !FLAG_WATER;
             if p.is_water(m.layers[0][i], m.layers[1][i]) {
@@ -267,6 +270,7 @@ impl AoMap {
             exit_at: vec![-1; n],
             trailing: 0,
             roof_triggers: Vec::new(),
+            walk_bounds: None,
         };
         for l in map.layers.iter_mut() {
             *l = vec![0; n];

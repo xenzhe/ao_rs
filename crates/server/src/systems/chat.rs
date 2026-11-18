@@ -148,6 +148,7 @@ impl World {
         }
         let (name, map) = (p.name.clone(), p.map);
         self.broadcast(map, &S2C::Console { text: format!("{name}: {clean}"), color: Tone::Chat }, None);
+        self.reveal(id);
     }
 
     /// Player commands of TSAO. Returns true if the line was one.
@@ -172,6 +173,10 @@ impl World {
                     self.teleport(id, home.0, home.1, home.2);
                     self.console(id, "Has regresado a tu ciudad.", Tone::Info);
                 }
+                true
+            }
+            "/desenterrar" => {
+                self.on_skill(id, ao_protocol::p4::skill::SkillC2S::Dig);
                 true
             }
             "/online" => {

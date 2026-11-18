@@ -575,12 +575,22 @@ pub enum Cue {
 /// Turns the raw messages `Game::poll` returned (already applied to the state) into
 /// cues. Steps of other characters come from `Moved`; the own character is predicted
 /// locally, so its steps are detected by watching its tile change.
-#[derive(Default)]
 pub struct FxCues {
     my_tile: Option<(i32, i32)>,
     foot: bool,
     /// fx id -> wav of the first Hechizos.dat spell with that FX (spell sounds).
     pub fx_wav: HashMap<u16, u16>,
+    /// Resource profile `[Sounds] StepsSimple=1`: always the two plain steps (TSAO
+    /// `DoPasosFx`), boat 50 when sailing.
+    pub simple_steps: bool,
+    /// Sound of the meditation FX (`[Sounds] Meditate`, 0 = none; AO20 158).
+    pub meditate_sound: u16,
+}
+
+impl Default for FxCues {
+    fn default() -> Self {
+        FxCues { my_tile: None, foot: false, fx_wav: HashMap::new(), simple_steps: false, meditate_sound: SND_MEDITATE }
+    }
 }
 
 impl FxCues {
@@ -593,11 +603,18 @@ impl FxCues {
                 }
             }
         }
-        FxCues { fx_wav, ..Default::default() }
+        let prof = ao_formats::profile::for_recursos(recursos);
+        let simple_steps = prof.sounds.get("stepssimple").is_some_and(|v| *v == 1);
+        let meditate_sound = prof.sounds.get("meditate").copied().unwrap_or(SND_MEDITATE);
+        FxCues { fx_wav, simple_steps, meditate_sound, ..Default::default() }
     }
 
     fn terrain_step(&mut self, game: &Game, x: i32, y: i32, files: &dyn Fn(u32) -> u32) -> u16 {
         self.foot = !self.foot;
+        if self.simple_steps {
+            let sailing = game.ents.values().any(|e| e.x == x && e.y == y && e.status & ao_protocol::status::SAILING != 0);
+            return if sailing { SND_SAILING } else if self.foot { 23 } else { 24 };
+        }
         let (l1, l2) = game.map.as_ref().filter(|_| ao_formats::csm::on_map(x, y)).map(|m| (m.layers[0][ao_formats::csm::tile(x, y)], m.layers[1][ao_formats::csm::tile(x, y)])).unwrap_or((0, 0));
         step_sound(if l1 > 0 { files(l1) } else { 0 }, l2, self.foot)
     }
@@ -613,8 +630,8 @@ impl FxCues {
                     if *fx > 0 {
                         if let Some(w) = self.fx_wav.get(fx) {
                             out.push(Cue::Sound { id: *w, at });
-                        } else if *loops == FX_FOREVER {
-                            out.push(Cue::Sound { id: SND_MEDITATE, at });
+                        } else if *loops == FX_FOREVER && self.meditate_sound > 0 {
+                            out.push(Cue::Sound { id: self.meditate_sound, at });
                         }
                     }
                 }

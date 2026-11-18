@@ -72,6 +72,11 @@ const NPC_ID: u32 = ACTOR_BASE + 1000;
 /// Meditation (intro + loop) shown around the new character when it is forged.
 const RITUAL_FX: u16 = 122;
 
+/// The ritual FX of this resource set (`init/profile.ini [Fx] Ritual`).
+fn ritual_fx(root: &std::path::Path) -> u16 {
+    ao_formats::profile::for_recursos(root).fx.get("ritual").copied().unwrap_or(RITUAL_FX)
+}
+
 /// Hours of the scenes.
 const HOUR_LOGIN: f32 = 19.9;
 const HOUR_CAMP: f32 = 21.2;
@@ -729,7 +734,7 @@ fn stage_camp(st: &mut AccountUi, game: &Game, assets: &Assets, renderer: &mut R
                 }
                 st.scene.burst(renderer, tile_feet(HERO.0, HERO.1) - vec2(0.0, 16.0));
                 // The forging aura goes with it (the hero actor leaves this frame).
-                st.scene.play_fx(renderer, assets, id, RITUAL_FX, 2);
+                st.scene.play_fx(renderer, assets, id, ritual_fx(&assets.root), 2);
             }
         }
     }
@@ -1452,7 +1457,7 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
         // The ritual: light and the meditation aura, then the request (purely visual: the
         // request leaves at once, the flash and the aura just accompany it).
         st.forging = Some(get_time());
-        st.scene.play_fx(renderer, assets, HERO_ID, RITUAL_FX, FX_FOREVER);
+        st.scene.play_fx(renderer, assets, HERO_ID, ritual_fx(&assets.root), FX_FOREVER);
         st.scene.burst(renderer, tile_feet(HERO.0, HERO.1) - vec2(0.0, 16.0));
         let f = &st.form;
         let head = f.heads.get(f.head_i).copied().unwrap_or(1);

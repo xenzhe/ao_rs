@@ -20,13 +20,13 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 
 | Sistema | Estado | Notas |
 |---|---|---|
-| Mapas, salidas, zonas seguras (Pk), agua | ✅ | Arreglado `Pk` invertido |
+| Mapas, salidas, zonas seguras (Pk), agua | ✅ | Bordes 0.11.5 (9-92 / 7-94) para cruzar de mapa; agua y recortes corregidos |
 | Viajero entre ciudades | ✅ | |
 | **/REGRESAR (volver a la ciudad)** | ✅ | Esta tanda |
-| Navegar (barcas, galeras) | ❌ | Bloquea mapas de agua |
+| Navegar (barcas, galeras) | ✅ | Nivel 30; desembarcar solo junto a tierra |
 | Monturas (/MONTAR) | ❌ | |
 | Casas (`Casas.dat`, NPC Propiedades) | ❌ | |
-| Tesoros (/DESENTERRAR, `Tesoros.dat`) | ❌ | |
+| Tesoros (/DESENTERRAR, `Tesoros.dat`) | ✅ | Leer el mapa del tesoro, cavar 30 s |
 | Mundo continuo entre mapas | 🟡 | TSAO no trae la rejilla de mapas vecinos |
 
 ## 3. Combate y magia
@@ -37,10 +37,10 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Balance PvP por clase y clase contra clase | ✅ | |
 | Hechizos (daño x3.1, bastones, defensa mágica) | ✅ | |
 | Hechizos exclusivos de clase | ✅ | |
-| Robar (/UK Robar) | ❌ | |
-| Ocultarse | ❌ | |
+| Robar (/UK Robar) | ✅ | Tecla J y clic |
+| Ocultarse | ✅ | Tecla B |
 | Apuñalar / críticos | 🟡 | Versión AO20 |
-| Mascotas e invocaciones (Invokar.dat, /QUITARMASCOTA, entrenador) | ❌ | |
+| Mascotas e invocaciones (Invokar.dat, /QUITARMASCOTA, entrenador) | ❌ | Siguiente: necesitan IA de mascota |
 | Golpe crítico mágico contra criaturas | ❌ | |
 | Objetos especiales por número (matadragones, túnicas, anillos) | ❌ | Pasarlos a datos |
 
@@ -117,3 +117,7 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 4. **Social TSAO**: ciudadanía, nobleza, dioses, parejas, ranking, votaciones, emoticonos.
 5. **Eventos**: castillos, CVC, desafíos por arena, torneos automáticos, captura la bandera, juegos del hambre, misiones diarias.
 6. **Mundo**: casas, monturas, bots.
+
+## Revisión automática
+
+`cargo run -p ao-formats --example world_audit` recorre todos los mapas y datos: salidas alcanzables, gráficos que existen y caben en su imagen, NPCs con gráfico, sonidos del motor. Quedan 73 gráficos que ni el índice de TSAO tiene y 7 salidas en x=8 del mapa 179 (rotas también en el original).

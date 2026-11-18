@@ -77,6 +77,8 @@ pub struct World {
     pub quest_last_victim: HashMap<u32, String>,
     /// Clan vaults loaded on first use (guild id -> vault).
     pub clan_vaults: HashMap<i64, bank::ClanVault>,
+    /// The world treasure (TSAO modTesoros).
+    pub treasure: crate::systems::thief::Treasure,
     pub cfg: ServerConfig,
     pub data: GameData,
     pub recursos: PathBuf,
@@ -121,6 +123,7 @@ impl World {
         World {
             quest_last_victim: HashMap::new(),
             clan_vaults: HashMap::new(),
+            treasure: Default::default(),
             db,
             ao,
             cfg: config,
@@ -318,6 +321,7 @@ impl World {
         self.tick_gm(now);
         self.tick_event(now);
         self.tick_magic(now);
+        self.tick_thief(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);
             self.regen();

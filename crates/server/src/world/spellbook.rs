@@ -74,6 +74,13 @@ pub struct StatusEffects {
     /// `Counters.TiempoDeInmunidadParalisisNoMagicas`.
     pub paralysis_immune_until: Option<GameTime>,
     pub eots: Vec<ActiveEot>,
+    /// TSAO `flags.Oculto` and when it is checked again (`DoPermanecerOculto`, 3 s).
+    pub hidden: bool,
+    pub hidden_check: GameTime,
+    /// TSAO `flags.Navegando`: the boat object in use.
+    pub sailing: Option<u16>,
+    /// Next steal / hide attempt allowed (TSAO `PuedoTrabajar`).
+    pub skill_ready: GameTime,
     /// Last flags broadcast with `S2C::Status` (to send only changes).
     pub sent_flags: u32,
     /// Map those flags were sent to.

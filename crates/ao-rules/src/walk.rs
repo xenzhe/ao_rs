@@ -8,23 +8,39 @@ pub const MAX_X: i32 = 89;
 pub const MIN_Y: i32 = 10;
 pub const MAX_Y: i32 = 91;
 
+/// Inside the AO20 border (spawns, random positions).
 pub fn in_bounds(x: i32, y: i32) -> bool {
     (MIN_X..=MAX_X).contains(&x) && (MIN_Y..=MAX_Y).contains(&y)
+}
+
+/// Inside the walkable border of this map: its resource set's (`AoMap::walk_bounds`; TSAO
+/// 0.11.5 had a smaller window, 9..92 x 7..94, and puts its map exits there).
+pub fn in_map_bounds(map: &AoMap, x: i32, y: i32) -> bool {
+    let (x0, x1, y0, y1) = map.walk_bounds.unwrap_or((MIN_X, MAX_X, MIN_Y, MAX_Y));
+    (x0..=x1).contains(&x) && (y0..=y1).contains(&y)
 }
 
 /// Inside the border, not water, and the destination tile is not blocked on the side we
 /// enter from. Occupancy by other characters is checked by the caller.
 pub fn can_enter(map: &AoMap, x: i32, y: i32, dir: Dir) -> bool {
-    if !in_bounds(x, y) {
+    if !in_map_bounds(map, x, y) {
         return false;
     }
     let b = map.blocked(x, y);
     b & FLAG_WATER == 0 && b & dir.block_bit() == 0
 }
 
+/// `LegalPos(..., PuedeAgua)`: a boat only moves on water, a walker only on land.
+pub fn can_enter_as(map: &AoMap, x: i32, y: i32, dir: Dir, sailing: bool) -> bool {
+    if !sailing {
+        return can_enter(map, x, y, dir);
+    }
+    in_map_bounds(map, x, y) && map.blocked(x, y) & FLAG_WATER != 0 && map.blocked(x, y) & dir.block_bit() == 0
+}
+
 /// A tile a character can be placed on (spawns, respawns, teleports).
 pub fn standable(map: &AoMap, x: i32, y: i32) -> bool {
-    in_bounds(x, y) && map.blocked(x, y) & (FLAG_WATER | BLOCK_ALL) == 0 && map.exit(x, y).is_none()
+    in_map_bounds(map, x, y) && map.blocked(x, y) & (FLAG_WATER | BLOCK_ALL) == 0 && map.exit(x, y).is_none()
 }
 
 /// Fully blocked tiles (walls, trees, rocks) block line of sight; water does not.

@@ -545,6 +545,8 @@ impl World {
         }
         let free = items::consumable_free_map(self.player(id).unwrap().map);
         match o.obj_type {
+            ObjType::Ships => self.use_boat(id, slot, self.data.balance.boat_min_level),
+            _ if o.tsao_type == 38 => self.read_treasure_map(id),
             ObjType::Chest if o.chest_kind > 0 => self.open_chest(id, slot, o.chest_kind as u32, o.chest_key),
             ObjType::UseOnce => {
                 let s = &mut self.player_mut(id).stats;

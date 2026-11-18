@@ -40,7 +40,8 @@ impl World {
 
         let (dx, dy) = dir.delta();
         let (nx, ny) = (x + dx, y + dy);
-        let legal = walk::can_enter(&self.instance(map).map, nx, ny, dir) && !self.occupied(map, nx, ny);
+        let sailing = self.player(id).is_some_and(|p| p.status.sailing.is_some());
+        let legal = walk::can_enter_as(&self.instance(map).map, nx, ny, dir, sailing) && !self.occupied(map, nx, ny);
         if !legal {
             // Not a cheat by itself: prediction can race with someone moving in.
             self.player_mut(id).dir = dir;
@@ -54,6 +55,7 @@ impl World {
         p.y = ny;
         p.dir = dir;
         self.broadcast(map, &S2C::Moved { id, x: nx, y: ny, dir }, Some(id));
+        self.thief_on_move(id);
         if let Some(exit) = self.instance(map).map.exit(nx, ny) {
             self.teleport(id, exit.map, exit.dest_x, exit.dest_y);
         }
