@@ -1233,6 +1233,8 @@ fn portrait_cluster(ui: &mut Ui, game: &mut Game, assets: &mut Assets, v: &Vital
         text(label, b.x + 20.0 * u, b.y + 15.0 * u, size, mix(col, WHITE, 0.45));
         bx += w + 5.0 * u;
     }
+    // Phase 7: buffs, debuffs and cooldowns above the badges (ui/buffs.rs).
+    super::buffs::draw(game, assets, c.x - r, by - 4.0 * u, u, tip);
 }
 
 // ---------------------------------------------------------------------------------------

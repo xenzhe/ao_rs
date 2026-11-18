@@ -10,6 +10,9 @@ mod progression;
 mod combat;
 mod magic;
 pub(crate) mod eot;
+mod eot_extra;
+mod magic_extra;
+mod npc_guard;
 mod movement;
 mod npc_ai;
 mod npc_tactics;
@@ -94,6 +97,7 @@ impl World {
             C2S::Surgeon(m) => self.on_surgeon(id, m),
             C2S::Tsao(m) => self.on_tsao(id, m),
             C2S::Skill(m) => self.on_skill(id, m),
+            C2S::UseItemAt { slot, tx, ty } => self.on_use_item_at(id, slot, tx, ty),
         }
     }
 }

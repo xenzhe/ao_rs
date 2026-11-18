@@ -43,6 +43,8 @@ pub struct Local {
     pub thunders: u32,
     /// P4: work, crafting, GM, events.
     pub p4: crate::p4::P4,
+    /// Phase 7: active buffs, debuffs and cooldowns.
+    pub buffs: crate::buffs::Buffs,
 }
 
 #[derive(Debug, Default)]
@@ -109,6 +111,7 @@ impl Local {
             S2C::BankClosed => self.bank = None,
             S2C::Weather { fog, precipitation } => self.weather = (*fog, *precipitation),
             S2C::Thunder => self.thunders += 1,
+            S2C::Buff { icon, uid, remaining_ms, total_ms, kind, stacks } => self.buffs.apply(*icon, *uid, *remaining_ms, *total_ms, *kind, *stacks),
             _ => return self.social.apply(msg) || self.p4.apply(msg),
         }
         true

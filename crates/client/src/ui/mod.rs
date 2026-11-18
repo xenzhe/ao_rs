@@ -12,6 +12,7 @@ pub mod login;
 // HUD pieces
 pub mod console;
 pub mod hud;
+pub mod buffs;
 // Windows
 pub mod inventory;
 pub mod bank;

@@ -154,6 +154,46 @@ reiniciar; el cliente no mueve al azar a un jugador estúpido (solo lo marca); s
   mensaje de buffs en el protocolo; `PROTOCOL_VERSION` sigue en 16).
 
 ## Velocidad, monturas, fogatas, cartas y aspectos (18/11)
+## Fase 7 hecha (18/11): magia e IA restantes
+
+`PROTOCOL_VERSION` 19 (`S2C::Buff`, `C2S::UseItemAt`).
+
+- **Efectos en el tiempo nuevos** (`systems/eot_extra.rs`): provocar (3, Provocar 246: área
+  de 20, la criatura persigue al que provoca, el jugador provocado pega -90 % a cualquier
+  otro), trampas (5: objetos 3783/3784/3789, máximo 3, cae la más vieja, solo criaturas que
+  el dueño puede atacar, se activan al pisarlas o al ser empujadas), borracho (6: vino y
+  cerveza apilan, desde 5 copas estupidez hasta bajar a 3), empujar (7, Flecha Cargada 248),
+  atraer (11, portado pero sin datos oficiales: probado con una definición de test),
+  explosión retardada (12: Cañonazo 256 de criaturas y cañón de bolsillo 3808/3815),
+  desequipar (13 + `DesequiparObjetoDeUnGolpe`: bandido y ladrón, por la parte del cuerpo;
+  interruptor `bandit_unequip_bonus`, encendido como en AO20, bloquea el hueco 8 s y sube la
+  probabilidad del bandido de 0,15 a 0,2 por skill).
+- **Barra de buffs**: `S2C::Buff` (= `WriteSendSkillCdUpdate`) para todos los efectos del
+  jugador, también los de la fase 4, y el enfriamiento de hechizos con `CdEffectId`. HUD:
+  `client/src/ui/buffs.rs`, iconos de `init/Effects.ini`, anillo dorado/rojo/apagado,
+  barrido del tiempo, segundos, pilas y tooltip. Captura invisible hecha.
+- **Magia** (`systems/magic_extra.rs`): `HandlePhysicalSkill` (flecha de empuje y cañón),
+  `RequireWeaponType` en `PuedeLanzar`, materializar (44, 45), `HechizoTerrenoEstado`,
+  `MultiShot` (Danza de Flechas 250, 5 flechas en abanico con -0,7 de daño), `HandlePetSpell`
+  (Mejorar Ataque de Mascotas 273), aturdimiento por munición (`StunNPc`/`StunPlayer`).
+- **IA** (`systems/npc_guard.rs`): `TryGuardAttackHostileNpc` y `GuardiaPersigueNpc`; el apoyo
+  de criaturas a jugadores usa `FactionCanHelpFaction` (`ao_rules::faction::faction_can_help`).
+- **ElementalTags**: arma contra criatura en cuerpo a cuerpo y hechizos (daño y curación,
+  como el VB), detrás de `elemental_tags` (apagado, como el `feature_toggle.ini` oficial).
+- **Bugs del VB corregidos**: `TranslationInmune` no funcionaba (`SetBaseDot` borraba la
+  marca); el provocado podía quedar con -90 % si fallaba el golpe; nuestro: la parte del
+  cuerpo re-tirada en PvP se descartaba.
+- **Datos que no hacen nada en AO20 (igual aquí)**: `Mimetiza` (Mimetizar, campo leído y sin
+  uso), hechizos `Tipo=12/13` (Detectar Invisibilidad, Orbe de Luz), munición de aturdir
+  (ninguna flecha oficial tiene `Porcentaje`).
+- **Falta**: comportamientos BG (1 criatura cada uno), invasiones y rutas entre mapas (0
+  criaturas oficiales con `Invasion`), `AI_NpcAtacaNpc`, criatura contra criatura con el
+  cañón; las trampas no se dibujan en el cliente (falta el mensaje `eUpdateTrap`); el cañón
+  de mano tira `MinHIT..MaxHIT` del objeto en vez de `GetUserDamageWithItem`; el arpón y la
+  reliquia de resurrección; encantamientos elementales por objeto del inventario; la
+  velocidad (otra sesión).
+
+## Hallazgo importante: datos del servidor desfasados
 
 - **Velocidad** (`ActualizarVelocidadDeUsuario`): normal x1, fantasmas x1,4, barcos y monturas
   por su `Velocidad` (montura x nivel de jinete 1,05-1,45), armadura con `Velocidad` propia y los

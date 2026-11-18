@@ -144,6 +144,7 @@ fn work_click(game: &mut Game, lay: &Layout, assets: &crate::assets::Assets) {
             game.plan_work(tool, tx, ty)
         }
         Targeting::Smelt { slot } => game.plan_smelt(slot, tx, ty),
+        Targeting::UseOn { slot } => Ok(ao_protocol::C2S::UseItemAt { slot, tx, ty }),
     };
     match plan {
         Ok(m) => game.send(&m),

@@ -460,6 +460,8 @@ impl World {
                 self.maps.get_mut(&map).unwrap().add_npc(nid, c);
                 self.broadcast(map, &msg, None);
             }
+            // Phase 7: an effect over time on oneself (AddOrResetEffect), for the buff bar.
+            ("/efecto", [e]) if *e > 0 => self.add_or_reset_effect(id, *e),
             ("/skill" | "/atributo" | "/clase" | "/aprender" | "/criatura", _) => self.console(id, "Uso: /skill id valor, /atributo i valor, /clase n, /aprender hechizo, /criatura npc [dx dy].", Tone::Warn),
             _ => return false,
         }

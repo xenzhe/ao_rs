@@ -84,6 +84,18 @@ pub struct ActiveEot {
     /// `MultipleAttacks`: extra blows still to throw and when the next one goes.
     pub pending_blows: u8,
     pub blow_at: GameTime,
+    /// `DrunkEffect.StackCount`.
+    pub stacks: u16,
+    /// Traps and delayed blasts: the tile they sit on (`clsTrap.mWorldPosition`).
+    pub tile: Option<(u16, i32, i32)>,
+    /// `DelayedBlast.SourceObjIndex` (0 = a creature's cannon).
+    pub obj: u16,
+    /// `TranslationEffect`: start tile, unit direction and steps taken.
+    pub start: (i32, i32),
+    pub dir: (f64, f64),
+    pub step: u32,
+    /// `UnequipItem.mUnequipedslotMask`.
+    pub slot_mask: u8,
 }
 
 /// A player turned into a creature by `TransformEffect` (Forma de Lobo / Oso...).
@@ -119,6 +131,10 @@ pub struct StatusEffects {
     pub dumb_until: Option<GameTime>,
     /// `Counters.TiempoDeInmunidadParalisisNoMagicas`.
     pub paralysis_immune_until: Option<GameTime>,
+    /// `Counters.StunEndTime` (`StunPlayer`): no walking until then.
+    pub stun_until: Option<GameTime>,
+    /// `MultiShot` in progress: every arrow carries `-MultiShotReduction` damage.
+    pub multishot: bool,
     pub eots: Vec<ActiveEot>,
     /// Active `TransformEffect` (systems/eot.rs).
     pub transform: Option<Transform>,

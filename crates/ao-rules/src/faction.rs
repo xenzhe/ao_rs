@@ -16,6 +16,28 @@ pub const COUNCIL_CHAOS: u8 = 4;
 /// Consejo de Banderbill (royal leaders).
 pub const COUNCIL_ROYAL: u8 = 5;
 
+/// `GameLogic.FactionCanHelpFaction`: citizens, Armada and Consejo help neither the chaos
+/// side nor criminals; Caos and Concilio do not help the royal side; criminals help anyone.
+pub fn faction_can_help(source: u8, target: u8) -> bool {
+    match source {
+        CITIZEN | ROYAL | COUNCIL_ROYAL => !matches!(target, CHAOS | COUNCIL_CHAOS | CRIMINAL),
+        CHAOS | COUNCIL_CHAOS => !matches!(target, ROYAL | COUNCIL_ROYAL | CITIZEN),
+        _ => true,
+    }
+}
+
+#[cfg(test)]
+mod help_tests {
+    use super::*;
+
+    #[test]
+    fn who_helps_whom() {
+        assert!(faction_can_help(CITIZEN, ROYAL) && !faction_can_help(CITIZEN, CRIMINAL) && !faction_can_help(ROYAL, CHAOS));
+        assert!(faction_can_help(CHAOS, CRIMINAL) && !faction_can_help(CHAOS, CITIZEN));
+        assert!(faction_can_help(CRIMINAL, CITIZEN) && faction_can_help(CRIMINAL, CHAOS));
+    }
+}
+
 /// `MAX_FACTION_ENLISTMENTS` (ModFacciones.bas): once enlisted, never again.
 pub const MAX_FACTION_ENLISTMENTS: u32 = 0;
 /// `MAXUSERMATADOS` (Declares.bas).

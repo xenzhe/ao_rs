@@ -133,7 +133,7 @@ impl World {
     }
 
     /// Ammunition equipped, of the weapon's kind and not empty (Protocol.bas checks).
-    fn has_ammo_for(&self, f: &Fighter, weapon: &ObjData) -> bool {
+    pub(crate) fn has_ammo_for(&self, f: &Fighter, weapon: &ObjData) -> bool {
         let Some((_, obj, amount)) = f.ammo else { return false };
         self.obj(Some(obj)).is_some_and(|a| a.obj_type == ObjType::Arrows && a.subtype == weapon.ammo) && amount >= 1
     }
@@ -154,7 +154,7 @@ impl World {
 
     /// `ConsumeAmunition`: one less in the equipped ammunition slot, unequipped when empty.
     /// Touches the inventory piece directly; the inventory system can take it over.
-    fn consume_ammo(&mut self, id: u32) {
+    pub(crate) fn consume_ammo(&mut self, id: u32) {
         let p = self.player_mut(id);
         let Some(slot) = p.inv.equipped.ammo else { return };
         let i = slot as usize - 1;
@@ -190,7 +190,7 @@ impl World {
     }
 
     /// `GetUserDamage`.
-    fn base_damage(&mut self, f: &Fighter, vs: Vs) -> i64 {
+    pub(crate) fn base_damage(&mut self, f: &Fighter, vs: Vs) -> i64 {
         let (lo, hi) = rules::user_hit_range(&f.mods, f.level);
         if f.weapon.is_none() && self.tsao_rules() {
             // TSAO CalcularDaño with bare hands: CInt(MaxHIT / 5).
@@ -263,7 +263,7 @@ impl World {
         self.raise_skill(id, skill);
     }
 
-    fn user_attacks_npc(&mut self, id: u32, map: u16, nid: u32, _ranged: bool) -> bool {
+    pub(crate) fn user_attacks_npc(&mut self, id: u32, map: u16, nid: u32, ranged: bool) -> bool {
         let Some(npc) = self.npc_combat(map, nid) else { return false };
         if !npc.attackable {
             self.console(id, "No podes atacar a este NPC.", Tone::Warn);
@@ -275,7 +275,7 @@ impl World {
         let Some(f) = self.fighter(id) else { return false };
         // EOT modifiers (GetHitBonus, GetEvasionBonus, GetDefenseBonus, GetLinearDamageBonus,
         // GetPhysicalDamageModifier, GetPhysicDamageReduction).
-        let (um, nm) = (self.modifiers(Who::User(id)), self.modifiers(Who::Npc(map, nid)));
+        let (um, nm) = (self.attack_mods(Who::User(id), Who::Npc(map, nid)), self.modifiers(Who::Npc(map, nid)));
         let attack = self.attack_power_of(&f) + um.hit as i64;
         let evasion = npc.evasion_power + nm.evasion as i64;
         let chance = if self.tsao_rules() { ao_rules::tsao_combat::hit_chance(attack, evasion) } else { rules::user_hit_chance(attack, evasion, 0) };
@@ -290,6 +290,7 @@ impl World {
         let npc_def = npc.defense + nm.defense;
         let def = (npc_def - self.armor_penetration(&f, npc_def)).max(0) as i64;
         let mut damage = ao_rules::eot::scale(ao_rules::eot::scale(base - def, um.physical_factor(true)), nm.physical_taken()).max(0);
+        damage = self.elemental_scale(id, map, nid, damage);
         // TSAO UserDañoNpc: pets x1.5, paladin bonus, 2-in-5 critical x2 (profile keys).
         let mut tsao_crit = false;
         if self.tsao_rules() {
@@ -318,7 +319,10 @@ impl World {
         }
         let total = (damage + extra.max(0)) as i32;
         self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 || tsao_crit }, None);
-        self.damage_npc(map, nid, total, id);
+        if !self.damage_npc(map, nid, total, id) && ranged {
+            // UserDañoNpc: stun arrows (Subtipo 2) may stun a creature that survives.
+            self.try_ranged_stun(id, Who::Npc(map, nid));
+        }
         // TargetDidHit: on-hit effects (Filo de Toxina, Desgarro...).
         self.eot_on_hit(id, Who::Npc(map, nid));
         true
@@ -359,7 +363,7 @@ impl World {
     }
 
     /// `UsuarioAtacaUsuario` + `UsuarioImpacto` + `UserDamageToUser`. True if it attacked.
-    fn user_attacks_user(&mut self, a: u32, v: u32, ranged: bool) -> bool {
+    pub(crate) fn user_attacks_user(&mut self, a: u32, v: u32, ranged: bool) -> bool {
         if !self.can_attack_user(a, v) {
             return false;
         }
@@ -372,7 +376,7 @@ impl World {
         let (Some(fa), Some(fv)) = (self.fighter(a), self.fighter(v)) else { return false };
 
         // UsuarioImpacto
-        let (am, vm) = (self.modifiers(Who::User(a)), self.modifiers(Who::User(v)));
+        let (am, vm) = (self.attack_mods(Who::User(a), Who::User(v)), self.modifiers(Who::User(v)));
         let attack = self.attack_power_of(&fa) + am.hit as i64;
         let mut evasion = rules::evasion_power(fv.skill(Skill::Tactics), fv.agility, fv.level, fv.mods.evasion, 0) + vm.evasion as i64;
         let mut block = 0;
@@ -414,7 +418,7 @@ impl World {
         let base = self.base_damage(&fa, Vs::User) + am.linear_bonus(false) as i64;
         // Body part 1..8; past the torso it is re-rolled among legs/arms/torso (only the
         // console text of the original depends on which one).
-        let place = self.roll(1, 8);
+        let mut place = self.roll(1, 8);
         let mut def = 0;
         let obj = |w: &World, o: Option<u16>| w.obj(o).cloned();
         if place == rules::BODY_HEAD {
@@ -423,7 +427,8 @@ impl World {
             }
         } else {
             if place > rules::BODY_TORSO {
-                self.roll(rules::BODY_LEFT_LEG, rules::BODY_TORSO);
+                // The re-rolled part also decides what a disarm takes off (Lugar).
+                place = self.roll(rules::BODY_LEFT_LEG, rules::BODY_TORSO);
             }
             for o in [obj(self, fv.armor), obj(self, fv.shield)].into_iter().flatten() {
                 def += self.roll(o.min_def, o.max_def);
@@ -471,7 +476,14 @@ impl World {
         self.broadcast(map, &S2C::Attack { attacker: a, target: v, hit: true, damage: total, critical: bonus > 0 }, None);
         let victim = self.player(v).unwrap().name.clone();
         self.console(a, format!("Le has pegado a {victim} por {total}."), Tone::Combat);
-        self.hurt_player(v, total, Source::Player(a));
+        // DesequiparObjetoDeUnGolpe (systems/eot_extra.rs), before the damage as in the VB.
+        if !self.tsao_rules() {
+            self.try_disarm(a, v, place);
+        }
+        if !self.hurt_player(v, total, Source::Player(a)) && ranged {
+            // UserDañoEspecial: stun arrows.
+            self.try_ranged_stun(a, Who::User(v));
+        }
         true
     }
 }

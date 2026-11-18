@@ -617,6 +617,7 @@ impl World {
                 s.water = (s.water + o.min_thirst).min(MAX_FOOD);
                 self.remove_from_slot(id, slot, 1);
                 self.send_inventory_vitals(id);
+                self.add_or_reset_effect(id, o.apply_effect_id);
             }
             ObjType::FullBottle => {
                 let s = &mut self.player_mut(id).stats;
@@ -927,7 +928,7 @@ impl World {
         if self.dead(id) {
             return self.console(id, "Estas muerto!! Solo podes usar items cuando estas vivo.", Tone::Combat);
         }
-        if self.player(id).unwrap().inv.get(slot).is_none() {
+        if self.player(id).unwrap().inv.get(slot).is_none() || self.equip_disabled(id, slot) {
             return;
         }
         self.equip(id, slot, false);

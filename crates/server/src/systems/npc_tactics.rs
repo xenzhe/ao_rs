@@ -8,9 +8,9 @@
 //! - `NpcLanzaSpellInmovilizado`: an immobilised caster only casts along the line it faces.
 //!
 //! Not ported: the battleground behaviours (`AI_BG*`), invasions and cross-map routes.
-//! Helping is decided with the creature's alignment against the player (`EsEnemigo`) instead
-//! of `FactionCanHelpFaction`, and creatures help any other wild creature (AO20 limits it
-//! to the same `Team`, which only battleground NPCs set).
+//! Helping a player uses `FactionCanHelpFaction` with the creature's `Faccion` (phase 7);
+//! creatures help any other wild creature (AO20 limits it to the same `Team`, which only
+//! battleground NPCs set).
 use crate::clock::GameTime;
 use crate::world::entities::EntityId;
 use crate::world::World;
@@ -203,7 +203,9 @@ impl World {
                     .find(|pid| {
                         let Some(p) = self.player(*pid) else { return false };
                         let wants = if need == Fx::DO_HEAL { p.hp < p.max_hp } else { !self.can_move(*pid) };
-                        p.hp > 0 && wants && self.in_vision(map, nid, d, *pid) && !self.npc_enemy(map, nid, *pid) && rules::distance(pos, (p.x, p.y)) < range
+                        // CanHelpUser: FactionCanHelpFaction(npc Faccion, user status).
+                        let helps = ao_rules::faction::faction_can_help(d.faction.clamp(0, 255) as u8, self.faction_status(*pid));
+                        p.hp > 0 && wants && self.in_vision(map, nid, d, *pid) && helps && rules::distance(pos, (p.x, p.y)) < range
                     })
                     .map(Cast::User);
             }

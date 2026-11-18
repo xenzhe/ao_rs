@@ -101,6 +101,11 @@ pub enum C2S {
     Surgeon(crate::p4::SurgeonC2S),
     Skill(crate::p4::SkillC2S),
     Tsao(crate::p4::TsaoC2S),
+
+    // Phase 7
+    /// `WorkLeftClick` with `TargetableItem`: an `otUsableOntarget` object (trap, harpoon,
+    /// hand cannon) used on a map tile.
+    UseItemAt { slot: u8, tx: i32, ty: i32 },
 }
 
 /// Server -> client.
@@ -202,6 +207,22 @@ pub enum S2C {
     Mail(crate::p4::MailS2C),
     Surgeon(crate::p4::SurgeonS2C),
     Tsao(crate::p4::TsaoS2C),
+
+    // Phase 7
+    /// `WriteSendSkillCdUpdate`: an active buff, debuff or cooldown of the player.
+    /// `icon` is the `ClientEffectTypeId` (row of `init/Effects.ini`); `uid` tells two of
+    /// the same icon apart (negative = a spell cooldown, `-spell`). `remaining_ms` 0
+    /// removes it. `kind`: see [`buff_kind`].
+    Buff { icon: u16, uid: i32, remaining_ms: u32, total_ms: u32, kind: u8, stacks: u16 },
+}
+
+/// `e_EffectType` of `S2C::Buff::kind`.
+pub mod buff_kind {
+    pub const BUFF: u8 = 1;
+    pub const DEBUFF: u8 = 2;
+    pub const COOLDOWN: u8 = 3;
+    pub const INFO_BUFF: u8 = 4;
+    pub const INFO_DEBUFF: u8 = 5;
 }
 
 /// Bits of `S2C::Status::flags`.

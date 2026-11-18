@@ -30,6 +30,10 @@ pub struct NpcStatus {
     pub paralyzed_until: Option<GameTime>,
     /// Immobilised: fights but cannot step.
     pub immobilized_until: Option<GameTime>,
+    /// `TargetNPC` of a guard hunting a hostile creature (systems/npc_guard.rs).
+    pub target_npc: Option<u32>,
+    /// `Contadores.StunEndTime` (`StunNPc`): neither moves nor attacks.
+    pub stunned_until: Option<GameTime>,
     /// Effects over time on the creature (systems/eot.rs).
     pub eots: Vec<crate::world::spellbook::ActiveEot>,
     /// `pathFindingInfo.OrbitDirection` (+1/-1, 0 = not chosen) and when it is chosen
@@ -60,13 +64,13 @@ impl World {
 
     pub(crate) fn npc_paralyzed(&self, map: u16, nid: u32) -> bool {
         let now = self.now();
-        self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).is_some_and(|n| n.status.paralyzed_until.is_some_and(|t| now < t))
+        self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).is_some_and(|n| [n.status.paralyzed_until, n.status.stunned_until].iter().any(|t| t.is_some_and(|t| now < t)))
     }
 
     /// Paralysed or immobilised: may not take a step.
     pub(crate) fn npc_rooted(&self, map: u16, nid: u32) -> bool {
         let now = self.now();
-        self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).is_some_and(|n| [n.status.paralyzed_until, n.status.immobilized_until].iter().any(|t| t.is_some_and(|t| now < t)))
+        self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).is_some_and(|n| [n.status.paralyzed_until, n.status.immobilized_until, n.status.stunned_until].iter().any(|t| t.is_some_and(|t| now < t)))
     }
 
     /// `HechizoEstadoNPC` (the part with a creature effect): paralyse / immobilise unless the
