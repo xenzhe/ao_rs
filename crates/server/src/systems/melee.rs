@@ -290,6 +290,7 @@ impl World {
         let npc_def = npc.defense + nm.defense;
         let def = (npc_def - self.armor_penetration(&f, npc_def)).max(0) as i64;
         let mut damage = ao_rules::eot::scale(ao_rules::eot::scale(base - def, um.physical_factor(true)), nm.physical_taken()).max(0);
+        damage = self.elemental_scale(id, map, nid, damage);
         // TSAO UserDañoNpc: pets x1.5, paladin bonus, 2-in-5 critical x2 (profile keys).
         let mut tsao_crit = false;
         if self.tsao_rules() {

@@ -111,7 +111,7 @@ impl Local {
             S2C::BankClosed => self.bank = None,
             S2C::Weather { fog, precipitation } => self.weather = (*fog, *precipitation),
             S2C::Thunder => self.thunders += 1,
-            S2C::Buff { icon, uid, remaining_ms, total_ms, kind, stacks } => self.buffs.apply(*icon, *uid, *remaining_ms, *total_ms, *kind, *stacks, std::time::Instant::now()),
+            S2C::Buff { icon, uid, remaining_ms, total_ms, kind, stacks } => self.buffs.apply(*icon, *uid, *remaining_ms, *total_ms, *kind, *stacks),
             _ => return self.social.apply(msg) || self.p4.apply(msg),
         }
         true

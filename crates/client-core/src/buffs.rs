@@ -44,7 +44,8 @@ pub struct Buffs {
 
 impl Buffs {
     /// `AddOrUpdateEffect` / `RemoveEffect`: same icon and uid = the same entry.
-    pub fn apply(&mut self, icon: u16, uid: i32, remaining_ms: u32, total_ms: u32, kind: u8, stacks: u16, now: Instant) {
+    pub fn apply(&mut self, icon: u16, uid: i32, remaining_ms: u32, total_ms: u32, kind: u8, stacks: u16) {
+        let now = Instant::now();
         self.list.retain(|b| !(b.icon == icon && b.uid == uid));
         if remaining_ms > 0 {
             self.list.push(ActiveBuff { icon, uid, ends: now + Duration::from_millis(remaining_ms as u64), total_ms, kind, stacks });
@@ -69,13 +70,13 @@ mod tests {
     fn same_icon_and_uid_replaces_zero_removes_and_time_expires() {
         let now = Instant::now();
         let mut b = Buffs::default();
-        b.apply(4, 7, 10_000, 10_000, buff_kind::BUFF, 0, now);
-        b.apply(4, 8, 5_000, 5_000, buff_kind::DEBUFF, 0, now);
-        b.apply(4, 7, 8_000, 10_000, buff_kind::BUFF, 2, now);
+        b.apply(4, 7, 10_000, 10_000, buff_kind::BUFF, 0);
+        b.apply(4, 8, 5_000, 5_000, buff_kind::DEBUFF, 0);
+        b.apply(4, 7, 8_000, 10_000, buff_kind::BUFF, 2);
         assert_eq!(b.list.len(), 2);
         assert_eq!(b.list.iter().find(|x| x.uid == 7).unwrap().stacks, 2);
         assert!(b.list.iter().find(|x| x.uid == 8).unwrap().is_debuff());
-        b.apply(4, 8, 0, 0, buff_kind::DEBUFF, 0, now);
+        b.apply(4, 8, 0, 0, buff_kind::DEBUFF, 0);
         assert_eq!(b.list.len(), 1);
         b.expire(now + Duration::from_millis(9_000));
         assert!(b.list.is_empty());

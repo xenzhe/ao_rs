@@ -84,6 +84,9 @@ pub struct WorldConfig {
     /// disarmed slot stays locked 8 s (EOT23) and the bandit's chance is 0.2 x skill
     /// instead of 0.15 x skill. The disarm itself happens either way.
     pub bandit_unequip_bonus: bool,
+    /// Feature toggle `elemental_tags` (off in the official feature_toggle.ini): weapon and
+    /// creature `ElementalTags` scale the damage through `[ElementalMatrixForNpcs]`.
+    pub elemental_tags: bool,
     /// Traps: `TrapPlacementRange` and `TrapParaliceDuration` of Configuracion.ini.
     pub trap_placement_range: i32,
     pub trap_paralyze_secs: u64,
@@ -112,7 +115,7 @@ impl Default for SecurityConfig {
 
 impl Default for WorldConfig {
     fn default() -> Self {
-        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120, creature_poison: true, bandit_unequip_bonus: true, trap_placement_range: 6, trap_paralyze_secs: 15 }
+        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120, creature_poison: true, bandit_unequip_bonus: true, elemental_tags: false,trap_placement_range: 6, trap_paralyze_secs: 15 }
     }
 }
 

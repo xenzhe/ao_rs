@@ -88,6 +88,26 @@ fn dist(a: (i32, i32), b: (i32, i32)) -> f64 {
     (((a.0 - b.0).pow(2) + (a.1 - b.1).pow(2)) as f64).sqrt()
 }
 
+/// `CalculateElementalTagsModifiers`: the damage times the matrix cell of every attacker
+/// element against every defender element (bit i = element i + 1).
+pub(crate) fn elemental_factor(attacker: i32, defender: i32, matrix: &[[f32; ao_formats::dat::balance::ELEMENT_TAGS]; ao_formats::dat::balance::ELEMENT_TAGS]) -> f64 {
+    let mut f = 1.0f64;
+    if attacker == 0 || defender == 0 {
+        return f;
+    }
+    for (a, row) in matrix.iter().enumerate() {
+        if attacker & (1 << a) == 0 {
+            continue;
+        }
+        for (d, cell) in row.iter().enumerate() {
+            if defender & (1 << d) != 0 {
+                f *= *cell as f64;
+            }
+        }
+    }
+    f
+}
+
 /// `e_EffectType` sent for an effect (`buffType`, 1..5).
 fn kind_of(def: &EotDef) -> u8 {
     match def.buff_type {
@@ -143,6 +163,18 @@ impl World {
         }
         let (remaining_ms, total_ms) = if on { self.eot_times(e, def) } else { (0, 0) };
         self.send(id, &S2C::Buff { icon, uid: e.uid as i32, remaining_ms, total_ms, kind: kind_of(def), stacks: e.stacks });
+    }
+
+    /// `CalculateElementalTagsModifiers` behind the `elemental_tags` toggle: the player's
+    /// weapon against the creature (`UserDañoNpc`, `HechizoPropNPC`).
+    pub(crate) fn elemental_scale(&self, id: u32, map: u16, nid: u32, dmg: i64) -> i64 {
+        if !self.cfg.world.elemental_tags {
+            return dmg;
+        }
+        let Some(p) = self.player(id) else { return dmg };
+        let weapon = p.inv.equipped.weapon.and_then(|s| p.inv.get(s)).and_then(|i| self.ao.objs.get(i.obj as u32)).map_or(0, |o| o.elemental_tags);
+        let npc = self.maps.get(&map).and_then(|i| i.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32)).map_or(0, |d| d.elemental_tags);
+        (dmg as f64 * elemental_factor(weapon, npc, &self.ao.balance.elemental_matrix)) as i64
     }
 
     // ------------------------------------------------------------ taunt (3, 4)
@@ -893,6 +925,23 @@ mod tests {
         t.w.on_equip_item(2, 1);
         let said: Vec<String> = t.drain(2).into_iter().filter_map(|m| if let S2C::Console { text, .. } = m { Some(text) } else { None }).collect();
         assert!(t.w.player(2).unwrap().inv.equipped.weapon.is_some(), "8 s later it can be equipped: {said:?}");
+    }
+
+    #[test]
+    fn elemental_matrix_multiplies_every_pair() {
+        let mut m = [[1.0f32; 4]; 4];
+        m[0][2] = 2.0;
+        m[1][2] = 0.5;
+        m[0][3] = 3.0;
+        assert_eq!(elemental_factor(0b0001, 0b0100, &m), 2.0);
+        assert_eq!(elemental_factor(0b0011, 0b0100, &m), 1.0, "x2 then x0.5");
+        assert_eq!(elemental_factor(0b0001, 0b1100, &m), 6.0);
+        assert_eq!(elemental_factor(0, 0b0100, &m), 1.0);
+        // Official matrix and toggle: off by default, x matrix when on.
+        let mut t = T::new();
+        t.join(1, 3, 50, 50);
+        t.dummy(900_001, 51, 50);
+        assert_eq!(t.w.elemental_scale(1, MAP, 900_001, 100), 100);
     }
 
     #[test]

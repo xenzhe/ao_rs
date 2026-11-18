@@ -958,6 +958,8 @@ impl World {
             }
             let amount = roll(self, s.hp.min, s.hp.max) as i64;
             let amount = ao_rules::eot::scale(ao_rules::eot::scale(amount, self.modifiers(Who::User(id)).magic_healing_factor()), self.modifiers(Who::Npc(map, nid)).self_healing_factor());
+            // HechizoPropNPC also runs the heal through the elemental matrix.
+            let amount = self.elemental_scale(id, map, nid, amount);
             let amount = (amount as i32).min(max_hp - hp);
             let n = self.maps.get_mut(&map).unwrap().npcs.get_mut(&nid).unwrap();
             n.hp += amount;
@@ -981,7 +983,8 @@ impl World {
                 rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0)
             };
             let _ = name;
-            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken());
+            let dmg = self.elemental_scale(id, map, nid, dmg) as i32;
             self.damage_npc(map, nid, dmg, id);
             return true;
         }
@@ -1051,7 +1054,8 @@ impl World {
         let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32));
         let npc_def = def.map(|d| rules::NpcMagicDefense { magic_resistance: d.magic_resistance, magic_def: d.magic_def, def_m: d.magic_defense_flat }).unwrap_or_default();
         let dmg = rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0);
-        let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
+        let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken());
+            let dmg = self.elemental_scale(id, map, nid, dmg) as i32;
         self.damage_npc(map, nid, dmg.max(0), id);
         true
     }
