@@ -118,6 +118,8 @@ impl World {
         }
         if hit {
             self.hurt_player(pid, damage, Source::Npc(map, nid));
+            // NpcEnvenenarUser.
+            self.npc_poison_on_hit(map, nid, pid);
         } else if !blocked {
             self.console(pid, format!("{} te ataco y fallo.", npc.name), Tone::Combat);
         }
@@ -322,6 +324,10 @@ impl World {
             let number = self.maps[&map].npcs[&nid].def;
             if let Some(why) = self.faction_npc_attack_refusal(attacker, number) {
                 self.console(attacker, why, Tone::Warn);
+                return false;
+            }
+            // UserCanAttackNpc (owner): another citizen's creature (systems/npc_owner.rs).
+            if !self.npc_owner_on_hit(attacker, map, nid) {
                 return false;
             }
             self.faction_on_npc_attacked(attacker, number);

@@ -755,7 +755,10 @@ impl World {
         if n.attacked_by == Some(pid) {
             return true;
         }
-        // `CanAttackNotOwner` (NPC ownership by its first attacker) is P2: anyone may.
+        // CanAttackNotOwner: fighting its owner, only players who could hit it cleanly.
+        if !self.npc_may_attack_not_owner(map, nid, pid) {
+            return false;
+        }
         let status = self.player_faction_status(pid);
         match self.ao.npcs.get(n.def as u32).map_or(0, |d| d.alignment) {
             1 => status % 2 != 1,

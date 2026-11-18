@@ -279,11 +279,9 @@ impl World {
         }
         match (def.kind, who) {
             (EotKind::Transform, Who::User(id)) => self.transform_into(id, def.npc_id),
-            (EotKind::ApplyEffectToParty, Who::User(id)) => {
-                if !self.party_song_pulse(id, def) {
-                    if let Some(i) = self.eot_index(who, uid) {
-                        self.remove_eot_at(who, i);
-                    }
+            (EotKind::ApplyEffectToParty, Who::User(id)) if !self.party_song_pulse(id, def) => {
+                if let Some(i) = self.eot_index(who, uid) {
+                    self.remove_eot_at(who, i);
                 }
             }
             _ => {}
