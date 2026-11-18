@@ -143,7 +143,14 @@ impl World {
             // DoMontar: no weapon or shield on a mount.
             return (p.body, p.head, 0, 0, anim(e.helmet, |o| o.helmet_anim));
         }
-        (p.body, p.head, weapon, anim(e.shield, |o| o.shield_anim), anim(e.helmet, |o| o.helmet_anim))
+        let skin = self.skin_look(id);
+        (
+            skin.body.unwrap_or(p.body),
+            skin.head.unwrap_or(p.head),
+            skin.weapon.unwrap_or(weapon),
+            skin.shield.unwrap_or_else(|| anim(e.shield, |o| o.shield_anim)),
+            skin.helmet.unwrap_or_else(|| anim(e.helmet, |o| o.helmet_anim)),
+        )
     }
 
     /// UserDie -> TirarTodosLosItems + the Desequipar calls after it. Called by combat
@@ -329,6 +336,9 @@ impl World {
         let user = item_user(p);
         if let Err(why) = items::can_use(o, &user) {
             return self.console(id, why.message(), Tone::Info);
+        }
+        if super::skins::skin_kind(o.obj_type).is_some() {
+            return self.toggle_skin(id, slot, logging_in);
         }
         let Some(role) = items::role_of(o.obj_type) else {
             return self.console(id, "Ese objeto no se puede equipar.", Tone::Info);
@@ -626,6 +636,7 @@ impl World {
             ObjType::Keys => self.use_key(id, slot),
             ObjType::Saddles => self.use_saddle(id, slot),
             ObjType::CollectibleCard => self.use_card(id, slot, o),
+            ObjType::SkinsArmours | ObjType::SkinsHelmets | ObjType::SkinsShields | ObjType::SkinsWeapons | ObjType::SkinsBoats | ObjType::SkinsWings | ObjType::SkinsSpells => self.toggle_skin(id, slot, false),
             // The dagger on a pile of wood (UseInvItem otWeapon: TratarDeHacerFogata).
             ObjType::Weapon if item.obj == super::campfire::DAGGER && self.try_make_campfire(id) => {}
             ObjType::EmptyBottle => self.fill_bottle(id, slot, o),

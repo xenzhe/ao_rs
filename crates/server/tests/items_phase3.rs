@@ -138,6 +138,27 @@ fn a_collectible_card_joins_the_collection() {
     b.wait_until("lista", |b| b.console().any(|l| l.starts_with("Colección de cartas:") && l.contains("1/10")));
 }
 
+/// Skins: "Máscara Ying Yang" (obj 1007, helmet skin, Anim=101) changes the helmet drawn
+/// and using it again takes it off.
+#[test]
+fn a_helmet_skin_changes_the_look_and_comes_off() {
+    let s = TestServer::start_at(1, 50, 50);
+    let mut b = s.bot("Enmascarado");
+    let me = b.id();
+    let helmet = |b: &Bot| {
+        b.log().iter().rev().find_map(|m| match m {
+            ao_protocol::S2C::Look { id, helmet, .. } if *id == me => Some(*helmet),
+            _ => None,
+        })
+    };
+    give_and_use(&s, &mut b, 1007);
+    b.wait_until("mascara", |b| helmet(b) == Some(101));
+    s.advance(1000);
+    b.send(&C2S::UseItem { slot: slot_of(&b, 1007).unwrap() });
+    b.wait_until("sin mascara", |b| helmet(b) == Some(0));
+    assert!(slot_of(&b, 1007).is_some(), "a skin is not spent");
+}
+
 #[test]
 fn an_empty_bottle_is_filled_next_to_water_only() {
     // A dry tile with water within two tiles, on the first maps.

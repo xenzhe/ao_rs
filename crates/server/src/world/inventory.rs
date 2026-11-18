@@ -26,11 +26,15 @@ pub struct Equipped {
     pub ring: Option<u8>,
     pub amulet: Option<u8>,
     pub backpack: Option<u8>,
+    /// Worn skins (`systems::skins::skin_kind`): armour, helmet, shield, weapon, boat,
+    /// wings, spells.
+    pub skins: [Option<u8>; 7],
 }
 
 impl Equipped {
-    pub fn all(&self) -> [Option<u8>; 11] {
-        [self.weapon, self.armor, self.shield, self.helmet, self.ammo, self.tool, self.ship, self.saddle, self.ring, self.amulet, self.backpack]
+    pub fn all(&self) -> [Option<u8>; 18] {
+        let s = self.skins;
+        [self.weapon, self.armor, self.shield, self.helmet, self.ammo, self.tool, self.ship, self.saddle, self.ring, self.amulet, self.backpack, s[0], s[1], s[2], s[3], s[4], s[5], s[6]]
     }
 
     pub fn is_equipped(&self, slot: u8) -> bool {
@@ -93,8 +97,16 @@ impl Equipped {
     }
 
     /// Every equipment field, to remap or clear slots (swaps, emptied stacks).
-    pub fn fields_mut(&mut self) -> [&mut Option<u8>; 11] {
+    pub fn fields_mut(&mut self) -> [&mut Option<u8>; 18] {
+        let [s0, s1, s2, s3, s4, s5, s6] = &mut self.skins;
         [
+            s0,
+            s1,
+            s2,
+            s3,
+            s4,
+            s5,
+            s6,
             &mut self.weapon,
             &mut self.armor,
             &mut self.shield,
