@@ -83,7 +83,13 @@ pub fn update(game: &mut Game, renderer: &mut Renderer, lay: &Layout, now: f64, 
                 game.trade_with_tile(tx, ty);
             }
         }
-        if is_mouse_button_pressed(MouseButton::Left) && STEALING.with(|s| s.replace(false)) {
+        // GM: Shift + left click teleports there (TSAO frmMain `/TELEP YO map x y`).
+        let shift = is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift);
+        if shift && is_mouse_button_pressed(MouseButton::Left) && game.local.p4.gm.is_gm() {
+            if let (Some((x, y)), Some(m)) = (tile_under_mouse(game, lay), game.map.as_ref().map(|m| m.number)) {
+                game.send(&ao_protocol::C2S::Gm(ao_protocol::GmC2S::Command { line: format!("/TELEP YO {m} {x} {y}") }));
+            }
+        } else if is_mouse_button_pressed(MouseButton::Left) && STEALING.with(|s| s.replace(false)) {
             if let Some((x, y)) = tile_under_mouse(game, lay) {
                 game.send(&ao_protocol::C2S::Skill(ao_protocol::p4::skill::SkillC2S::Steal { x, y }));
             }

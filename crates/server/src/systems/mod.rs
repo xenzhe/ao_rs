@@ -25,6 +25,7 @@ pub(crate) mod weather;
 mod work;
 mod craft;
 mod gm;
+mod gm_tsao;
 mod event;
 mod travel;
 mod mail;

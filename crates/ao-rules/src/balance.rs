@@ -16,6 +16,12 @@ pub struct Balance {
     /// Lowest level allowed to sail (TSAO 30).
     #[serde(default)]
     pub boat_min_level: u32,
+    /// Jail and where released prisoners go (AO20 Ciudades.dat Prision/Libertad: 66,50,50 /
+    /// 66,48,73; TSAO General.bas: 78,50,50 / 28,50,50).
+    #[serde(default = "default_jail")]
+    pub jail: (u16, i32, i32),
+    #[serde(default = "default_freedom")]
+    pub freedom: (u16, i32, i32),
     pub start_map: u16,
     pub start_x: i32,
     pub start_y: i32,
@@ -34,6 +40,14 @@ pub struct Balance {
     pub player_heads: Vec<u16>,
 }
 
+fn default_jail() -> (u16, i32, i32) {
+    (66, 50, 50)
+}
+
+fn default_freedom() -> (u16, i32, i32) {
+    (66, 48, 73)
+}
+
 fn default_newbie() -> u32 {
     12
 }
@@ -45,6 +59,8 @@ impl Default for Balance {
             newbie_max_level: 12,
             home: None,
             boat_min_level: 0,
+            jail: default_jail(),
+            freedom: default_freedom(),
             start_map: 1,
             start_x: 50,
             start_y: 50,

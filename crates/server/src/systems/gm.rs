@@ -53,7 +53,7 @@
 use crate::clock::GameTime;
 use crate::security::sanitize_chat;
 use crate::world::entities::Npc;
-use crate::world::gm::{Shutdown, FREEDOM, JAIL, MAX_JAIL_MINUTES, MAX_SILENCE_MINUTES, PANEL_LOG_ROWS, SEED_ENV};
+use crate::world::gm::{Shutdown, MAX_JAIL_MINUTES, MAX_SILENCE_MINUTES, PANEL_LOG_ROWS, SEED_ENV};
 use crate::world::inventory::InvItem;
 use crate::world::World;
 use ao_formats::dat::obj::ObjType;
@@ -138,6 +138,17 @@ impl World {
             "/CI" | "/QUITAR" | "/ROL" | "/APAGAR" => GmRank::Admin,
             // `/dar` without `@` is the development command (`/dar obj cant`).
             "/DAR" if rest.contains('@') => GmRank::Admin,
+            "/KILL" | "/HOME" | "/LIBERAR" | "/DEST" | "/GO" | "/SMSG" | "/HORA" | "/IRCERCA" | "/SOBJ" | "/NENE" | "/TRIGGER" | "/BLOQ" | "/LMAP" | "/EXP" | "/GLD" | "/HECHIZO" => {
+                let need = Self::gm_tsao_rank(cmd.as_str()).unwrap();
+                if rank < need {
+                    self.console(id, DENIED, Tone::Warn);
+                    return true;
+                }
+                let me = self.player(id).map(|p| p.name.clone()).unwrap_or_default();
+                info!(gm = %me, %line, "comando de GM");
+                self.gm_tsao(id, &me, cmd.as_str(), rest.trim());
+                return true;
+            }
             _ => return false,
         };
         // Warping someone else needs SemiDios (a Consejero may only move himself).
@@ -250,8 +261,8 @@ impl World {
             self.console(id, format!("Rango: {}. F10 abre el panel de GM.", rank.label()), Tone::Good);
         }
         if jail_ms > 0 {
-            if map != JAIL.0 {
-                self.teleport(id, JAIL.0, JAIL.1, JAIL.2);
+            if map != self.data.balance.jail.0 {
+                self.teleport(id, self.data.balance.jail.0, self.data.balance.jail.1, self.data.balance.jail.2);
             }
             self.console(id, format!("Estás encarcelado. Te quedan {} minutos.", mins(jail_ms)), Tone::Warn);
         }
@@ -409,12 +420,12 @@ impl World {
             }
             let (jail, silence, map) = (p.gm.jail_ms, p.gm.silence_ms, p.map);
             if jail_before > 0 && jail == 0 {
-                self.teleport(pid, FREEDOM.0, FREEDOM.1, FREEDOM.2);
+                self.teleport(pid, self.data.balance.freedom.0, self.data.balance.freedom.1, self.data.balance.freedom.2);
                 self.console(pid, "Has sido liberado.", Tone::Good);
                 self.persist_sentence(pid);
-            } else if jail > 0 && map != JAIL.0 {
+            } else if jail > 0 && map != self.data.balance.jail.0 {
                 // No escaping (/HOGAR, a teleport...): back to the cell.
-                self.teleport(pid, JAIL.0, JAIL.1, JAIL.2);
+                self.teleport(pid, self.data.balance.jail.0, self.data.balance.jail.1, self.data.balance.jail.2);
             }
             if silence_before > 0 && silence == 0 {
                 self.console(pid, "Has sido desilenciado.", Tone::Good);
@@ -601,7 +612,7 @@ impl World {
             self.player_mut(t).gm.jail_ms = 0;
             self.persist_sentence(t);
             if was {
-                self.teleport(t, FREEDOM.0, FREEDOM.1, FREEDOM.2);
+                self.teleport(t, self.data.balance.freedom.0, self.data.balance.freedom.1, self.data.balance.freedom.2);
                 self.console(t, "Has sido liberado.", Tone::Good);
             }
             self.log_gm(me, "liberar", &tn, &reason);
@@ -610,7 +621,7 @@ impl World {
         self.player_mut(t).gm.jail_ms = m * MS_PER_MIN;
         self.persist_sentence(t);
         self.remove_jail_items(t);
-        self.teleport(t, JAIL.0, JAIL.1, JAIL.2);
+        self.teleport(t, self.data.balance.jail.0, self.data.balance.jail.1, self.data.balance.jail.2);
         self.console(t, format!("{me} te ha encarcelado, deberás permanecer en la cárcel {m} minutos."), Tone::Warn);
         self.penalty(&tn, me, "carcel", m as i64, &reason);
         self.log_gm(me, "carcel", &tn, &format!("{m} min: {reason}"));

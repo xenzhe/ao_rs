@@ -1319,6 +1319,15 @@ fn minimap(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, hour
     let (px, py) = me.map(|(x, y)| (x as f32 - 0.5, y as f32 - 0.5)).unwrap_or((n / 2.0, n / 2.0));
     let center = vec2(px.clamp(half, n - half), py.clamp(half, n - half));
     let to = |x: f32, y: f32| c + (vec2(x, y) - center) / MINIMAP_SPAN * 2.0 * r;
+    // GM: right click on the minimap teleports there (TSAO Minimap_Click `/TELEP YO`).
+    let m: Vec2 = mouse_position().into();
+    if m.distance(c) <= r && is_mouse_button_pressed(MouseButton::Right) && game.local.p4.gm.is_gm() {
+        let w = (m - c) / (2.0 * r) * MINIMAP_SPAN + center;
+        if let Some(map) = game.map.as_ref().map(|m| m.number) {
+            let (tx, ty) = ((w.x + 1.0).floor() as i32, (w.y + 1.0).floor() as i32);
+            game.send(&ao_protocol::C2S::Gm(ao_protocol::GmC2S::Command { line: format!("/TELEP YO {map} {tx} {ty}") }));
+        }
+    }
     glow(c + vec2(0.0, 4.0 * u), r * 1.3, Color::new(0.0, 0.0, 0.0, 0.6));
     disc(c, r, Color::new(0.02, 0.02, 0.02, 1.0));
     if let Some(t) = minimap_texture(game, assets) {
