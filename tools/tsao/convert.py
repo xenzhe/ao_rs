@@ -515,7 +515,7 @@ def main(src, dst):
     # Resource-set numbers (ao_formats::profile): General.bas DarCuerpoDesnudo (elves fall
     # in its `Case Else`), Declares.bas iCuerpoMuertoN/iCabezaMuertoN, General.bas HayAgua.
     naked = {(1, 1): 21, (2, 1): 39, (1, 2): 21, (2, 2): 39, (1, 3): 32, (2, 3): 40, (1, 4): 53, (2, 4): 60, (1, 5): 53, (2, 5): 60}
-    prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", "",
+    prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", "", "[Weather]", "FogGrh=0", "",
                                                                                                                             # TCP_HandleData2.bas /MEDITAR: FXMEDITARCHICO 4 (<15), MEDIANO 5 (<30), GRANDE 6 (<50), XGRANDE 43 (<60), CIUDA 44.
                                                                                                                             "[Meditate]", "FxByLevel=15:4,30:5,50:6,60:43,255:44", "",
                                                                                                                             "[Combat]", "Rules=tsao",

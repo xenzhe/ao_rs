@@ -23,6 +23,8 @@ pub struct Profile {
     pub dead_head: u16,
     pub water: Vec<(u32, u32)>,
     pub water_needs_empty_layer2: bool,
+    /// `[Weather] FogGrh=32014`: the fog texture (0 = this resource set has no fog).
+    pub fog_grh: u32,
     /// `[Meditate] FxByLevel=15:4,30:5`: below level 15 FX 4, below 30 FX 5... (empty =
     /// the AO20 table of the engine).
     pub meditate_fx: Vec<(u32, u16)>,
@@ -145,7 +147,7 @@ const AO20_WATER: [(u32, u32); 9] = [(1505, 1520), (124, 139), (24223, 24238), (
 
 impl Default for Profile {
     fn default() -> Self {
-        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new(), creation_races: Vec::new(), creation_classes: Vec::new(), start_hp: None, start_mana: HashMap::new(), scene: None, spell_fx: HashMap::new(), npc_combat: NpcCombatRules::default(), pets: PetRules::default() }
+        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, fog_grh: 32014, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new(), creation_races: Vec::new(), creation_classes: Vec::new(), start_hp: None, start_mana: HashMap::new(), scene: None, spell_fx: HashMap::new(), npc_combat: NpcCombatRules::default(), pets: PetRules::default() }
     }
 }
 
@@ -176,6 +178,9 @@ impl Profile {
                 p.water = ranges(v);
             }
             p.water_needs_empty_layer2 = w.get("emptylayer2").is_some_and(|v| v.trim() == "1");
+        }
+        if let Some(v) = ini.section("weather").and_then(|w| w.get("foggrh")).and_then(|v| v.trim().parse().ok()) {
+            p.fog_grh = v;
         }
         if let Some(v) = ini.section("walk").and_then(|w| w.get("bounds")) {
             let n: Vec<i32> = v.split(',').filter_map(|s| s.trim().parse().ok()).collect();

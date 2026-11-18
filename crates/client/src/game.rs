@@ -11,7 +11,6 @@ use crate::assets::Assets;
 use crate::audio::Channel;
 use crate::render::characters::{self, FRAME};
 use crate::render::fx::Fx;
-use crate::render::weather::FOG_GRH;
 use ao_protocol::Tone;
 use client_core::p3::fx::{map_music, under_roof, volume_at, weather_for, Cue, FX_FOREVER, SND_RAIN_IN_LOOP, SND_RAIN_OUT_LOOP};
 pub use client_core::{tile_center, ClientEvent, Ent, Game, Pt, Screen};
@@ -116,11 +115,15 @@ pub fn poll(game: &mut Game, assets: &mut Assets, fx: &mut Fx) {
 
     // Weather of this map and whether the player is under a roof.
     if let Some(m) = &game.map {
+        let fog_grh = ao_formats::profile::for_recursos(&game.recursos).fog_grh;
         let w = weather_for(m.rain, m.snow, m.fog, game.local.weather, env("AO_WEATHER").as_deref());
+        // Resource sets without weather graphics (TSAO, FogGrh=0): our own procedural weather.
+        fx.weather.fog_grh = fog_grh;
+        fx.weather.own = fog_grh == 0;
         let indoor = under_roof(game, me_tile.0, me_tile.1);
         fx.weather.set(w, indoor);
-        if w.fog && !fx.grh_tex.contains_key(&FOG_GRH) {
-            fx.resolve_grhs(assets, &[FOG_GRH]);
+        if w.fog && fog_grh != 0 && !fx.grh_tex.contains_key(&fog_grh) {
+            fx.resolve_grhs(assets, &[fog_grh]);
         }
         for s in [client_core::p3::fx::STREAM_RAIN, client_core::p3::fx::STREAM_SNOW] {
             fx.resolve_stream(assets, s);
