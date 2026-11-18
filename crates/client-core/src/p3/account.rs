@@ -163,11 +163,12 @@ pub fn creation_preview(bal: &Balance, race: u8, class: u8) -> Option<Preview> {
     let (r, c) = (Race::from_id(race as i32)?, Class::from_id(class as i32)?);
     let attributes = initial_attributes(bal, r);
     let m = bal.race(r);
+    let prof = ao_formats::profile::for_recursos(&ao_formats::recursos_dir());
     Some(Preview {
         attributes,
         race_mods: [m.strength, m.agility, m.intelligence, m.constitution, m.charisma],
-        hp: initial_hp(&attributes),
-        mana: initial_mana(bal, c, &attributes),
+        hp: prof.start_hp.unwrap_or_else(|| initial_hp(&attributes)),
+        mana: if prof.start_hp.is_some() { prof.start_mana_for(class, attributes[2]) } else { initial_mana(bal, c, &attributes) },
         class: gauges(bal, c),
     })
 }

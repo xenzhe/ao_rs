@@ -254,7 +254,10 @@ impl AccountUi {
                     self.pass.clear();
                     self.pass2.clear();
                 }
-                self.scene.travel(&TOWN_PATH, 11.0, 1.0);
+                match scene::stage().filter(|s| !s.town_path.is_empty()) {
+                    Some(s) => self.scene.travel(&s.town_path, 11.0, 1.0),
+                    None => self.scene.travel(&TOWN_PATH, 11.0, 1.0),
+                }
                 self.scene.hour_goal = HOUR_LOGIN;
                 self.scene.follow = 1.2;
             }
@@ -580,7 +583,7 @@ fn section(title: &str, x: f32, y: f32, w: f32, u: f32) -> f32 {
 /// of the chosen character, world px) it leans and comes closer to it.
 fn camp_shot(focus: Option<Vec2>) -> Shot {
     let base = Scene::base_scale();
-    let group = tile_feet(FIRE.0, FIRE.1) - vec2(0.0, 2.6 * 32.0);
+    let group = { let f = scene::on_stage(FIRE); tile_feet(f.0, f.1) } - vec2(0.0, 2.6 * 32.0);
     let (at, zoom) = match focus {
         Some(f) => (group.lerp(f - vec2(0.0, 20.0), 0.35), (base + 0.5) / base),
         None => (group, 1.0),
@@ -596,7 +599,7 @@ fn hero_shot() -> Shot {
     let base = Scene::base_scale();
     let zoom = (base + 1.0) / base;
     let s = base * zoom;
-    let hero = tile_feet(HERO.0, HERO.1) - vec2(0.0, 22.0);
+    let hero = { let h = scene::on_stage(HERO); tile_feet(h.0, h.1) } - vec2(0.0, 22.0);
     let want = vec2(screen_width() * 0.29, screen_height() * 0.54);
     let half = vec2(screen_width(), screen_height()) / 2.0;
     Shot { at: hero - (want - half) / s, zoom }
@@ -657,10 +660,13 @@ fn stage_town(st: &mut AccountUi, assets: &Assets) {
         }
     }
     for (i, ((x, y), race, class, gender)) in TOWNSFOLK.into_iter().enumerate() {
+        let (x, y) = scene::stage().and_then(|s| s.folk.get(i).copied()).unwrap_or((x, y));
         let heads = valid_heads(race, gender, |h| assets.db.heads.contains_key(&h));
         let head = heads.get(i * 5 % heads.len().max(1)).copied().unwrap_or(1);
         let (weapon, shield, _) = st.kits.as_ref().and_then(|k| k.get(&class).copied()).unwrap_or((0, 0, 0));
-        let body = displayable_body(assets, ao_rules::character::starting_body(race, gender), race, gender);
+        let prof = ao_formats::profile::for_recursos(&assets.root);
+        let start = if prof.naked.is_empty() { ao_rules::character::starting_body(race, gender) } else { prof.naked_body(race, gender) };
+        let body = displayable_body(assets, start, race, gender);
         st.scene.put(FOLK_ID + i as u32, Look { body, head, weapon, shield, helmet: 0 }, (x, y), Act::Wander(4));
     }
 }
@@ -714,7 +720,7 @@ fn stage_camp(st: &mut AccountUi, game: &Game, assets: &Assets, renderer: &mut R
     if !st.scene.ready() {
         return;
     }
-    st.scene.bonfire(FIRE.0, FIRE.1);
+    { let f = scene::on_stage(FIRE); st.scene.bonfire(f.0, f.1); }
     let cast: String = game.characters.iter().map(|c| format!("{}:{}:{};", c.name, c.body, c.head)).collect();
     if cast != st.cast {
         let fresh = !st.cast.is_empty();
@@ -723,16 +729,17 @@ fn stage_camp(st: &mut AccountUi, game: &Game, assets: &Assets, renderer: &mut R
         st.scene.remove_range(CHAR_ID..CHAR_ID + MAX_CHARACTERS as u32);
         for (i, c) in game.characters.iter().enumerate().take(MAX_CHARACTERS) {
             let (spot, dir) = RING[PROMINENCE[i]];
+            let spot = scene::on_stage(spot);
             let body = displayable_body(assets, c.body, c.race, c.gender);
             let id = CHAR_ID + i as u32;
             st.scene.put(id, Look { body, head: c.head, ..Default::default() }, spot, Act::Go { to: spot, face: dir, idle: true });
             if fresh && !before.contains(&c.name) {
                 // Just created: it rises where it was forged and walks to its place.
                 if let Some(e) = st.scene.ent_mut(id) {
-                    e.snap(HERO.0, HERO.1);
+                    { let h = scene::on_stage(HERO); e.snap(h.0, h.1); }
                     e.dir = Dir::Up;
                 }
-                st.scene.burst(renderer, tile_feet(HERO.0, HERO.1) - vec2(0.0, 16.0));
+                st.scene.burst(renderer, { let h = scene::on_stage(HERO); tile_feet(h.0, h.1) } - vec2(0.0, 16.0));
                 // The forging aura goes with it (the hero actor leaves this frame).
                 st.scene.play_fx(renderer, assets, id, ritual_fx(&assets.root), 2);
             }
@@ -740,7 +747,7 @@ fn stage_camp(st: &mut AccountUi, game: &Game, assets: &Assets, renderer: &mut R
     }
     let n = game.characters.len().min(MAX_CHARACTERS);
     // The first free place has a waiting silhouette (a translucent figure).
-    let ghost = (n < MAX_CHARACTERS && !hero).then(|| RING[PROMINENCE[n]]);
+    let ghost = (n < MAX_CHARACTERS && !hero).then(|| RING[PROMINENCE[n]]).map(|(p, d)| (scene::on_stage(p), d));
     match ghost {
         Some((spot, _)) => {
             // Facing the camera: a recognisable figure, not a side view.
@@ -756,9 +763,10 @@ fn stage_camp(st: &mut AccountUi, game: &Game, assets: &Assets, renderer: &mut R
     // their places, the selected one looking at the camera and the rest at the fire.
     for i in 0..n {
         let (spot, dir) = RING[PROMINENCE[i]];
+            let spot = scene::on_stage(spot);
         let act = if hero {
-            let w = WITNESS[i];
-            Act::Go { to: w, face: dir_to(w, HERO), idle: false }
+            let w = scene::on_stage(WITNESS[i]);
+            Act::Go { to: w, face: dir_to(w, scene::on_stage(HERO)), idle: false }
         } else if i == st.selected {
             Act::Go { to: spot, face: Dir::Down, idle: true }
         } else {
@@ -981,6 +989,7 @@ fn characters_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game) {
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by_key(|i| {
             let ((x, y), _) = RING[PROMINENCE[*i]];
+            let (x, y) = scene::on_stage((x, y));
             (x, y)
         });
         let step = |dir: i32, st: &mut AccountUi| {
@@ -1116,27 +1125,29 @@ fn stage_hero(st: &mut AccountUi, assets: &Assets, renderer: &mut Renderer) {
     st.refresh_heads(assets);
     let f = &st.form;
     let head = f.heads.get(f.head_i).copied().unwrap_or(1);
-    let body = displayable_body(assets, ao_rules::character::starting_body(f.race, f.gender), f.race, f.gender);
+    let prof = ao_formats::profile::for_recursos(&assets.root);
+    let start = if prof.naked.is_empty() { ao_rules::character::starting_body(f.race, f.gender) } else { prof.naked_body(f.race, f.gender) };
+    let body = displayable_body(assets, start, f.race, f.gender);
     let (weapon, shield, _) = st.kits.as_ref().and_then(|k| k.get(&f.class).copied()).unwrap_or((0, 0, 0));
     let act = if f.walk { Act::InPlace(f.facing) } else { Act::Still(f.facing) };
     let fresh = !st.scene.has(HERO_ID);
-    st.scene.put(HERO_ID, Look { body, head, weapon, shield, helmet: 0 }, HERO, act);
+    st.scene.put(HERO_ID, Look { body, head, weapon, shield, helmet: 0 }, scene::on_stage(HERO), act);
     if fresh {
         st.scene.jump_if_far(hero_shot());
-        st.scene.burst(renderer, tile_feet(HERO.0, HERO.1) - vec2(0.0, 16.0));
+        st.scene.burst(renderer, { let h = scene::on_stage(HERO); tile_feet(h.0, h.1) } - vec2(0.0, 16.0));
     }
     st.scene.aim(hero_shot());
     st.scene.me = Some(HERO_ID);
     let since = (get_time() - f.changed_at) as f32;
     let flash = (1.0 - since / 0.45).clamp(0.0, 1.0);
-    let feet = tile_feet(HERO.0, HERO.1);
+    let feet = { let h = scene::on_stage(HERO); tile_feet(h.0, h.1) };
     st.scene.light(feet - vec2(0.0, 18.0), 110.0 + 90.0 * flash, Color::new(0.85 + 0.15 * flash, 0.82, 0.7, 0.75 + 0.25 * flash));
 }
 
 /// Marks a form change: a puff of smoke and a flash on the hero.
 fn changed(st: &mut AccountUi, renderer: &mut Renderer) {
     st.form.changed_at = get_time();
-    renderer.fx.spawn_puff(tile_feet(HERO.0, HERO.1) - vec2(0.0, 14.0));
+    renderer.fx.spawn_puff({ let h = scene::on_stage(HERO); tile_feet(h.0, h.1) } - vec2(0.0, 14.0));
 }
 
 fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut Assets, renderer: &mut Renderer) {
@@ -1340,7 +1351,8 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
     let gap = 8.0 * u;
     let cw = (pw0 - gap * (cols - 1) as f32) / cols as f32;
     let ch = 38.0 * u;
-    for (i, (id, name)) in RACES.into_iter().enumerate() {
+    let prof = ao_formats::profile::for_recursos(&assets.root);
+    for (i, (id, name)) in RACES.into_iter().filter(|(r, _)| prof.creation_races.is_empty() || prof.creation_races.contains(r)).enumerate() {
         let r = Rect::new(px0 + (i % cols) as f32 * (cw + gap), y + (i / cols) as f32 * (ch + gap), cw, ch);
         let sel = st.form.race == id;
         let (hover, click) = card(r, sel, !busy, u);
@@ -1371,7 +1383,7 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
     y = section("Clase", px0, y, pw0, u);
     let ch2 = 34.0 * u;
     let kits = st.kits.clone().unwrap_or_default();
-    for (i, (id, name)) in CLASSES.iter().enumerate() {
+    for (i, (id, name)) in CLASSES.iter().filter(|(c, _)| prof.creation_classes.is_empty() || prof.creation_classes.contains(c)).enumerate() {
         let r = Rect::new(px0 + (i % cols) as f32 * (cw + gap), y + (i / cols) as f32 * (ch2 + gap * 0.75), cw, ch2);
         let sel = st.form.class == *id;
         let (hover, click) = card(r, sel, !busy, u);
@@ -1458,7 +1470,7 @@ fn create_screen(st: &mut AccountUi, ui: &mut Ui, game: &mut Game, assets: &mut 
         // request leaves at once, the flash and the aura just accompany it).
         st.forging = Some(get_time());
         st.scene.play_fx(renderer, assets, HERO_ID, ritual_fx(&assets.root), FX_FOREVER);
-        st.scene.burst(renderer, tile_feet(HERO.0, HERO.1) - vec2(0.0, 16.0));
+        st.scene.burst(renderer, { let h = scene::on_stage(HERO); tile_feet(h.0, h.1) } - vec2(0.0, 16.0));
         let f = &st.form;
         let head = f.heads.get(f.head_i).copied().unwrap_or(1);
         let (name, race, class, gender) = (f.name.clone(), f.race, f.class, f.gender);

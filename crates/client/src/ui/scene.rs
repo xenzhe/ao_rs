@@ -32,6 +32,23 @@ use std::path::PathBuf;
 
 /// Ullathorpe: town, plaza and the woods around it.
 pub const SCENE_MAP: u16 = 1;
+
+/// The stage of this resource set (`init/profile.ini [Scene]`), else AO20's.
+pub fn stage() -> Option<&'static ao_formats::profile::SceneCfg> {
+    ao_formats::profile::for_recursos(&ao_formats::recursos_dir()).scene.as_ref()
+}
+
+pub fn scene_map() -> u16 {
+    stage().map_or(SCENE_MAP, |s| s.map)
+}
+
+/// Tile `p` of the AO20 layout (built around the fire at 10,51) moved to this stage.
+pub fn on_stage(p: (i32, i32)) -> (i32, i32) {
+    match stage() {
+        Some(s) => (p.0 - 10 + s.fire.0, p.1 - 51 + s.fire.1),
+        None => p,
+    }
+}
 /// Id of the invisible camera anchor (`game.me()` when no actor has the focus).
 const ANCHOR_ID: u32 = 1;
 /// Scene actor ids start here (far from anything the real game uses).
@@ -194,7 +211,7 @@ impl Scene {
             return;
         }
         self.recursos = assets.root.clone();
-        match AoMap::load(&self.recursos, SCENE_MAP) {
+        match AoMap::load(&self.recursos, scene_map()) {
             Ok(m) => {
                 assets.preload_map(&m);
                 self.game.map = Some(m);
@@ -206,7 +223,7 @@ impl Scene {
                 self.game.my_id = ANCHOR_ID;
             }
             Err(e) => {
-                eprintln!("scene: map {SCENE_MAP} not loaded: {e:?}");
+                eprintln!("scene: map {} not loaded: {e:?}", scene_map());
                 self.loaded = Some(false);
             }
         }
@@ -556,7 +573,7 @@ impl Scene {
             fx.resolve_stream(assets, s);
         }
         // The map's own music (Ullathorpe) while the account screens are open.
-        let music = client_core::p3::fx::map_music(&assets.root, SCENE_MAP).unwrap_or(0);
+        let music = client_core::p3::fx::map_music(&assets.root, scene_map()).unwrap_or(0);
         if let Some(a) = &mut fx.audio {
             a.music(music);
         }
@@ -605,7 +622,7 @@ impl Scene {
             self.light_rt = render_target(size.x as u32, size.y as u32);
         }
         let origin = (self.cam - size / 2.0).floor();
-        let number = SCENE_MAP;
+        let number = scene_map();
         let cw = self.cw.get_or_insert_with(|| ContinuousWorld::new(assets.root.clone()));
         cw.update(number, 1);
         for n in cw.take_new() {
@@ -647,7 +664,8 @@ impl Scene {
         }
         for (x, y) in &self.fires {
             let p = vec2((x - 1) as f32 * TILE, (y - 1) as f32 * TILE) - origin;
-            assets.draw(BONFIRE_GRH, p.x, p.y, true, t_ms, WHITE);
+            let grh = stage().map(|s| s.bonfire_grh).filter(|g| *g > 0).unwrap_or(BONFIRE_GRH);
+            assets.draw(grh, p.x, p.y, true, t_ms, WHITE);
         }
         fx.draw(origin);
         gl_use_material(&fx.multiply);

@@ -128,7 +128,8 @@ impl World {
         // The head must be one of its race and gender (it used to accept any 1..=757, so a
         // forged packet could pick a head of another race or a GM-only one).
         let head_ok = (1..=MAX_HEAD).contains(&head) && ao_formats::heads::for_recursos(&self.recursos).allows(race, gender, head);
-        if !(valid_race(race) && valid_class(class) && valid_gender(gender)) || !head_ok {
+        let allowed = ao_formats::profile::for_recursos(&self.recursos).may_create(race, class);
+        if !(valid_race(race) && valid_class(class) && valid_gender(gender)) || !head_ok || !allowed {
             // The client only offers valid options: anything else is a forged packet.
             return self.kick(id, "datos de creacion de personaje invalidos");
         }
@@ -150,7 +151,19 @@ impl World {
             gender,
             // AO20 starting body, or (profile with naked bodies, e.g. TSAO) the naked body:
             // the starting armour dresses it.
-            body: if ao_formats::profile::for_recursos(&self.recursos).naked.is_empty() { starting_body(race, gender) } else { ao_formats::profile::for_recursos(&self.recursos).naked_body(race, gender) },
+            // The worn starting armour's body, so the character screen shows it dressed.
+            body: if ao_formats::profile::for_recursos(&self.recursos).naked.is_empty() {
+                starting_body(race, gender)
+            } else {
+                state
+                    .inventory
+                    .iter()
+                    .filter(|(.., equipped)| *equipped)
+                    .filter_map(|(_, obj, ..)| self.ao.objs.get(*obj as u32))
+                    .find(|o| o.obj_type == ao_formats::dat::obj::ObjType::Armor && o.clothing > 0)
+                    .map(|o| o.clothing as u16)
+                    .unwrap_or_else(|| ao_formats::profile::for_recursos(&self.recursos).naked_body(race, gender))
+            },
             head,
             hp: vitals.hp,
             mana: vitals.mana,

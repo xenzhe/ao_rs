@@ -100,8 +100,9 @@ impl World {
     pub(crate) fn new_character_vitals(&self, race: u8, class: u8) -> Option<StartVitals> {
         let attributes = character::initial_attributes(&self.ao.balance, Race::from_id(race as i32)?);
         let class = Class::from_id(class as i32)?;
-        if let Some(s) = self.data.levels.as_ref().and_then(|t| t.start.as_ref()) {
-            return Some(StartVitals { hp: s.hp, mana: s.mana_for(class.spanish_name(), attributes[character::ATTR_INTELLIGENCE]) });
+        let prof = ao_formats::profile::for_recursos(&self.recursos);
+        if let Some(hp) = prof.start_hp {
+            return Some(StartVitals { hp, mana: prof.start_mana_for(class as u8, attributes[character::ATTR_INTELLIGENCE]) });
         }
         Some(StartVitals { hp: character::initial_hp(&attributes), mana: character::initial_mana(&self.ao.balance, class, &attributes) })
     }

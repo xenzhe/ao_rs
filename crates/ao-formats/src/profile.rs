@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Profile {
     /// `(gender, race)` -> body with no armour. Missing pairs use the AO20 formula.
     pub naked: HashMap<(u8, u8), u16>,
@@ -35,6 +35,40 @@ pub struct Profile {
     pub sounds: HashMap<String, u16>,
     /// `[Fx]`: the engine's fixed FX ids for this resource set (`levelup`, `ritual`).
     pub fx: HashMap<String, u16>,
+    /// `[Creation] Races=1,2` / `Classes=1,3`: what a new character may be (empty = all).
+    pub creation_races: Vec<u8>,
+    pub creation_classes: Vec<u8>,
+    /// `[Creation] Hp=21` and `ManaN=base,div` (class id N): starting life and mana
+    /// `base + Inteligencia / (2 * div)` (TSAO ConnectNewUser). None = AO20 formulas.
+    pub start_hp: Option<i32>,
+    pub start_mana: HashMap<u8, (i32, i32)>,
+    /// `[Scene]`: where the login / character screens are staged (None = AO20 map 1).
+    pub scene: Option<SceneCfg>,
+}
+
+/// `[Scene] Map=28 Fire=40,19 TownPath=32,48;45,48 Folk=40,47;46,49 BonfireGrh=123`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SceneCfg {
+    pub map: u16,
+    pub fire: (i32, i32),
+    pub town_path: Vec<(f32, f32)>,
+    pub folk: Vec<(i32, i32)>,
+    pub bonfire_grh: u32,
+}
+
+impl Profile {
+    pub fn may_create(&self, race: u8, class: u8) -> bool {
+        (self.creation_races.is_empty() || self.creation_races.contains(&race)) && (self.creation_classes.is_empty() || self.creation_classes.contains(&class))
+    }
+
+    /// Starting mana of a class with this intelligence, if the profile sets life/mana.
+    pub fn start_mana_for(&self, class: u8, intelligence: u8) -> i32 {
+        match self.start_mana.get(&class) {
+            Some((base, div)) if *div > 0 => base + intelligence as i32 / (2 * div),
+            Some((base, _)) => *base,
+            None => 0,
+        }
+    }
 }
 
 /// AO20 `HayAgua` layer-1 ranges.
@@ -42,7 +76,7 @@ const AO20_WATER: [(u32, u32); 9] = [(1505, 1520), (124, 139), (24223, 24238), (
 
 impl Default for Profile {
     fn default() -> Self {
-        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new() }
+        Profile { naked: HashMap::new(), dead_body: 829, dead_head: 0, water: AO20_WATER.to_vec(), water_needs_empty_layer2: false, meditate_fx: Vec::new(), tsao_combat: false, walk_bounds: None, sounds: HashMap::new(), fx: HashMap::new(), creation_races: Vec::new(), creation_classes: Vec::new(), start_hp: None, start_mana: HashMap::new(), scene: None }
     }
 }
 
@@ -85,6 +119,34 @@ impl Profile {
         }
         if let Some(s) = ini.section("fx") {
             p.fx = s.iter().filter_map(|(k, v)| Some((k.clone(), v.trim().parse().ok()?))).collect();
+        }
+        if let Some(c) = ini.section("creation") {
+            let ids = |k: &str| c.get(k).map(|v| v.split(',').filter_map(|s| s.trim().parse().ok()).collect()).unwrap_or_default();
+            p.creation_races = ids("races");
+            p.creation_classes = ids("classes");
+            p.start_hp = c.get("hp").and_then(|v| v.trim().parse().ok());
+            for (k, v) in c {
+                if let Some(n) = k.strip_prefix("mana").and_then(|n| n.parse::<u8>().ok()) {
+                    let f: Vec<i32> = v.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                    p.start_mana.insert(n, (f.first().copied().unwrap_or(0), f.get(1).copied().unwrap_or(0)));
+                }
+            }
+        }
+        if let Some(s) = ini.section("scene") {
+            let pair = |v: &str| -> Option<(i32, i32)> {
+                let (a, b) = v.split_once(',')?;
+                Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+            };
+            let list = |k: &str| s.get(k).map(|v| v.split(';').filter_map(pair).collect::<Vec<_>>()).unwrap_or_default();
+            if let (Some(map), Some(fire)) = (s.get("map").and_then(|v| v.trim().parse().ok()), s.get("fire").and_then(|v| pair(v))) {
+                p.scene = Some(SceneCfg {
+                    map,
+                    fire,
+                    town_path: list("townpath").into_iter().map(|(x, y)| (x as f32, y as f32)).collect(),
+                    folk: list("folk"),
+                    bonfire_grh: s.get("bonfiregrh").and_then(|v| v.trim().parse().ok()).unwrap_or(0),
+                });
+            }
         }
         p.tsao_combat = ini.section("combat").and_then(|c| c.get("rules")).is_some_and(|v| v.trim().eq_ignore_ascii_case("tsao"));
         if let Some(v) = ini.section("meditate").and_then(|m| m.get("fxbylevel")) {

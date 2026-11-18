@@ -436,7 +436,11 @@ def main(src, dst):
             # DoPasosFx: always 23/24 (50 sailing); no meditation sound.
             "[Sounds]", "StepsSimple=1", "Meditate=0", "",
             # CheckUserLevel CFF 58; the big meditation (FXMEDITARGRANDE 6) for the creation scene.
-            "[Fx]", "LevelUp=58", "Ritual=6", ""]
+            "[Fx]", "LevelUp=58", "Ritual=6", "",
+            # frmCrearPersonaje: 5 races, 8 classes; ConnectNewUser: 21 life, mage 100 + INT/3 (avg), casters 50.
+            "[Creation]", "Races=1,2,3,4,5", "Classes=1,2,3,4,5,6,7,8", "Hp=21", "Mana1=100,3", "Mana2=50,0", "Mana4=50,0", "Mana5=50,0", "Mana6=50,0", "",
+            # Login / character screens: the meadow north of Tanaris, a tour of the town, a campfire (obj 63 Fogata).
+            "[Scene]", "Map=28", "Fire=40,19", "TownPath=32,48;45,48;58,50;70,50;62,62;45,62", "Folk=40,47;46,49;52,50;36,52;60,52;66,48", "BonfireGrh=1521", ""]
     open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",
