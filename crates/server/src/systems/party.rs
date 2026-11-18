@@ -33,8 +33,10 @@ impl World {
 
     /// HOOK (combat): experience earned by `id` from an NPC on `map`. The party system
     /// shares it among nearby members (`CalcularDarExpGrupal`); alone it all goes to `id`.
-    pub(crate) fn share_exp(&mut self, id: u32, amount: u32, map: u16) {
+    /// `npc_level`: the creature's `Nivel` (0 = none), for each member's `GetExpPenalty`.
+    pub(crate) fn share_exp(&mut self, id: u32, amount: u32, map: u16, npc_level: i32) {
         let Some(party) = self.party_of(id).and_then(|pid| self.parties.by_id.get(&pid)).cloned() else {
+            let amount = self.exp_after_penalty(id, amount, npc_level);
             self.give_exp(id, amount);
             return;
         };
@@ -62,11 +64,22 @@ impl World {
         }
         let shares = rules::share_exp(amount, earner, leader_map, &members);
         for (&m, exp) in party.members.iter().zip(shares) {
+            let exp = self.exp_after_penalty(m, exp, npc_level);
             if exp > 0 {
                 self.console(m, format!("El grupo ha ganado {exp} puntos de experiencia."), Tone::Combat);
                 self.give_exp(m, exp);
             }
         }
+    }
+
+    /// `GetExpPenalty` applied to what `id` earns, with its notice.
+    fn exp_after_penalty(&self, id: u32, exp: u32, npc_level: i32) -> u32 {
+        let Some(level) = self.player(id).map(|p| p.level) else { return exp };
+        let Some(pen) = ao_rules::progression::exp_penalty(level, npc_level) else { return exp };
+        if exp > 0 {
+            self.console(id, format!("Debido a tu nivel, obtienes el {}% de la experiencia.", (pen * 100.0) as i32), Tone::Combat);
+        }
+        ao_rules::combat::vb_round(exp as f64 * pen) as u32
     }
 
     /// HOOK (chat channels): ids of the online members of `id`'s party, `id` included.
@@ -378,7 +391,7 @@ mod tests {
         for id in 1..=5 {
             w.player_mut(id).party.id = Some(pid);
         }
-        w.share_exp(1, 40, 2);
+        w.share_exp(1, 40, 2, 0);
         assert!(got(&w, 1) && got(&w, 2), "near and alive");
         assert!(!got(&w, 3) && !got(&w, 4) && !got(&w, 5), "dead, far, other map");
         assert_eq!(w.player(2).unwrap().exp, w.player(1).unwrap().exp, "same share");
@@ -386,7 +399,7 @@ mod tests {
 
         // The leader on another map takes a share that is lost: 40 / 3 each instead of 20.
         w.parties.by_id.get_mut(&pid).unwrap().leader = 5;
-        w.share_exp(1, 40, 2);
+        w.share_exp(1, 40, 2, 0);
         assert!(!got(&w, 5));
         assert_eq!(w.player(1).unwrap().exp - alone, 13);
     }

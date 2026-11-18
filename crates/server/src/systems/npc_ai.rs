@@ -381,7 +381,11 @@ impl World {
                 }
                 let p = self.player(pid).unwrap();
                 let dist = distancia(pos, (p.x, p.y));
-                // Invisibility/hiding (magic) is not modelled yet: everyone is attackable.
+                // UsuarioAtacableConMelee: an invisible or hidden player is only a target
+                // when standing right next to the creature.
+                if dist > 1 && self.user_concealed(pid, now) {
+                    continue;
+                }
                 if dist < best_d {
                     best = Some(pid);
                     best_d = dist;
@@ -716,6 +720,11 @@ impl World {
     }
 
     /// `EsObjetivoValido`: in vision, level rule, enemy, alive.
+    /// Invisible (spell) or hidden (skill): `flags.invisible + flags.Oculto <> 0`.
+    pub(crate) fn user_concealed(&self, pid: EntityId, now: GameTime) -> bool {
+        self.player(pid).is_some_and(|p| p.status.invisible_until.is_some_and(|u| now < u) || p.status.hidden)
+    }
+
     fn valid_target(&self, map: u16, nid: u32, d: &NpcData, pid: EntityId, aggressor: Option<EntityId>) -> bool {
         if !self.in_vision(map, nid, d, pid) {
             return false;
@@ -910,6 +919,44 @@ mod tests {
             hit |= p.hp != hp0 || (p.map, p.x, p.y) != (M, 55, 50);
         }
         assert!(hit, "the wolf attacks");
+    }
+
+    /// `UsuarioAtacableConMelee`: an invisible or hidden player is not chased from afar,
+    /// but one right next to the creature is still a target.
+    #[test]
+    fn invisible_and_hidden_players_are_not_chased_from_afar() {
+        for hidden in [false, true] {
+            let mut b = Bench::new(M, 55, 50);
+            let _rx = b.join(1, "Sombra");
+            b.clear(M, 30, 35, 70, 65);
+            b.place(1, 55, 50);
+            let conceal = |b: &mut Bench| {
+                let far = b.t.after_ms(3_600_000);
+                let st = &mut b.w.player_mut(1).status;
+                if hidden {
+                    st.hidden = true;
+                } else {
+                    st.invisible_until = Some(far);
+                }
+            };
+            conceal(&mut b);
+            let nid = b.spawn(M, LOBO, 51, 50);
+            for _ in 0..30 {
+                b.run(100);
+                conceal(&mut b);
+            }
+            let n = b.npc(M, nid);
+            assert!(n.target != Some(1) && distancia((n.x, n.y), (55, 50)) > 1, "hidden={hidden}: not chased, wolf at {:?}", (n.x, n.y));
+            // Right next to it: attacked anyway.
+            b.place(1, n.x + 1, n.y);
+            let mut targeted = false;
+            for _ in 0..30 {
+                b.run(100);
+                conceal(&mut b);
+                targeted |= b.npc(M, nid).target == Some(1);
+            }
+            assert!(targeted, "hidden={hidden}: next to the wolf, it attacks");
+        }
     }
 
     #[test]

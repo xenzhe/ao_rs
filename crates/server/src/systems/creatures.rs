@@ -163,7 +163,8 @@ impl World {
             let exp = rules::exp_for_damage(c.exp, max_hp, before, hp) * self.cfg.world.exp_mult.max(1);
             let exp = self.exp_with_items(o, exp);
             if exp > 0 {
-                self.share_exp(o, exp, map);
+                let lvl = self.npc_level(map, v);
+                self.share_exp(o, exp, map, lvl);
             }
         }
         if hp <= 0 {

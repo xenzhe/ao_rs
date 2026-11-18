@@ -288,3 +288,33 @@ mod tests {
         assert_eq!(meditation_mana(&bal, 0, 0), 1, "at least one point");
     }
 }
+
+/// `NpcDeltaLevelPenalties` (Configuracion.ini): levels above a creature's that still earn
+/// its full experience.
+pub const NPC_DELTA_LEVEL_PENALTIES: i32 = 4;
+/// `PenaltyExpUserPerLevel`: experience lost per level beyond that.
+pub const PENALTY_EXP_PER_LEVEL: f64 = 0.05;
+
+/// `GetExpPenalty`: multiplier (1.0 down to 0.0) for a player `level` hitting a creature of
+/// `npc_level` (0 = the creature has no level: no penalty).
+pub fn exp_penalty(level: u32, npc_level: i32) -> Option<f64> {
+    let delta = level as i32 - npc_level;
+    if npc_level <= 0 || delta <= NPC_DELTA_LEVEL_PENALTIES {
+        return None;
+    }
+    Some((1.0 - PENALTY_EXP_PER_LEVEL * (delta - NPC_DELTA_LEVEL_PENALTIES) as f64).max(0.0))
+}
+
+#[cfg(test)]
+mod exp_penalty_tests {
+    use super::*;
+
+    #[test]
+    fn penalty_starts_past_four_levels_and_bottoms_at_zero() {
+        assert_eq!(exp_penalty(10, 6), None);
+        assert_eq!(exp_penalty(10, 0), None);
+        assert_eq!(exp_penalty(11, 6), Some(0.95));
+        assert!((exp_penalty(20, 6).unwrap() - 0.5).abs() < 1e-9);
+        assert_eq!(exp_penalty(50, 1), Some(0.0));
+    }
+}

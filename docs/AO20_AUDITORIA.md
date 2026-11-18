@@ -24,6 +24,19 @@ restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
 - **Recursos oficiales completos** (`tools/ao20/build_full.cmd`): todos los cuerpos de NPC y
   gráficos de mapa; los tests usan estos datos por defecto.
 
+## Fase 1 hecha (18/11)
+
+- **Resistencia mágica**: `GetUserMR` / `GetUserMRForNpc` (objetos, skill Resistencia x0.04 / x0.4,
+  clase) y la de los NPC (`MagicResistance`, `MagicDef`, `DEFm`). Antes era siempre 0.
+- **Skills por uso** (`SubirSkill`): armas / proyectiles / sin armas al acertar, tácticas cuando
+  un NPC te ataca, defensa con escudo al bloquear, apuñalar, magia al lanzar y resistencia
+  al recibir daño mágico.
+- **Invisibles y ocultos**: los NPC no los persiguen salvo que estén pegados; los hechizos de
+  NPC tampoco los alcanzan.
+- **`GetExpPenalty`**: más de 4 niveles por encima de la criatura, -5 % de experiencia por nivel
+  (por miembro del grupo).
+- **Hechizos con efectos en el tiempo aún no portados**: avisan y no gastan maná.
+
 ## Hallazgo importante: datos del servidor desfasados
 
 El servidor lee `Dat/` (npcs.dat, obj.dat, misiones…) del repositorio público, pero los

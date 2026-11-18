@@ -293,6 +293,11 @@ impl World {
         })
     }
 
+    /// npcs.dat `Nivel` of a creature on the map (0 = none or gone).
+    pub(crate) fn npc_level(&self, map: u16, nid: u32) -> i32 {
+        self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32)).map_or(0, |d| d.level)
+    }
+
     /// Damage to a creature from a player (melee, arrows, spells). Gives experience for
     /// the share of life taken (GetExpForUser) and kills it at 0. Returns true if killed.
     pub(crate) fn damage_npc(&mut self, map: u16, nid: u32, amount: i32, attacker: u32) -> bool {
@@ -303,6 +308,7 @@ impl World {
         // Fixes over TSAO: summons kept their GiveEXP (the 2 zombies of "Invokar Zombies" give
         // 1000 each) and an owner could farm their own pets; neither gives experience here.
         let exp_total = if self.pet_gives_no_exp(map, nid, attacker) { 0 } else { c.exp };
+        let npc_level = self.npc_level(map, nid);
         if self.player(attacker).is_some() {
             let number = self.maps[&map].npcs[&nid].def;
             if let Some(why) = self.faction_npc_attack_refusal(attacker, number) {
@@ -322,7 +328,7 @@ impl World {
         let exp = rules::exp_for_damage(exp_total, max_hp, before, hp) * self.cfg.world.exp_mult.max(1);
         let exp = self.exp_with_items(attacker, exp);
         if exp > 0 && self.player(attacker).is_some() {
-            self.share_exp(attacker, exp, map);
+            self.share_exp(attacker, exp, map, npc_level);
         }
         if hp <= 0 {
             self.kill_npc(map, nid, attacker);

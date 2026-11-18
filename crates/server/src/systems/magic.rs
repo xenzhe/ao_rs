@@ -672,6 +672,11 @@ impl World {
         if ok && s.eot_id > 0 && self.player(t).is_some_and(|p| !p.combat.dead && p.hp > 0) {
             self.start_eot(id, t, s.eot_id as u16);
         }
+        // Spells that only carry an effect over time not ported yet (stat buffs, taunts,
+        // transforms...) do nothing: say so (no mana is spent, `after_cast` needs `ok`).
+        if !ok && s.eot_id > 0 && !eot_table(&self.recursos.clone()).get(&(s.eot_id as u16)).is_some_and(|d| matches!(d.kind, 1 | 9)) {
+            self.console(id, "Ese hechizo todavía no está disponible.", Tone::Warn);
+        }
         let _ = spell_id;
         ok
     }
@@ -1071,7 +1076,8 @@ impl World {
         let now = self.now();
         let Some(name) = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).filter(|n| n.alive()).map(|n| n.name.clone()) else { return };
         let Some(p) = self.player(pid) else { return };
-        if p.map != map || p.combat.dead || p.hp <= 0 || p.status.invisible_until.is_some_and(|u| now < u) {
+        // UsuarioAtacableConMagia: not on the invisible or the hidden.
+        if p.map != map || p.combat.dead || p.hp <= 0 || p.status.invisible_until.is_some_and(|u| now < u) || p.status.hidden {
             return;
         }
         let (px, py) = (p.x, p.y);
@@ -1198,6 +1204,25 @@ mod tests {
         // Test casters: seguro off (citizens log in with it on).
         w.player_mut(id).faction.safe = false;
         Conn { rx }
+    }
+
+    /// `GetUserMR` / `GetUserMRForNpc`: item `ResistenciaMagica` + Resistencia skill x0.04
+    /// (players) or x0.4 (creatures) + class modifier (0 for every class in Balance.dat).
+    #[test]
+    fn magic_resistance_from_items_and_skill() {
+        let mut w = world((1, 50, 50));
+        let _c = login(&mut w, 1, "Resistente");
+        assert_eq!(w.user_magic_resistance(1, false), 0);
+        // Sombrero Zaphyr: ResistenciaMagica=7.
+        w.add_item(1, crate::world::inventory::InvItem { obj: 1093, amount: 1 });
+        let slot = (1..=24).find(|s| w.player(1).unwrap().inv.get(*s).is_some_and(|i| i.obj == 1093)).expect("hat in the bag");
+        w.player_mut(1).inv.equipped.helmet = Some(slot);
+        w.player_mut(1).stats.skills[SKILL_RESISTANCE] = 100;
+        assert_eq!(w.user_magic_resistance(1, false), 7 + 4);
+        assert_eq!(w.user_magic_resistance(1, true), 7 + 40);
+        // And it takes its share off a spell: 100 damage, 11 % resisted.
+        assert_eq!(rules::damage_vs_user(100, w.user_magic_resistance(1, false), 0, false), 89);
+        assert_eq!(rules::damage_vs_user(100, w.user_magic_resistance(1, false), 0, true), 100, "AntiRM spells ignore it");
     }
 
     #[test]
