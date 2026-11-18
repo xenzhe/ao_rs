@@ -153,13 +153,13 @@ reiniciar; el cliente no mueve al azar a un jugador estúpido (solo lo marca); s
   criaturas con hechizos de apoyo por equipos. El buff no se ve en el cliente (no hay
   mensaje de buffs en el protocolo; `PROTOCOL_VERSION` sigue en 16).
 
-## Hallazgo importante: datos del servidor desfasados
+## Datos del servidor frente a los mapas oficiales (revisado)
 
-El servidor lee `Dat/` (npcs.dat, obj.dat, misiones…) del repositorio público, pero los
-mapas oficiales colocan algunos NPCs con números más nuevos (Ullathorpe: Makrom 408, con una
-misión, en vez de 407, con seis). El cliente de Steam no trae los datos del servidor. Hay que
-revisar mapa por mapa qué NPCs quedan con otro papel y corregir `npcs.dat` (o buscar un
-`Dat` oficial más reciente). Mientras tanto, los tests de misiones usan los mapas públicos.
+Comparando nombre por nombre con el cliente oficial (`init/sp_localindex.dat`), los NPCs,
+hechizos y misiones de `Dat/` coinciden todos, y en objetos solo faltan los 818-820. Los
+mapas oficiales simplemente colocan otros NPCs que los públicos (en Ullathorpe, el Makrom 408
+con una misión en lugar del 407 con seis): es el diseño actual de AO20, no un desfase. Los
+tests de misiones escritos para el Makrom de seis misiones usan los mapas públicos.
 
 ## Orden recomendado
 
@@ -171,4 +171,3 @@ revisar mapa por mapa qué NPCs quedan con otro papel y corregir `npcs.dat` (o b
 | 4 | Magia completa: motor de efectos en el tiempo, área, terreno, IA a distancia y de hechizos de NPC | Lo más grande de combate (L) |
 | 5 | GM y moderación: ban temporal, inspección, SOS/denuncias | Necesario antes de abrir a jugadores |
 | 6 | Eventos: lobby y escenarios, eventos por hora, quests globales, castillo, captura | Contenido de largo plazo |
-| 7 | Datos: cuadrar `npcs.dat` con los mapas oficiales | Ver el hallazgo |
