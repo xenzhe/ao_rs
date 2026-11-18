@@ -12,6 +12,7 @@ mod magic;
 pub(crate) mod eot;
 mod movement;
 mod npc_ai;
+mod npc_tactics;
 mod regen;
 mod session;
 // P2 (docs/P2_CONTRATO.md)

@@ -32,6 +32,15 @@ pub struct NpcStatus {
     pub immobilized_until: Option<GameTime>,
     /// Effects over time on the creature (systems/eot.rs).
     pub eots: Vec<crate::world::spellbook::ActiveEot>,
+    /// `pathFindingInfo.OrbitDirection` (+1/-1, 0 = not chosen) and when it is chosen
+    /// again (systems/npc_tactics.rs).
+    pub orbit_dir: i8,
+    pub orbit_until: GameTime,
+    /// `Spells(i).lastUse` + `Cd`: when each spell slot may be cast again.
+    pub spell_ready: Vec<GameTime>,
+    /// `flags.AttackedFirstBy` / owner of a creature (`GetOwnedBy`, `CanAttackNotOwner`):
+    /// the player who hit it first and until when it stays theirs.
+    pub owner: Option<(u32, GameTime)>,
 }
 
 /// Who a weapon hits (dragon slayer: dragons and players differ).
@@ -150,7 +159,7 @@ impl World {
 
     /// Damage from creature `a` to creature `v`. A pet's owner gets the experience and the
     /// kill (loot, quests), like `MuereNpc(Victima, MaestroUser)`.
-    fn npc_damaged_by_npc(&mut self, map: u16, v: u32, damage: i32, a: u32) {
+    pub(crate) fn npc_damaged_by_npc(&mut self, map: u16, v: u32, damage: i32, a: u32) {
         let owner = self.maps.get(&map).and_then(|m| m.npcs.get(&a)).and_then(|n| n.pet.owner).filter(|o| self.player(*o).is_some());
         let Some(mut c) = self.npc_combat(map, v) else { return };
         if owner.is_some_and(|o| self.pet_gives_no_exp(map, v, o)) {

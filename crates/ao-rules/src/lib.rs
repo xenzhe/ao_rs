@@ -14,6 +14,7 @@ pub mod eot;
 pub mod items;
 pub mod level_table;
 pub mod magic;
+pub mod npc_tactics;
 pub mod pathfinding;
 pub mod progression;
 pub mod spells;
