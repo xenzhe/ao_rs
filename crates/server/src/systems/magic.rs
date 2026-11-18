@@ -34,6 +34,8 @@ pub const DEV_MIN_STA: i32 = 500;
 /// `e_Skill` indexes (0-based) read by magic.
 const SKILL_MAGIC: usize = 0;
 const SKILL_MEDITATE: usize = 4;
+/// `e_Skill.Resistencia` (16, 0-based 15).
+const SKILL_RESISTANCE: usize = 15;
 /// `e_Trigger`: ZonaSegura, ZONAPELEA.
 const TRIGGER_SAFE: u16 = 4;
 const TRIGGER_ARENA: u16 = 6;
@@ -840,6 +842,29 @@ impl World {
     }
 
     /// Equipped items that add magic damage (weapon, amulet, ring), obj.dat values.
+    /// `GetUserMR` / `GetUserMRForNpc`: `ResistenciaMagica` of armour, ring, shield and
+    /// helmet, the Resistencia skill (x0.04 against players, x0.4 against creatures with
+    /// the official Balance.dat) and the class modifier, as a percentage.
+    pub(crate) fn user_magic_resistance(&self, id: u32, vs_npc: bool) -> i32 {
+        let Some(p) = self.player(id) else { return 0 };
+        let eq = p.inv.equipped;
+        let items: i32 = [eq.armor, eq.ring, eq.shield, eq.helmet]
+            .into_iter()
+            .flatten()
+            .filter_map(|slot| p.inv.get(slot))
+            .filter_map(|it| self.ao.objs.get(it.obj as u32))
+            .map(|o| o.magic_resistance)
+            .sum();
+        let x = &self.ao.balance.extra;
+        let per_skill = if vs_npc { x.magic_resistance_skill_protection_modifier_npc } else { x.magic_resistance_skill_protection_modifier };
+        // VB adds a Single to an Integer: rounded at each step.
+        let mut mr = items + rules::vb_round(p.stats.skills[SKILL_RESISTANCE] as f64 * per_skill as f64) as i32;
+        if let Some(c) = ao_formats::dat::balance::Class::from_id(p.class as i32) {
+            mr = (mr as f64 + 100.0 * self.ao.balance.class(c).magic_resistance).round() as i32;
+        }
+        mr
+    }
+
     fn magic_items(&self, id: u32) -> Vec<MagicItem> {
         let p = self.player(id).unwrap();
         let eq = p.inv.equipped;
@@ -888,13 +913,13 @@ impl World {
                 self.tsao_spell_damage(id, s.staff_affected, r, Some(t))
             } else {
                 let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
-                // GetUserMR (magic resistance from items/class) belongs to combat/inventory: 0.
-                rules::damage_vs_user(dmg, 0, pen, s.anti_magic_resistance != 0)
+                rules::damage_vs_user(dmg, self.user_magic_resistance(t, false), pen, s.anti_magic_resistance != 0)
             };
             let tname = self.player(t).unwrap().name.clone();
             self.console(id, format!("Le has quitado {dmg} puntos de vida a {tname}."), Tone::Combat);
             // As a player hit (not a named source): faction and kill credit apply to spells too.
             self.hurt_player(t, dmg, super::combat::Source::Player(id));
+            self.raise_skill(t, ao_formats::dat::balance::Skill::MagicResistance);
             ok = true;
         }
         if self.player(t).is_none() {
@@ -961,9 +986,10 @@ impl World {
                 d
             } else {
                 let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
-                // npcs.dat MagicResistance/MagicDef/DefM are not on `Npc` yet (NPC system).
                 let skill = self.player(id).unwrap().stats.skills[SKILL_MAGIC] as i32;
-                rules::damage_vs_npc(dmg, Default::default(), skill, pen, s.anti_magic_resistance != 0)
+                let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32));
+                let npc_def = def.map(|d| rules::NpcMagicDefense { magic_resistance: d.magic_resistance, magic_def: d.magic_def, def_m: d.magic_defense_flat }).unwrap_or_default();
+                rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0)
             };
             let _ = name;
             self.damage_npc(map, nid, dmg, id);
@@ -1024,7 +1050,10 @@ impl World {
                 self.refresh_status(t);
             }
         }
-        // TODO(progression): SubirSkill(Magia) unless the spell is a physical skill.
+        // SubirSkill(Magia), except for physical skills (TipoHechizo 10).
+        if s.spell_type != SpellType::PhysicalSkill {
+            self.raise_skill(id, ao_formats::dat::balance::Skill::Magic);
+        }
     }
 
     /// The client draws its own particles for this spell (profile [SpellFx]): the old
@@ -1056,17 +1085,20 @@ impl World {
                 self.heal_player(pid, amount);
             }
         } else if s.effects.contains(Fx::DO_DAMAGE) {
-            // Npc MagicBonus and GetUserMRForNpc are not modelled yet: base roll, or the
-            // creature's own `SpellDamage` (TSAO: the fire elemental's 70..90).
+            // Base roll, or the creature's own `SpellDamage` (TSAO: the fire elemental's
+            // 70..90); then GetUserMRForNpc unless the spell ignores it.
             let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or(0, |n| n.def);
             let (lo, hi) = self.ao.npcs.get(def as u32).and_then(|d| d.special.spell_damage).unwrap_or((s.hp.min, s.hp.max));
             let mut dmg = roll(self, lo, hi).max(0);
             if self.tsao_rules() {
                 // NpcLanzaSpellSobreUser: helmet, armour and ring take their DefensaMagica.
                 dmg = (dmg - self.tsao_npc_spell_absorb(pid)).max(0);
+            } else {
+                dmg = rules::damage_vs_user(dmg, self.user_magic_resistance(pid, true), 0, s.anti_magic_resistance != 0);
             }
             self.pets_defend(pid, map, nid);
             self.damage_player(pid, dmg, &name);
+            self.raise_skill(pid, ao_formats::dat::balance::Skill::MagicResistance);
         }
         if self.player(pid).is_none_or(|p| p.combat.dead || p.hp <= 0) {
             return;

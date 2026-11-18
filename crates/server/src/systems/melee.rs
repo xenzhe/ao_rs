@@ -239,6 +239,18 @@ impl World {
     // ------------------------------------------------------------ against creatures
 
     /// `UsuarioAtacaNpc` + `UserImpactoNpc` + `UserDamageNpc`. Returns true if it attacked.
+    /// `SubirSkillDeArmaActual`: projectiles, knuckles/no weapon (wrestling) or weapons.
+    fn raise_weapon_skill(&mut self, id: u32) {
+        let weapon = self.player(id).and_then(|p| p.inv.equipped.weapon.and_then(|s| p.inv.get(s))).and_then(|it| self.ao.objs.get(it.obj as u32));
+        let skill = match weapon {
+            Some(w) if w.projectile > 0 => Skill::Projectiles,
+            Some(w) if w.weapon_type == Some(ao_formats::dat::balance::WeaponType::Knuckle) => Skill::Wrestling,
+            Some(_) => Skill::Weapons,
+            None => Skill::Wrestling,
+        };
+        self.raise_skill(id, skill);
+    }
+
     fn user_attacks_npc(&mut self, id: u32, map: u16, nid: u32, _ranged: bool) -> bool {
         let Some(npc) = self.npc_combat(map, nid) else { return false };
         if !npc.attackable {
@@ -253,6 +265,7 @@ impl World {
             self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: false, damage: 0, critical: false }, None);
             return true;
         }
+        self.raise_weapon_skill(id);
         let vs = self.melee_target_kind(map, nid);
         let base = self.base_damage(&f, vs);
         let def = (npc.defense - self.armor_penetration(&f, npc.defense)).max(0) as i64;
@@ -281,6 +294,7 @@ impl World {
             let (lo, hi) = (f.mods.stab_npc_min, f.mods.stab_npc_max);
             let r = self.rnd();
             extra = rules::vb_round(damage as f64 * (r * (hi - lo) + lo));
+            self.raise_skill(id, Skill::Stab);
         }
         let total = (damage + extra.max(0)) as i32;
         self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 || tsao_crit }, None);
@@ -364,6 +378,7 @@ impl World {
             if self.chance(block) {
                 self.console(a, "El usuario rechazo el ataque con su escudo.", Tone::Combat);
                 self.console(v, "Has rechazado el ataque con el escudo.", Tone::Combat);
+                self.raise_skill(v, Skill::ShieldDefense);
             } else {
                 self.console(v, format!("{attacker_name} te ataco y fallo!"), Tone::Combat);
                 self.console(a, "Has fallado el golpe!", Tone::Combat);
@@ -371,6 +386,7 @@ impl World {
             return true;
         }
 
+        self.raise_weapon_skill(a);
         // UserDamageToUser
         let base = self.base_damage(&fa, Vs::User);
         // Body part 1..8; past the torso it is re-rolled among legs/arms/torso (only the
@@ -415,6 +431,7 @@ impl World {
             let c = rules::clamp_chance(self.stab_chance(&fa) as f64 + back);
             if self.roll(1, 100) <= c {
                 bonus = rules::vb_round(damage as f64 * fa.mods.stab);
+                self.raise_skill(a, Skill::Stab);
             }
         }
         let mut total = damage;

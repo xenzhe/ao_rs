@@ -250,9 +250,11 @@ fn warrior_kills_a_creature_and_gets_its_official_experience() {
         }
     }
     assert!(killed, "the hen died: {:?}", attacks_by(&bot, bot.id()));
-    // GiveEXP=5, all of it for taking its whole life.
+    // GiveEXP=5, all of it for taking its whole life, plus 5 per skill raised by use
+    // (SubirSkill: weapons on each hit, tactics on each of its attacks).
+    let raises = bot.console().filter(|t| t.contains("Has mejorado tu habilidad")).count() as u32;
     let b = ao_formats::dat::balance::load(&recursos_dir()).unwrap().data;
-    let want = rules::add_exp(&b, 1, exp0, 5);
+    let want = rules::add_exp(&b, 1, exp0, 5 + 5 * raises);
     assert_eq!((bot.level(), bot.game.stats.exp), (want.level, want.exp));
 }
 

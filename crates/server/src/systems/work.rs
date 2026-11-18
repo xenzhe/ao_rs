@@ -459,9 +459,22 @@ impl World {
 
     /// `SubirSkill`: raise by use, with the level cap, hunger/thirst and the 5-exp bonus.
     pub(crate) fn work_raise_skill(&mut self, id: u32, job: Job) {
+        self.raise_skill_at(id, job.skill(), job.skill_name());
+    }
+
+    /// `SubirSkill` for any skill (combat, magic, resistance...).
+    pub(crate) fn raise_skill(&mut self, id: u32, skill: ao_formats::dat::balance::Skill) {
+        let name = skill.spanish_name().unwrap_or("?");
+        self.raise_skill_at(id, skill.id() as usize - 1, name);
+    }
+
+    fn raise_skill_at(&mut self, id: u32, index: usize, name: &str) {
         let difficulty = self.ao.balance.extra.skill_up_difficulty;
-        let p = self.player(id).unwrap();
-        let (value, level) = (p.stats.skills[job.skill()], p.level);
+        let Some(p) = self.player(id) else { return };
+        if p.combat.dead {
+            return;
+        }
+        let (value, level) = (p.stats.skills[index], p.level);
         if !rules::can_raise_skill(value, level, p.stats.food, p.stats.water) {
             return;
         }
@@ -469,8 +482,8 @@ impl World {
             return;
         }
         let new = value + 1;
-        self.player_mut(id).stats.skills[job.skill()] = new;
-        self.console(id, format!("¡Has mejorado tu habilidad {} en un punto! Ahora tienes {new} pts.", job.skill_name()), Tone::Good);
+        self.player_mut(id).stats.skills[index] = new;
+        self.console(id, format!("¡Has mejorado tu habilidad {name} en un punto! Ahora tienes {new} pts."), Tone::Good);
         self.send_skills(id);
         if level < self.ao.balance.max_level() {
             self.give_exp(id, rules::SKILL_UP_EXP);

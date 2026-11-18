@@ -116,6 +116,11 @@ impl World {
         } else if !blocked {
             self.console(pid, format!("{} te ataco y fallo.", npc.name), Tone::Combat);
         }
+        // NpcAtacaUser: SubirSkill(Defensa) on a block, SubirSkill(Tacticas) on every attack.
+        if blocked {
+            self.raise_skill(pid, Skill::ShieldDefense);
+        }
+        self.raise_skill(pid, Skill::Tactics);
     }
 
     /// Hook (contract): a priest (NPC system) or a spell brings a dead player back with
