@@ -168,8 +168,8 @@ pub struct ScoreBoard {
 
 impl ScoreBoard {
     pub fn add_player(&mut self, key: i64) {
-        if !self.scores.contains_key(&key) {
-            self.scores.insert(key, 0);
+        if let std::collections::hash_map::Entry::Vacant(e) = self.scores.entry(key) {
+            e.insert(0);
             self.order.push(key);
         }
     }
@@ -463,7 +463,7 @@ pub fn top10_add(top: &mut Vec<(String, i64)>, name: &str, score: i64) {
     } else {
         top.push((name.to_string(), score));
     }
-    top.sort_by(|a, b| b.1.cmp(&a.1));
+    top.sort_by_key(|e| std::cmp::Reverse(e.1));
     top.truncate(10);
 }
 

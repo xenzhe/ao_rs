@@ -395,7 +395,7 @@ impl World {
         }
         let max_players = s.max_players.max(1);
         let team_size = if s.team_size <= 1 { 1 } else { s.team_size };
-        if max_players % team_size != 0 {
+        if !max_players.is_multiple_of(team_size) {
             return Err("La cantidad maxima de jugadores no es divisible por la cantidad de grupos.".into());
         }
         self.lobbies.next_id += 1;
@@ -1489,7 +1489,7 @@ impl World {
             "SETTEAMSIZE" if num.is_some() => {
                 let size = num.unwrap().max(1);
                 let l = &mut self.lobbies.lobbies[li];
-                if l.max_players % size != 0 {
+                if !l.max_players.is_multiple_of(size) {
                     self.console(id, "La cantidad maxima de jugadores no es divisible por la cantidad de grupos.", Tone::Warn);
                 } else if !(state == LobbyState::Initialized || (state == LobbyState::AcceptingPlayers && l.seats.is_empty())) {
                     self.console(id, "No puede cambiar la cantidad de equipos una vez abierta la inscripcion.", Tone::Warn);

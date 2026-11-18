@@ -309,7 +309,7 @@ impl World {
     fn capture_begin(&mut self) {
         let cap = self.capture.as_mut().unwrap();
         cap.wait = 0;
-        if cap.participants.len() % 2 != 0 || cap.participants.len() < 2 {
+        if !cap.participants.len().is_multiple_of(2) || cap.participants.len() < 2 {
             self.capture_finish(Some(-2));
             return;
         }

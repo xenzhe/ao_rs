@@ -532,7 +532,7 @@ impl World {
         if self.wevents.invasions.is_none() {
             self.invasions();
         }
-        let minute = self.wevents.seconds % 60 == 0;
+        let minute = self.wevents.seconds.is_multiple_of(60);
         let on = self.wevents.invasions_on;
         let n = self.invasions().len();
         for i in 0..n {
