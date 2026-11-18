@@ -104,7 +104,7 @@ impl World {
     }
 
     fn quest_ready(&self, id: u32, q: &Quest, a: &ActiveQuest) -> bool {
-        q.global_quest_index <= 0 && self.quest_unmet(id, q, a).is_none()
+        (q.global_quest_index <= 0 || self.gquest_finish_check(id, q, false)) && self.quest_unmet(id, q, a).is_none()
     }
 
     /// The symbol over the NPC number `number` for this player (`MODULO_NPCs`).
@@ -230,7 +230,7 @@ impl World {
         let data = self.quest_data();
         let Some(q) = data.quest(qid as u32) else { return };
         let p = self.player(id).unwrap();
-        let state = quest::offer_state(q, p.level, p.quest.is_active(qid), p.quest.has_done(qid as u32), p.quest.has_done(q.required_quest.max(0) as u32), false);
+        let state = quest::offer_state(q, p.level, p.quest.is_active(qid), p.quest.has_done(qid as u32), p.quest.has_done(q.required_quest.max(0) as u32), self.gquest_accept_open(q));
         let quests = vec![OfferedQuest { info: self.quest_info(qid as u32, q), state: state as u8 }];
         self.player_mut(id).quest.obj_offer = Some((slot, qid));
         self.send(id, &S2C::Quest(QuestS2C::Offer { npc: 0, quests }));
@@ -256,7 +256,7 @@ impl World {
             return true;
         }
         let who = Candidate { level: p.level, class: p.class, skills: &p.stats.skills, faction_bit: self.quest_faction_bit(id) };
-        if let Err(r) = quest::can_accept(q, &who, p.quest.is_active(qid), |n| p.quest.has_done(n), qid as u32, false) {
+        if let Err(r) = quest::can_accept(q, &who, p.quest.is_active(qid), |n| p.quest.has_done(n), qid as u32, self.gquest_accept_open(q)) {
             let text = self.quest_refusal_text(&data, r);
             self.console(id, text, Tone::Warn);
             return true;
@@ -300,7 +300,7 @@ impl World {
             return self.console(id, TOO_FAR, Tone::Info);
         }
         let who = Candidate { level: p.level, class: p.class, skills: &p.stats.skills, faction_bit: self.quest_faction_bit(id) };
-        let verdict = quest::can_accept(q, &who, p.quest.is_active(qid), |n| p.quest.has_done(n), qid as u32, false);
+        let verdict = quest::can_accept(q, &who, p.quest.is_active(qid), |n| p.quest.has_done(n), qid as u32, self.gquest_accept_open(q));
         if let Err(r) = verdict {
             let text = self.quest_refusal_text(&data, r);
             return self.console(id, text, Tone::Warn);
@@ -372,7 +372,7 @@ impl World {
             .iter()
             .map(|qid| {
                 let q = data.quest(*qid).unwrap();
-                let state = quest::offer_state(q, p.level, p.quest.is_active(*qid as u16), p.quest.has_done(*qid), p.quest.has_done(q.required_quest.max(0) as u32), false);
+                let state = quest::offer_state(q, p.level, p.quest.is_active(*qid as u16), p.quest.has_done(*qid), p.quest.has_done(q.required_quest.max(0) as u32), self.gquest_accept_open(q));
                 OfferedQuest { info: self.quest_info(*qid, q), state: state as u8 }
             })
             .collect();
@@ -547,8 +547,8 @@ impl World {
             self.console(id, "Esta misión no está disponible para tu clase.", Tone::Warn);
             return false;
         }
-        if q.global_quest_index > 0 {
-            self.console(id, "El evento de esta misión ya terminó.", Tone::Warn);
+        // FinishGlobalQuestCheck (ModGlobalQuests.bas).
+        if q.global_quest_index > 0 && !self.gquest_finish_check(id, q, true) {
             return false;
         }
         if let Some(u) = self.quest_unmet(id, q, &a) {
@@ -576,6 +576,8 @@ impl World {
 
         // ---- everything is in order: take, then give.
         for o in &q.required_objs {
+            // FinishGlobalQuest: every object handed in counts for the global quest.
+            self.gquest_contribute(id, q, o.amount.max(0) as i64);
             self.quest_take_obj(id, o.obj, o.amount.max(0) as u32);
         }
         if !q.required_spells.is_empty() {

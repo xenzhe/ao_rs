@@ -159,7 +159,7 @@ impl World {
     ///   maps (TCP_HandleData2.bas).
     /// - `/online`: how many players are in.
     fn player_command(&mut self, id: u32, line: &str) -> bool {
-        if self.sos_player_command(id, line) {
+        if self.sos_player_command(id, line) || self.event_player_command(id, line) {
             return true;
         }
         let cmd = line.split_whitespace().next().unwrap_or("").to_lowercase();

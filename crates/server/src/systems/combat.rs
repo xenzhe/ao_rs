@@ -199,6 +199,7 @@ impl World {
         if let Source::Player(a) = source {
             // UsuarioAtacadoPorUsuario: every hit, not only the killing one.
             self.faction_on_player_attacked(a, id);
+            self.lobby_on_player_hit(a, id);
         }
         // TargetApplyDamageReduction / TargetWasDamaged: shields, damage-bonus debuffs.
         let dmg = self.eot_on_damaged(super::eot::Who::User(id), dmg);
@@ -228,6 +229,9 @@ impl World {
         }
         let killer = if let Source::Player(a) = source { Some(a) } else { None };
         self.event_on_player_killed(killer, id);
+        // Phase 6: scenario scores and respawn, capture the flag (`muereUsuario`).
+        self.lobby_on_player_killed(killer, id);
+        self.capture_on_death(id);
         true
     }
 
@@ -368,6 +372,10 @@ impl World {
             self.drop_npc_loot(map, nid, killer);
         }
         self.creature_on_killed(map, kind, killer);
+        // Phase 6: hunt scores, global quest bosses, invaders.
+        let melee = self.melee_blow;
+        self.lobby_on_npc_killed(map, nid, number, killer, melee);
+        self.world_events_on_npc_killed(map, nid, killer);
         if self.player(killer).is_some() {
             self.quest_on_npc_killed(killer, number, map);
             self.faction_on_npc_killed(killer, number);

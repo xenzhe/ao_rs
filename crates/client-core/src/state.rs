@@ -281,6 +281,7 @@ impl Game {
             S2C::WorldTime { elapsed_ms, day_ms } => self.world_time = Some((elapsed_ms, day_ms.max(1), self.now)),
             S2C::MapObject { x, y, obj } => self.on_map_object(x, y, obj),
             S2C::Sound { wav, x, y } => self.events.push(ClientEvent::Sound { wav, at: (x, y) }),
+            S2C::Music { midi } => self.events.push(ClientEvent::Music { midi }),
             S2C::SpellBook { spells } => {
                 self.spells = spells;
                 self.selected = self.selected.min(self.spells.len().saturating_sub(1));

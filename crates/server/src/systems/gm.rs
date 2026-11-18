@@ -162,6 +162,18 @@ impl World {
                 self.gm_mod(id, &me, c, rest.trim(), &a);
                 return true;
             }
+            // Phase 6 (systems/gm_event.rs): events, lobbies and the remaining handlers.
+            c if Self::gm_event_rank(c).is_some() => {
+                let need = Self::gm_event_rank(c).unwrap();
+                if rank < need {
+                    self.console(id, DENIED, Tone::Warn);
+                    return true;
+                }
+                let me = self.name_of(id);
+                info!(gm = %me, %line, "comando de GM");
+                self.gm_event(id, &me, c, rest.trim(), &a);
+                return true;
+            }
             "/KILL" | "/HOME" | "/LIBERAR" | "/DEST" | "/GO" | "/SMSG" | "/HORA" | "/IRCERCA" | "/SOBJ" | "/NENE" | "/TRIGGER" | "/BLOQ" | "/LMAP" | "/EXP" | "/GLD" | "/HECHIZO" => {
                 let need = Self::gm_tsao_rank(cmd.as_str()).unwrap();
                 if rank < need {

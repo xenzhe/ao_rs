@@ -328,6 +328,9 @@ impl World {
         if self.instance(map).npcs[&nid].pet.owner.is_some() {
             return self.pet_ai(map, nid, now);
         }
+        if self.invasion_npc_ai(map, nid, now) {
+            return;
+        }
         let n = &self.instance(map).npcs[&nid];
         let ao = self.ao.clone();
         let Some(d) = ao.npcs.get(n.def as u32) else { return };

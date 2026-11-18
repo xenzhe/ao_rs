@@ -318,7 +318,9 @@ impl World {
         }
         let total = (damage + extra.max(0)) as i32;
         self.broadcast(map, &S2C::Attack { attacker: id, target: nid, hit: true, damage: total, critical: extra > 0 || tsao_crit }, None);
+        self.melee_blow = true;
         self.damage_npc(map, nid, total, id);
+        self.melee_blow = false;
         // TargetDidHit: on-hit effects (Filo de Toxina, Desgarro...).
         self.eot_on_hit(id, Who::Npc(map, nid));
         true

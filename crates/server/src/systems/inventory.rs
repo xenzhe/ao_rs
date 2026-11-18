@@ -582,6 +582,7 @@ impl World {
             _ if o.tsao_type == super::tsao_progress::TSAO_OCTARINE_GEM => self.tsao_upgrades(id),
             ObjType::Chest if o.chest_kind > 0 => self.open_chest(id, slot, o.chest_kind as u32, o.chest_key),
             ObjType::Chest => self.open_ao20_chest(id, slot, o),
+            ObjType::CastleSpawner => self.castle_use_relic(id, item.obj),
             ObjType::Quest if o.quest_id > 0 => self.quest_from_object(id, slot, o.quest_id as u16),
             ObjType::UseOnce => {
                 let s = &mut self.player_mut(id).stats;
@@ -931,6 +932,7 @@ impl World {
             return self.console(id, "Accion no permitida.", Tone::Warn);
         }
         self.drop_obj(id, slot, amount, map, x, y);
+        self.capture_dropped(id, item.obj);
     }
 
     /// HandleDrop (gold slot) -> TirarOro: at most 100.000 per request, never more than
@@ -961,8 +963,12 @@ impl World {
         if ao.objs.get(item.obj as u32).is_some_and(|o| o.grabbable == 1) {
             return;
         }
+        if !self.capture_may_pick(id, item.obj) {
+            return;
+        }
         if self.add_item(id, item) {
             self.erase_obj(map, x, y, item.amount);
+            self.capture_picked(id, item.obj);
             if item.obj != GOLD_OBJ {
                 let name = ao.objs.get(item.obj as u32).map_or("objeto", |o| o.name.as_str());
                 self.console(id, format!("Has agarrado {} {name}.", item.amount), Tone::Info);

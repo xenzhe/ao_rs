@@ -16,6 +16,54 @@ pub struct ServerConfig {
     pub security: SecurityConfig,
     pub world: WorldConfig,
     pub ops: OpsConfig,
+    pub events: EventsConfig,
+}
+
+/// Phase 6 events (`[events]`): what AO20 read from its own `Configuracion.ini [EVENTOS]`
+/// and `Server.ini AUTOEVENT*` (neither file is public: everything is off by default).
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct EventsConfig {
+    /// Hours of the server's local time (dates of GlobalQuests.dat, hourly events).
+    pub utc_offset_hours: i32,
+    /// `[EVENTOS] 0..23`: hour -> "tipo-duración-multiplicación" (types 1 gold, 2 exp,
+    /// 3 gathering, 4 drop, 5 gold+exp, 6 +gathering, 7 +drop).
+    pub hourly: std::collections::HashMap<String, String>,
+    /// `AUTOEVENTHOURCALENDAR_Horarios`: hour of the automatic lobby event (-1 = never).
+    pub auto_hour: i32,
+    /// `AUTOEVENTDAYCALENDAR_<día>`: Sunday..Saturday, the `e_EventType` of the day
+    /// (0 none, 1 capture, 2 hunt, 3 deathmatch).
+    pub auto_days: [u8; 7],
+    /// `AUTO<TIPO>_*` of the automatic event (same for every type).
+    pub auto_min_level: u32,
+    pub auto_max_level: u32,
+    pub auto_min_players: u32,
+    pub auto_max_players: u32,
+    pub auto_team_size: u32,
+    pub auto_rounds: u32,
+    pub auto_fee: u32,
+    /// Founding a castle needs Patreon "Noble" in AO20, which does not exist here: off =
+    /// nobody can found one (as for the Patreon maps), on = any player can.
+    pub castle_without_patreon: bool,
+}
+
+impl Default for EventsConfig {
+    fn default() -> Self {
+        EventsConfig {
+            utc_offset_hours: -3,
+            hourly: Default::default(),
+            auto_hour: -1,
+            auto_days: [0; 7],
+            auto_min_level: 1,
+            auto_max_level: 47,
+            auto_min_players: 2,
+            auto_max_players: 20,
+            auto_team_size: 1,
+            auto_rounds: 3,
+            auto_fee: 0,
+            castle_without_patreon: false,
+        }
+    }
 }
 
 /// Operation: statistics, backups, graceful shutdown (`crate::ops`, docs/OPERACION.md).
@@ -73,6 +121,8 @@ pub struct WorldConfig {
     pub gold_mult: u32,
     /// `DropMult`: divides the npcs.dat drop chance "1 in N" (0 = 1).
     pub drop_mult: u32,
+    /// `RecoleccionMult`: multiplies what gathering gives (mining, wood, fishing; 0 = 1).
+    pub gather_mult: u32,
     /// Minutes an object dropped on the floor stays before it vanishes (0 = forever, as in
     /// the official server, whose cleaner `TLimpiezaItem` is never used).
     pub floor_cleanup_minutes: u64,
@@ -93,6 +143,7 @@ impl Default for ServerConfig {
             security: SecurityConfig::default(),
             world: WorldConfig::default(),
             ops: OpsConfig::default(),
+            events: EventsConfig::default(),
         }
     }
 }
@@ -105,7 +156,7 @@ impl Default for SecurityConfig {
 
 impl Default for WorldConfig {
     fn default() -> Self {
-        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120, creature_poison: true }
+        WorldConfig { tick_ms: 50, exp_mult: 1, gold_mult: 1, drop_mult: 1, gather_mult: 1, floor_cleanup_minutes: 15, day_length_minutes: 120, creature_poison: true }
     }
 }
 

@@ -33,6 +33,14 @@ mod gm;
 mod gm_mod;
 mod gm_tsao;
 mod event;
+// Phase 6 (docs/AO20_AUDITORIA.md): lobbies, world events, castles, capture, GM extras.
+pub(crate) mod lobby;
+pub(crate) mod world_events;
+pub(crate) mod castle;
+pub(crate) mod capture;
+mod gm_event;
+#[cfg(test)]
+mod phase6_tests;
 mod travel;
 mod mail;
 mod surgeon;

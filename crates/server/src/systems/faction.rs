@@ -69,6 +69,10 @@ impl World {
     /// (`PuedeAtacar` faction/criminal rules beyond safe zones). The caller shows the
     /// message to the attacker. Default: allowed.
     pub(crate) fn faction_attack_refusal(&self, attacker: u32, victim: u32) -> Option<&'static str> {
+        // Lobbies and capture the flag (`SafeFightMap`, `CurrentTeam`): only teams count.
+        if self.event_safe_fight(attacker) && self.event_safe_fight(victim) {
+            return self.event_same_team(attacker, victim).then_some("¡No puedes atacar a miembros de tu propio equipo!");
+        }
         let (a, v) = (self.faction_fighter(attacker)?, self.faction_fighter(victim)?);
         let map = self.player(victim)?.map;
         let safe = self.maps.get(&map).is_some_and(|m| m.map.safe);
@@ -198,7 +202,7 @@ impl World {
 
     /// Standing on an arena tile (`e_Trigger6` / trigger 6, `TRIGGER_FIGHT_ZONE`).
     fn faction_in_arena(&self, id: u32) -> bool {
-        self.player(id).is_some_and(|p| self.maps.get(&p.map).is_some_and(|m| m.map.trigger(p.x, p.y) == ao_rules::combat::TRIGGER_FIGHT_ZONE))
+        self.player(id).is_some_and(|p| self.maps.get(&p.map).is_some_and(|m| m.map.trigger(p.x, p.y) == ao_rules::combat::TRIGGER_FIGHT_ZONE)) || self.event_safe_fight(id)
     }
 
     /// `PeleaSegura`: both fighters in an arena.
