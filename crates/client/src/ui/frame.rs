@@ -38,16 +38,18 @@ pub enum WindowId {
     Exchange,
     Bonus,
     Poll,
+    Upgrade,
 }
 
 impl WindowId {
-    pub const ALL: [WindowId; 21] = [
+    pub const ALL: [WindowId; 22] = [
         WindowId::Travel,
         WindowId::Mail,
         WindowId::Surgeon,
         WindowId::Exchange,
         WindowId::Bonus,
         WindowId::Poll,
+        WindowId::Upgrade,
         WindowId::Inventory,
         WindowId::Bank,
         WindowId::Shop,
@@ -88,6 +90,7 @@ impl WindowId {
             WindowId::Exchange => "Canje",
             WindowId::Bonus => "Bonificación de clase",
             WindowId::Poll => "Votación",
+            WindowId::Upgrade => "Mejorar objetos",
         }
     }
 
@@ -137,6 +140,7 @@ impl WindowId {
             WindowId::Exchange => vec2(780.0, 560.0),
             WindowId::Bonus => vec2(560.0, 400.0),
             WindowId::Poll => vec2(480.0, 420.0),
+            WindowId::Upgrade => vec2(620.0, 440.0),
         }
     }
 }

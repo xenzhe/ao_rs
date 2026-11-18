@@ -55,6 +55,8 @@ pub enum TsaoC2S {
     ChooseBonus { tier: u8, option: u8 },
     /// Option (0-based) of the open poll.
     Vote { option: u8 },
+    /// Upgrade `index` (of `Mejorados.dat`, as sent in `Upgrades`) with the Octarine gem.
+    Upgrade { index: u16 },
 }
 
 /// Server -> client.
@@ -71,4 +73,7 @@ pub enum TsaoS2C {
     /// The poll window; `results` are the votes per option, sent once the player voted.
     Poll { question: String, options: Vec<String>, results: Option<Vec<u32>> },
     CloseExchange,
+    /// The Octarine gem window: `(index, object you have, what it becomes)`; empty when
+    /// nothing in the bag can be upgraded. Sent again (or empty) after an upgrade.
+    Upgrades(Vec<(u16, u16, PrizeView)>),
 }

@@ -22,6 +22,7 @@ thread_local! {
     static SCROLL: Cell<usize> = const { Cell::new(0) };
     static UNITS: Cell<u32> = const { Cell::new(1) };
     static TAB_ENV: Cell<bool> = const { Cell::new(false) };
+    static UP_SCROLL: Cell<usize> = const { Cell::new(0) };
 }
 
 const ROW: f32 = 46.0;
@@ -182,6 +183,39 @@ pub fn draw_exchange(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect)
     }
 }
 
+
+/// The Octarine gem: each object you can upgrade, what it becomes and the button.
+pub fn draw_upgrade(ui: &mut Ui, game: &mut Game, assets: &mut Assets, r: Rect) {
+    let u = ui.u;
+    kit::begin(ui, WindowId::Upgrade);
+    let Some(list) = game.local.p4.tsao.upgrades.clone() else { return };
+    let mut y = kit::section("Mejorar con la Gema Octarina", r.x + 6.0 * u, r.y, r.w - 12.0 * u, u);
+    y += 6.0 * u;
+    let row_h = 76.0 * u;
+    let vis = (((r.bottom() - y) / (row_h + 6.0 * u)).floor() as usize).max(1);
+    let area = Rect::new(r.x, y, r.w, r.bottom() - y);
+    let off = kit::wheel(area, UP_SCROLL.with(Cell::get), list.len(), vis, 1);
+    UP_SCROLL.with(|s| s.set(off));
+    for (index, from, to) in list.iter().skip(off).take(vis) {
+        let row = Rect::new(r.x + 6.0 * u, y, r.w - 18.0 * u, row_h);
+        kit::page(row, u);
+        let a = Rect::new(row.x + 8.0 * u, row.y + 12.0 * u, 52.0 * u, 52.0 * u);
+        draw_cell(assets, a, Some(ItemSlot { obj: *from, amount: 1, equipped: false }), &CellOpts { no_amount: true, ..Default::default() }, u);
+        kit::icon(Icon::Star, a.right() + 16.0 * u, a.center().y, 14.0 * u, WAX);
+        let b = Rect::new(a.right() + 32.0 * u, a.y, 52.0 * u, 52.0 * u);
+        draw_cell(assets, b, Some(ItemSlot { obj: to.obj, amount: 1, equipped: false }), &CellOpts { no_amount: true, ..Default::default() }, u);
+        let tx = b.right() + 12.0 * u;
+        let tw = row.right() - tx - 140.0 * u;
+        kit::ink_fit(FontKind::Title, &to.name, tx, row.y + 26.0 * u, 16.0 * u, tw, INK);
+        let stats: Vec<String> = to.stats.iter().zip(["Golpe", "Def.", "Daño mág.", "Def. mág."]).filter(|((_, hi), _)| *hi > 0).map(|((lo, hi), n)| format!("{n} {lo}-{hi}")).collect();
+        kit::ink_fit(FontKind::Body, &format!("de {} · {}", item_name(assets, *from), stats.join(" · ")), tx, row.y + 50.0 * u, 13.0 * u, tw, INK);
+        if button_kind(Rect::new(row.right() - 128.0 * u, row.y + 22.0 * u, 118.0 * u, 32.0 * u), "Mejorar", Kind::Primary, true, u) {
+            game.tsao_send(TsaoC2S::Upgrade { index: *index });
+        }
+        y += row_h + 6.0 * u;
+    }
+    kit::scrollbar(area, list.len(), vis, off, u);
+}
 
 pub fn draw_bonus(ui: &mut Ui, game: &mut Game, _assets: &mut Assets, r: Rect) {
     let u = ui.u;

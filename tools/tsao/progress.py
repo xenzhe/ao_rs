@@ -1,7 +1,7 @@
 """TSAO progression data for Numic AO, run after convert.py (build.cmd):
 
-- Premios.dat (tournament point prizes) and ItemsDonaciones.dat (donation credit packs) as
-  TSAO has them;
+- Premios.dat (tournament point prizes), ItemsDonaciones.dat (donation credit packs) and
+  Mejorados.dat (upgrades with the Octarine gem) as TSAO has them;
 - CanjeTS.dat: the TS point shop, hard-coded in TCP_HandleData1.bas `FTSPTS`;
 - ClassBonus.dat: the class bonuses of levels 53/56/60 (Modulo_UsUaRiOs.bas CheckUserLevel),
   each option with the effect the combat code gave its text (SistemaCombate.bas,
@@ -76,7 +76,7 @@ def effect(text):
 def main(src, dst):
     sdat = os.path.join(src, "Servidor", "Dat")
     ddat = os.path.join(dst, "Dat")
-    for f in ("Premios.dat", "ItemsDonaciones.dat"):
+    for f in ("Premios.dat", "ItemsDonaciones.dat", "Mejorados.dat"):
         write(os.path.join(ddat, f), read(os.path.join(sdat, f)))
 
     out = ["[INIT]", f"Num={len(TS_SHOP)}", ""]
@@ -103,7 +103,8 @@ def main(src, dst):
 
     quests = sections(read(os.path.join(sdat, "QUESTS.DAT")))
     qpath = os.path.join(ddat, "Quests.DAT")
-    text = read(qpath).replace("\r\n", "\n")
+    # Idempotent: drop what an earlier run added.
+    text = re.sub(r"(?im)^Reward(Torneo|TS|Creditos)=.*\n", "", read(qpath).replace("\r\n", "\n"))
 
     def add(m):
         q = quests.get(f"QUEST{m.group(1)}", {})

@@ -26,6 +26,8 @@ pub struct TsaoState {
     pub bonus_offer: Option<(u8, u32, [String; 2])>,
     pub bonuses: Vec<String>,
     pub poll: Option<Poll>,
+    /// The Octarine gem window: `(index, object you have, what it becomes)`.
+    pub upgrades: Option<Vec<(u16, u16, PrizeView)>>,
 }
 
 impl TsaoState {
@@ -37,6 +39,7 @@ impl TsaoState {
             TsaoS2C::Bonuses(b) => self.bonuses = b.clone(),
             TsaoS2C::Poll { question, options, results } => self.poll = Some(Poll { question: question.clone(), options: options.clone(), results: results.clone() }),
             TsaoS2C::CloseExchange => self.exchange = None,
+            TsaoS2C::Upgrades(list) => self.upgrades = (!list.is_empty()).then(|| list.clone()),
         }
     }
 }
@@ -48,6 +51,10 @@ impl Game {
 
     pub fn exchange_close(&mut self) {
         self.local.p4.tsao.exchange = None;
+    }
+
+    pub fn upgrades_close(&mut self) {
+        self.local.p4.tsao.upgrades = None;
     }
 
     pub fn poll_close(&mut self) {

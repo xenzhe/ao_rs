@@ -26,6 +26,36 @@ pub struct Prize {
     pub desc: String,
 }
 
+/// `Mejorados.dat`: object `requires` + the Octarine gem become `prize.obj`
+/// (InvUsuario.bas otGemaOctarina, TCP_HandleData1.bas `SPÑ`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Upgrade {
+    pub requires: u16,
+    /// What it becomes and its stats (`price` unused).
+    pub result: Prize,
+}
+
+pub fn parse_upgrades(ini: &Ini) -> Vec<Upgrade> {
+    (1..=count(ini.section("init"), "nummejorados"))
+        .filter_map(|i| {
+            let s = ini.section(&format!("item{i}"));
+            s?;
+            let result = Prize {
+                name: get(s, "nombre").trim().to_string(),
+                obj: int(s, "numobj") as u16,
+                price: 0,
+                hit: range(s, "ataqueminimo", "ataquemaximo"),
+                def: range(s, "defensaminima", "defensamaxima"),
+                magic_hit: range(s, "ataquemagicominimo", "ataquemagicomaximo"),
+                magic_def: range(s, "defensamagicaminima", "defensamagicamaxima"),
+                desc: get(s, "descripcion").to_string(),
+            };
+            Some(Upgrade { requires: int(s, "requiere") as u16, result })
+        })
+        .filter(|u| u.requires > 0 && u.result.obj > 0)
+        .collect()
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PackReward {
     Item { obj: u16, amount: u32 },
@@ -144,6 +174,7 @@ pub struct TsaoProgress {
     pub bonus: ClassBonus,
     pub level_points: Vec<LevelPoints>,
     pub poll: Option<Poll>,
+    pub upgrades: Vec<Upgrade>,
 }
 
 fn get<'a>(s: Option<&'a HashMap<String, String>>, k: &str) -> &'a str {
@@ -274,6 +305,7 @@ pub fn load(recursos: &Path) -> TsaoProgress {
         bonus: parse_bonus(&dat("ClassBonus.dat")),
         level_points: parse_level_points(&dat("LevelPoints.dat")),
         poll: parse_poll(&dat("Consultas.dat")),
+        upgrades: parse_upgrades(&dat("Mejorados.dat")),
     }
 }
 

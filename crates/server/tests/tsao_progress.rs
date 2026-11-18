@@ -69,6 +69,42 @@ fn data_is_converted() {
     assert!(npcs.data.iter().any(|(_, n)| n.give_points == 200));
 }
 
+/// Mejorados.dat: the Octarine gem turns an object into its upgrade, taking both, once.
+#[test]
+fn octarine_gem_upgrades() {
+    let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };
+    let data = ao_formats::dat::tsao_progress::load(&rec);
+    let objs = ao_formats::dat::obj::load(&rec).unwrap().data;
+    let gem = objs.iter().find(|(_, o)| o.tsao_type == 37).map(|(n, _)| n as u16).expect("Octarine gem in obj.dat");
+    let up = data.upgrades[0].clone();
+    let s = server(rec);
+    let mut a = s.connect();
+    assert!(a.create_account("cuenta_m", PASS));
+    assert!(a.create_character("Herrero", 1, 3, 1, 5));
+    a.play("Herrero");
+    // Without anything to upgrade the gem says so.
+    a.say(&format!("/dar {gem} 2"));
+    a.wait_until("gema", |b| count(b, gem) == 2);
+    let gslot = a.game.local.inventory.iter().position(|i| i.is_some_and(|i| i.obj == gem)).unwrap() as u8 + 1;
+    a.send(&C2S::UseItem { slot: gslot });
+    a.wait_until("nada que mejorar", |b| says(b, "No tienes objetos que se puedan mejorar"));
+    a.say(&format!("/dar {} 1", up.requires));
+    a.wait_until("objeto", |b| count(b, up.requires) == 1);
+    // The use interval between two uses.
+    s.advance(2000);
+    a.send(&C2S::UseItem { slot: gslot });
+    a.wait_until("ventana", |b| b.game.local.p4.tsao.upgrades.is_some());
+    let list = a.game.local.p4.tsao.upgrades.clone().unwrap();
+    assert!(list.iter().any(|(i, from, to)| *i == 0 && *from == up.requires && to.obj == up.result.obj));
+    a.send(&C2S::Tsao(TsaoC2S::Upgrade { index: 999 }));
+    a.send(&C2S::Tsao(TsaoC2S::Upgrade { index: 0 }));
+    a.send(&C2S::Tsao(TsaoC2S::Upgrade { index: 0 }));
+    a.wait_until("mejorado", |b| count(b, up.result.obj) == 1);
+    step(&s, &mut a);
+    assert_eq!((count(&a, up.requires), count(&a, gem), count(&a, up.result.obj)), (0, 1, 1), "one upgrade, one gem");
+    assert!(says(&a, "No tienes ese objeto"));
+}
+
 #[test]
 fn points_bonus_exchange_vote_and_marriage() {
     let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };

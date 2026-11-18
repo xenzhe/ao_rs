@@ -76,6 +76,7 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
             WindowId::Exchange => tsao::draw_exchange(ui, game, assets, r),
             WindowId::Bonus => tsao::draw_bonus(ui, game, assets, r),
             WindowId::Poll => tsao::draw_poll(ui, game, assets, r),
+            WindowId::Upgrade => tsao::draw_upgrade(ui, game, assets, r),
         }
     }
     // Floating "X invites you to trade" and orphan prompts.
@@ -99,6 +100,7 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
         (WindowId::Exchange, l.p4.tsao.exchange.is_some()),
         (WindowId::Bonus, l.p4.tsao.bonus_offer.is_some()),
         (WindowId::Poll, l.p4.tsao.poll.is_some()),
+        (WindowId::Upgrade, l.p4.tsao.upgrades.is_some()),
     ];
     for (w, on) in states {
         let was = ui.server_windows.contains(&w);
@@ -114,6 +116,7 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
                     WindowId::Exchange => game.exchange_close(),
                     WindowId::Bonus => game.bonus_later(),
                     WindowId::Poll => game.poll_close(),
+                    WindowId::Upgrade => game.upgrades_close(),
                     _ => game.trade_cancel(),
                 }
                 ui.server_windows.remove(&w);

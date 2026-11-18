@@ -35,6 +35,9 @@
 //! - `/RESULTADOS` divided by the total with no votes (error), votes lived in memory and
 //!   `/VOTAR` could be answered several times from one account; votes are stored, one per
 //!   account, and results show once you voted;
+//! - `SPÑ` (Mejorados.dat) took the upgrade by NAME from the client text, gave the new
+//!   object before taking the old one and could take an equipped one; here by index, only
+//!   unequipped objects, the gem found by its TSAO type (not object 1448 in code);
 //! - `/DIVORCIARSE` read the spouse from the file after clearing it (the spouse's file was
 //!   never cleared when offline); marriages are a table and both sides go together.
 use crate::db::tsao::PointsRow;
@@ -49,6 +52,8 @@ use tracing::{info, warn};
 
 /// Most units of a prize bought at once (TSAO meant 10000 with its broken check).
 pub const MAX_PRIZE_UNITS: u32 = 10_000;
+/// TSAO `otGemaOctarina` (Declares.bas), kept by the converter as `TsaoObjType`.
+pub const TSAO_OCTARINE_GEM: i32 = 37;
 
 /// A player's TSAO progression piece (loaded on entering, written on every change).
 #[derive(Clone, Debug, Default)]
@@ -443,7 +448,68 @@ impl World {
             }
             TsaoC2S::ChooseBonus { tier, option } => self.tsao_choose_bonus(id, tier, option),
             TsaoC2S::Vote { option } => self.tsao_vote(id, option),
+            TsaoC2S::Upgrade { index } => {
+                if self.tsao_can_exchange(id) {
+                    self.tsao_upgrade(id, index)
+                }
+            }
         }
+    }
+
+    // ---- upgrades (Mejorados.dat) ----
+
+    /// First bag slot holding `obj`, not equipped.
+    fn tsao_free_slot_of(&self, id: u32, obj: u16) -> Option<u8> {
+        let p = self.player(id)?;
+        (1..=p.inv.usable_slots()).find(|s| p.inv.get(*s).is_some_and(|i| i.obj == obj) && !p.inv.equipped.is_equipped(*s) && !p.inv.pending_equipped.contains(s))
+    }
+
+    fn tsao_gem_slot(&self, id: u32) -> Option<u8> {
+        let p = self.player(id)?;
+        (1..=p.inv.usable_slots()).find(|s| p.inv.get(*s).and_then(|i| self.ao.objs.get(i.obj as u32)).is_some_and(|o| o.tsao_type == TSAO_OCTARINE_GEM))
+    }
+
+    /// HOOK (inventory): the Octarine gem was used: the upgrades of what the bag holds.
+    pub(crate) fn tsao_upgrades(&mut self, id: u32) {
+        let data = self.tsao_data();
+        let list: Vec<_> = data
+            .upgrades
+            .iter()
+            .enumerate()
+            .filter(|(_, u)| self.tsao_free_slot_of(id, u.requires).is_some())
+            .map(|(i, u)| {
+                let z = &u.result;
+                (i as u16, u.requires, PrizeView { obj: z.obj, name: z.name.clone(), price: 0, stats: [z.hit, z.def, z.magic_hit, z.magic_def], desc: z.desc.clone() })
+            })
+            .collect();
+        if list.is_empty() {
+            self.console(id, "No tienes objetos que se puedan mejorar (desequípalos primero).", Tone::Info);
+        }
+        self.send(id, &S2C::Tsao(TsaoS2C::Upgrades(list)));
+    }
+
+    fn tsao_upgrade(&mut self, id: u32, index: u16) {
+        let data = self.tsao_data();
+        let Some(up) = data.upgrades.get(index as usize) else { return self.strike(id, "mejorar: indice falso") };
+        let Some(gem) = self.tsao_gem_slot(id) else { return self.console(id, "Necesitas una Gema Octarina.", Tone::Warn) };
+        let Some(slot) = self.tsao_free_slot_of(id, up.requires) else { return self.console(id, "No tienes ese objeto (o lo llevas equipado).", Tone::Warn) };
+        // Room: the two go out first, so a full bag still fits the result when the
+        // required object was alone in its slot; check against the bag without them.
+        let frees = self.player(id).unwrap().inv.get(slot).is_some_and(|i| i.amount == 1) || self.player(id).unwrap().inv.get(gem).is_some_and(|i| i.amount == 1);
+        if !frees && !self.fits_in_bag(id, &[(up.result.obj, 1)]) {
+            return self.console(id, "No tienes espacio en el inventario.", Tone::Warn);
+        }
+        let from = self.ao.objs.get(up.requires as u32).map_or(String::new(), |o| o.name.clone());
+        self.remove_from_slot(id, slot, 1);
+        self.remove_from_slot(id, gem, 1);
+        self.add_item(id, InvItem { obj: up.result.obj, amount: 1 });
+        self.send_inventory_vitals(id);
+        if let Some(p) = self.player(id) {
+            info!(name = %p.name, from = up.requires, to = up.result.obj, "mejora de objeto");
+            self.save_player(p);
+        }
+        self.console(id, format!("Has mejorado {from}: ahora es {}.", up.result.name), Tone::Good);
+        self.tsao_upgrades(id);
     }
 
     // ---- poll ----
@@ -545,6 +611,14 @@ impl World {
                 }
             }
             "/votar" | "/resultados" => self.tsao_poll_window(id),
+            // Numic: the same as using the gem from the bag.
+            "/mejorar" => {
+                if self.tsao_gem_slot(id).is_some() {
+                    self.tsao_upgrades(id);
+                } else {
+                    self.console(id, "Necesitas una Gema Octarina.", Tone::Warn);
+                }
+            }
             "/casar" if !rest.is_empty() => self.tsao_marry(id, rest),
             "/divorciarse" => self.tsao_divorce(id),
             "/puntos" | "/est" => {

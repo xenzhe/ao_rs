@@ -54,8 +54,8 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Oro y botín de criaturas como TSAO | ✅ | |
 | **Cofres al azar (Starterpack, `Cofres.dat`)** | ✅ | Esta tanda |
 | Correo con paquetes | ✅ | |
-| Mejorar objetos (`Mejorados.dat`) | ❌ | |
-| Pergaminos de experiencia/oro (scrolls) | ❌ | |
+| Mejorar objetos (`Mejorados.dat`) | ✅ | Usar la Gema Octarina (o `/mejorar`): ventana «Mejorar objetos» |
+| Pergaminos de experiencia/oro (scrolls) | ❌ | El código existe en TSAO pero `Obj.dat` no trae ningún objeto de tipo 50: nada que portar hasta que haya datos |
 | Canje por puntos (torneo, TS, donación) | ✅ | `/canje`: `Premios.dat`, tienda TS (`CanjeTS.dat`), `ItemsDonaciones.dat`; packs con premium/skins visibles pero no a la venta (no hay esos sistemas) |
 | Subastas | ✅ | (versión Numic) |
 
