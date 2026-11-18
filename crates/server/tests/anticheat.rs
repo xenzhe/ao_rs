@@ -33,6 +33,29 @@ fn speedhack_is_rejected_and_kicked() {
     bot.wait_until("conexion cerrada", |b| b.closed());
 }
 
+/// A GM teleporting around while walking: after each teleport the client walks again at
+/// once (its step timer restarts with the new map). That is not a speed-hack.
+#[test]
+fn walking_right_after_teleports_is_not_a_speedhack() {
+    let s = TestServer::start();
+    let mut bot = s.bot("Viajante");
+    let (x, y) = bot.pos();
+    let map = bot.map();
+    for _ in 0..10 {
+        let dir = bot.free_dir(1).expect("free direction");
+        bot.walk_raw(dir);
+        bot.say(&format!("/ir {map} {x} {y}"));
+        bot.sync();
+        let dir = bot.free_dir(1).expect("free direction");
+        bot.walk_raw(dir);
+        bot.sync();
+        s.advance(WALK_MS);
+    }
+    bot.sync();
+    assert!(bot.kicked().is_none(), "kicked: {:?}", bot.kicked());
+    assert!(!bot.closed());
+}
+
 /// Walks `steps` tiles, advancing game time between steps in uneven slices.
 fn legit_walk(steps: i32, slices: &[u64]) {
     let s = TestServer::start();

@@ -305,6 +305,8 @@ impl World {
         self.broadcast(old, &S2C::Despawn { id }, Some(id));
         let (fx, fy) = self.free_tile_near(map, x, y, 2);
         self.enter_map(id, map, fx, fy);
+        let now = self.now();
+        self.player_mut(id).walk.reset(now);
     }
 
     /// Tells everyone on the map how this player looks (equipment, death...).

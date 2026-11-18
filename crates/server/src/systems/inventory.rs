@@ -839,7 +839,7 @@ mod tests {
 
     fn login(w: &mut World, id: u32, name: &str) -> Conn {
         let c = connect(w, id);
-        w.on_event(Event::Frame { id, msg: C2S::Login { name: name.into(), version: PROTOCOL_VERSION } });
+        w.on_event(Event::Frame { id, msg: C2S::Login { name: name.into(), version: PROTOCOL_VERSION }, at: None });
         assert!(w.player(id).is_some(), "dev login de {name}");
         c
     }
@@ -869,7 +869,7 @@ mod tests {
     }
 
     fn send(w: &mut World, id: u32, msg: C2S) {
-        w.on_event(Event::Frame { id, msg });
+        w.on_event(Event::Frame { id, msg, at: None });
     }
 
     #[test]

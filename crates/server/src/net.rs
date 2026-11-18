@@ -13,7 +13,8 @@ pub type ConnId = u32;
 
 pub enum Event {
     Connected { id: ConnId, addr: SocketAddr, tx: UnboundedSender<Vec<u8>> },
-    Frame { id: ConnId, msg: C2S },
+    /// `at`: when it arrived (pacing checks must not depend on how busy the world was).
+    Frame { id: ConnId, msg: C2S, at: Option<GameTime> },
     Violation { id: ConnId, reason: &'static str },
     Disconnected { id: ConnId },
 }
@@ -71,7 +72,7 @@ async fn connection(sock: TcpStream, addr: SocketAddr, id: ConnId, ev: Unbounded
                     if count > max_per_sec {
                         Some("flood de paquetes")
                     } else {
-                        let _ = ev.send(Event::Frame { id, msg });
+                        let _ = ev.send(Event::Frame { id, msg, at: Some(now) });
                         None
                     }
                 }

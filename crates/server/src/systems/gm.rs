@@ -1077,7 +1077,7 @@ mod tests {
         let mut w = World::new(Settings::defaults());
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         w.on_event(Event::Connected { id: 1, addr: "127.0.0.1:9".parse().unwrap(), tx });
-        w.on_event(Event::Frame { id: 1, msg: ao_protocol::C2S::Login { name: "Gema".into(), version: PROTOCOL_VERSION } });
+        w.on_event(Event::Frame { id: 1, msg: ao_protocol::C2S::Login { name: "Gema".into(), version: PROTOCOL_VERSION }, at: None });
         w.player_mut(1).gm.rank = GmRank::Admin;
         let map = w.player(1).unwrap().map;
         let before: Vec<u32> = w.instance(map).npc_ids().to_vec();

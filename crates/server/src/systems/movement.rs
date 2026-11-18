@@ -17,7 +17,8 @@ impl World {
     }
 
     pub(crate) fn on_walk(&mut self, id: u32, dir: Dir, seq: u32) {
-        let now = self.now();
+        // Paced by arrival time: a busy world tick must not turn queued steps into a burst.
+        let now = self.frame_at.unwrap_or_else(|| self.now());
         let (map, x, y, seq_ok, pace_ok) = {
             let p = self.player_mut(id);
             let seq_ok = p.seq.accept(seq);

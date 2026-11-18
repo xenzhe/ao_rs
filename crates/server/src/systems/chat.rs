@@ -241,7 +241,7 @@ mod tests {
     fn login(w: &mut World, id: u32, name: &str) -> UnboundedReceiver<Vec<u8>> {
         let (tx, rx) = unbounded_channel();
         w.on_event(Event::Connected { id, addr: "127.0.0.1:9".parse().unwrap(), tx });
-        w.on_event(Event::Frame { id, msg: C2S::Login { name: name.into(), version: PROTOCOL_VERSION } });
+        w.on_event(Event::Frame { id, msg: C2S::Login { name: name.into(), version: PROTOCOL_VERSION }, at: None });
         rx
     }
 

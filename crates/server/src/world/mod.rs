@@ -73,6 +73,8 @@ pub enum Control {
 }
 
 pub struct World {
+    /// Arrival time of the frame being handled (None outside frames / in tests).
+    pub(crate) frame_at: Option<crate::clock::GameTime>,
     /// Last player each player killed and counted for a quest (anti alt-farming).
     pub quest_last_victim: HashMap<u32, String>,
     /// Clan vaults loaded on first use (guild id -> vault).
@@ -141,6 +143,7 @@ impl World {
             next_regen: GameTime(REGEN_MS),
             next_autosave: GameTime::ZERO,
             probe,
+            frame_at: None,
             addrs: HashMap::new(),
             map_npcs: npcs,
             guilds: Default::default(),
@@ -294,9 +297,11 @@ impl World {
                 }
                 self.sessions.insert(id, Session::new(tx, addr));
             }
-            Event::Frame { id, msg } => {
+            Event::Frame { id, msg, at } => {
                 if self.sessions.contains_key(&id) {
+                    self.frame_at = at;
                     self.handle(id, msg);
+                    self.frame_at = None;
                 }
                 self.probe_conn(id, |c| c.frames_in += 1);
             }

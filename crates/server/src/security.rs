@@ -18,7 +18,16 @@ impl WalkLimiter {
         WalkLimiter { tokens: 2.0, last: now, step_ms: step_ms as f32, tolerance }
     }
 
+    /// After a teleport the client starts walking afresh (its step timer restarts with the
+    /// new map): the budget restarts too, or legit steps would count as a speed-hack.
+    pub fn reset(&mut self, now: GameTime) {
+        self.tokens = 2.0;
+        self.last = now;
+    }
+
     pub fn try_step(&mut self, now: GameTime) -> bool {
+        // Frames arrive in order, but `now` may be older than `last` after a reset.
+        let now = if now.0 < self.last.0 { self.last } else { now };
         let elapsed = now.since(self.last) as f32;
         self.last = now;
         self.tokens = (self.tokens + elapsed / self.step_ms).min(2.0);
