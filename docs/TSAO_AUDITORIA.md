@@ -111,6 +111,28 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Teclas configurables | ✅ | |
 | Sonido y música de TSAO | ✅ | |
 
+## Progresión y social TSAO (rama `worktree-agent-a3119a629ac9ab613`)
+
+Hecho y probado (`crates/server/tests/tsao_progress.rs`, capturas invisibles de las ventanas
+Canje, Bonificación de clase, Votación y Mejorar objetos): monedas TSAO y de dónde salen,
+canje de las tres monedas, bonus de clase, mejorar con Gema Octarina, votaciones, matrimonio.
+Datos: `tools/tsao/progress.py` (lo llama `build.cmd`). Migración `0013_tsao_progress.sql`,
+protocolo 14 (`C2S::Tsao` / `S2C::Tsao`). Comandos: `/canje`, `/puntos` (`/est`), `/bonus`,
+`/mejorar`, `/votar`, `/resultados`, `/casar`, `/divorciarse`; GM `/encuesta`.
+
+Pendiente de esta área, por orden de valor:
+- Efecto de los bonus de evasión, escudo, golpe, flechas y apuñalar en el combate: el valor
+  está en `World::tsao_bonus(id)` (décimas de %); falta usarlo en `tsao_evasion`,
+  `attack_power_of` y el apuñalar (código del dueño del combate).
+- Ciudadanía (NPC 13), renunciar (NPC 154) y nobleza: dependen de `StatusMith` (ciudadano /
+  criminal / neutral de TSAO), que aún no existe en el motor.
+- Dioses y almas, ranking, emoticonos, créditos por sacos (tipo 51: TSAO no trae ninguno en
+  `Obj.dat`), pergaminos (tipo 50: ninguno en `Obj.dat`).
+- Eventos: castillos y asedio, CVC, desafíos por arena y `/PAREJA` (2v2), torneos
+  automáticos, captura la bandera, juegos del hambre, evento faccionario, evento luz, ARAM,
+  batalla mística, misiones diarias, casas, monturas, centinela, apuestas.
+- Comandos de jugador que faltan: `/INFORMACION`, `/PING`, `/NICK`, `/EVENTOS`, `/PARTICIPAR`.
+
 ## Orden propuesto
 
 1. **Flujo newbie** (esta tanda): premios por nivel, salida a nivel 10, Starterpack, cofres, límite newbie 9, /REGRESAR.
