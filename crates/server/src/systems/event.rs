@@ -211,7 +211,7 @@ impl World {
 
     // ================================================================== helpers
 
-    fn id_by_name(&self, name: &str) -> Option<u32> {
+    pub(crate) fn id_by_name(&self, name: &str) -> Option<u32> {
         let name = name.trim();
         self.player_ids().into_iter().find(|id| self.player(*id).is_some_and(|p| p.name.eq_ignore_ascii_case(name)))
     }

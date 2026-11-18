@@ -4,8 +4,13 @@ pub mod craft;
 pub mod gm;
 pub mod event;
 pub mod travel;
+pub mod mail;
+pub mod surgeon;
+
+pub use surgeon::{SurgeonC2S, SurgeonS2C};
 
 pub use travel::{TravelC2S, TravelS2C};
+pub use mail::{MailC2S, MailS2C};
 pub use work::{WorkC2S, WorkS2C};
 pub use craft::{CraftC2S, CraftS2C};
 pub use gm::{GmC2S, GmS2C};

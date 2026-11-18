@@ -75,6 +75,8 @@ pub enum Control {
 pub struct World {
     /// Last player each player killed and counted for a quest (anti alt-farming).
     pub quest_last_victim: HashMap<u32, String>,
+    /// Clan vaults loaded on first use (guild id -> vault).
+    pub clan_vaults: HashMap<i64, bank::ClanVault>,
     pub cfg: ServerConfig,
     pub data: GameData,
     pub recursos: PathBuf,
@@ -118,6 +120,7 @@ impl World {
         let ao = ao_data::AoData::shared(&recursos);
         World {
             quest_last_victim: HashMap::new(),
+            clan_vaults: HashMap::new(),
             db,
             ao,
             cfg: config,

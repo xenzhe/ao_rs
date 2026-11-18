@@ -13,7 +13,9 @@ fn account_with_two_characters_persists() {
     assert!(c.create_account("xenzhe", "secreta1"));
     assert!(c.characters().is_empty());
     assert!(c.create_character("Gandalf", 1, 1, 1, 1));
-    assert!(c.create_character("Aragorn", 6, 3, 1, 1));
+    // An orc wears an orc head: the server checks the race and gender ranges now (a head
+    // of another race is a forged packet and gets the client kicked).
+    assert!(c.create_character("Aragorn", 6, 3, 1, 500));
     assert_eq!(c.characters().len(), 2);
     let orc = c.characters().iter().find(|x| x.name == "Aragorn").unwrap();
     assert_eq!(orc.body, 582, "official starting body for a male orc (DarCuerpo)");

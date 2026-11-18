@@ -23,12 +23,21 @@ pub struct BankState {
     pub gold: u32,
     /// Banker NPC currently open (deposits/withdrawals only while open and near).
     pub open_with: Option<u32>,
+    /// The open window is the vault of this clan (TSAO BoveClan), not the player's own.
+    pub clan: Option<i64>,
 }
 
 impl Default for BankState {
     fn default() -> Self {
-        BankState { slots: vec![None; MAX_BANK_SLOTS], gold: 0, open_with: None }
+        BankState { slots: vec![None; MAX_BANK_SLOTS], gold: 0, open_with: None, clan: None }
     }
+}
+
+/// A clan vault in memory: shared by every member who has it open.
+#[derive(Clone, Debug)]
+pub struct ClanVault {
+    pub slots: Vec<Option<InvItem>>,
+    pub gold: u32,
 }
 
 /// Where `amount` units of `obj` go inside `slots`: the first slot already holding `obj`

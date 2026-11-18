@@ -97,6 +97,8 @@ pub enum C2S {
     Gm(crate::p4::GmC2S),
     Event(crate::p4::EventC2S),
     Travel(crate::p4::TravelC2S),
+    Mail(crate::p4::MailC2S),
+    Surgeon(crate::p4::SurgeonC2S),
 }
 
 /// Server -> client.
@@ -185,6 +187,8 @@ pub enum S2C {
     Gm(crate::p4::GmS2C),
     Event(crate::p4::EventS2C),
     Travel(crate::p4::TravelS2C),
+    Mail(crate::p4::MailS2C),
+    Surgeon(crate::p4::SurgeonS2C),
 }
 
 /// Bits of `S2C::Status::flags`.

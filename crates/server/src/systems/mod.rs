@@ -27,6 +27,8 @@ mod craft;
 mod gm;
 mod event;
 mod travel;
+mod mail;
+mod surgeon;
 
 use crate::world::World;
 use ao_protocol::C2S;
@@ -72,6 +74,8 @@ impl World {
             C2S::Gm(m) => self.on_gm(id, m),
             C2S::Event(m) => self.on_game_event(id, m),
             C2S::Travel(m) => self.on_travel(id, m),
+            C2S::Mail(m) => self.on_mail(id, m),
+            C2S::Surgeon(m) => self.on_surgeon(id, m),
         }
     }
 }

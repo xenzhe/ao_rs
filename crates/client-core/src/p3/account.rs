@@ -13,7 +13,7 @@ use crate::state::{Game, Screen};
 use ao_formats::dat::balance::{Balance, Class, Race};
 use ao_protocol::{Tone, C2S, PROTOCOL_VERSION};
 use ao_rules::character::{
-    initial_attributes, initial_hp, initial_mana, valid_account_name, valid_class, valid_gender, valid_password, valid_race, FEMALE, MALE, MAX_CHARACTERS,
+    initial_attributes, initial_hp, initial_mana, valid_account_name, valid_class, valid_gender, valid_password, valid_race, FEMALE, MAX_CHARACTERS,
 };
 
 /// Highest head id the server accepts at creation (`systems/account.rs` `MAX_HEAD`).
@@ -24,23 +24,10 @@ pub const REQUEST_TIMEOUT: f64 = 12.0;
 
 // ------------------------------------------------------------------ creation data
 
-/// Valid head ranges by race and gender (VB6 `ValidarCabeza`, TCP.bas).
+/// Valid head ranges by race and gender of the resources in use (AO20 `ValidarCabeza`, or
+/// `init/head_ranges.ini`). The server checks the same table.
 pub fn head_ranges(race: u8, gender: u8) -> &'static [(u16, u16)] {
-    match (gender, race) {
-        (MALE, 1) => &[(1, 41), (778, 791)],
-        (MALE, 2) => &[(101, 132), (531, 545)],
-        (MALE, 3) => &[(200, 229), (792, 810)],
-        (MALE, 4) => &[(400, 429)],
-        (MALE, 5) => &[(300, 344)],
-        (MALE, 6) => &[(500, 529)],
-        (FEMALE, 1) => &[(50, 80), (187, 190), (230, 246)],
-        (FEMALE, 2) => &[(150, 179), (758, 777)],
-        (FEMALE, 3) => &[(250, 279)],
-        (FEMALE, 4) => &[(450, 479)],
-        (FEMALE, 5) => &[(350, 379)],
-        (FEMALE, 6) => &[(550, 579)],
-        _ => &[],
-    }
+    ao_formats::heads::for_recursos(&ao_formats::recursos_dir()).ranges(race, gender)
 }
 
 /// Heads a player can pick for `race` + `gender`: the official ranges, capped at what this
@@ -479,6 +466,7 @@ impl AccountFlow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ao_rules::character::MALE;
 
     #[test]
     fn heads_follow_the_official_ranges() {

@@ -62,6 +62,35 @@ def write_sections(path, count_key, n, prefix, rows):
     open(path, "w", newline="\r\n").write("\n".join(lines))
 
 
+# Faces per gender-race (TCP_HandleData1.bas `CABEZI`, the surgeon; the engine uses the
+# same table at character creation). Races: 1 human, 2 elf, 3 drow, 4 gnome, 5 dwarf
+# (TSAO has no orcs).
+HEADS = {
+    (1, 1): (1, 30), (1, 2): (101, 113), (1, 3): (202, 209), (1, 4): (401, 406), (1, 5): (301, 305),
+    (2, 1): (70, 76), (2, 2): (170, 176), (2, 3): (270, 280), (2, 4): (470, 474), (2, 5): (370, 373),
+}
+
+
+def write_head_ranges(path, existing):
+    """Only heads that have graphics; contiguous runs become ranges."""
+    lines = []
+    for (g, r), (a, b) in sorted(HEADS.items()):
+        hs = [h for h in range(a, b + 1) if h in existing]
+        runs, start, prev = [], None, None
+        for h in hs:
+            if start is None:
+                start = prev = h
+            elif h == prev + 1:
+                prev = h
+            else:
+                runs.append((start, prev))
+                start = prev = h
+        if start is not None:
+            runs.append((start, prev))
+        lines += [f"[{g}-{r}]", "Ranges=" + ",".join(f"{x}-{y}" for x, y in runs), ""]
+    open(path, "w", newline="\r\n").write("\n".join(lines))
+
+
 def clean_ini(src, dst):
     """Copies an INI dropping the ' comments after values."""
     text = open(src, encoding="latin-1").read()
@@ -144,7 +173,8 @@ def convert_map(num, maps_dir, info):
     out += struct.pack("<ii", 0, 0)  # tMapSize
     out += vb_string(info.get("name", f"Mapa {num}"))
     out += b"\x00" + vb_string("") + struct.pack("<ii", int(info.get("musicnum", "0") or 0), 0)
-    out += bytes([1 if info.get("pk", "1").strip() == "0" else 0])
+    # FileIO.bas: `Pk=0` -> MapInfo.Pk = True (PvP allowed); `Pk=1` -> safe map.
+    out += bytes([1 if info.get("pk", "0").strip() == "1" else 0])
     out += vb_string(info.get("zona", "")) + vb_string(info.get("terreno", "")) + vb_string("")
     out += bytes(16) + vb_string("")
     out += bytes([0, 0, 0])  # rain, snow, fog
@@ -173,7 +203,9 @@ AO20_DAT = r"X:/dev/ao20/Recursos/Dat"
 # TSAO eNPCType -> engine NpcType (AO20 ids). TSAO-only types keep their number in
 # `TsaoType` and become ordinary NPCs until their system is ported (5 is not a TSAO type:
 # its NPCs are scripted by number in the VB code).
-NPC_TYPE = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 6: 6, 7: 7, 8: 8, 11: 17, 12: 26}
+NPC_TYPE = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 6: 6, 7: 7, 8: 8, 11: 17, 12: 26, 19: 102, 22: 101, 23: 100}
+# NPCs whose TSAO type lies about them (the VB code dispatched them by number).
+NPC_FIX = {185: 102}  # second "Cirujano", typed 17 (QuestNoble)
 
 # frmViajar + `/VIAJAR` (TCP_HandleData3.bas): name-map-x-y-price-minLevel-priceFromLv30.
 TRAVEL = [
@@ -242,10 +274,10 @@ def remap_npc(m):
     head, num, body = m.group(1), int(m.group(2)), m.group(3)
     t = re.search(r"(?im)^NpcType=(\d+)", body)
     tsao = int(t.group(1)) if t else 0
-    new = NPC_TYPE.get(tsao, 0)
+    new = NPC_FIX.get(num, NPC_TYPE.get(tsao, 0))
     if t:
         body = body[:t.start()] + f"NpcType={new}" + body[t.end():]
-    extra = f"TsaoType={tsao}\n" if tsao not in NPC_TYPE else ""
+    extra = f"TsaoType={tsao}\n" if tsao not in NPC_TYPE and num not in NPC_FIX else ""
     if num == QUEST_NPC:
         extra += "NumQuest=31\n" + "".join(f"QuestNumber{i}={i}\n" for i in range(1, 32))
     if new == 17 and num != QUEST_NPC:
@@ -295,6 +327,7 @@ def main(src, dst):
         heads = read_ind_records(os.path.join(cinit, name), "<4h")
         write_sections(os.path.join(init, out), key, len(heads), "HEAD",
                        [(i + 1, [(f"Head{k + 1}", h[k] & 0xFFFF) for k in range(4)]) for i, h in enumerate(heads) if h[0]])
+    write_head_ranges(os.path.join(init, "head_ranges.ini"), {i + 1 for i, h in enumerate(read_ind_records(os.path.join(cinit, "Cabezas.ind"), "<4h")) if h[0]})
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",
                    [(i + 1, [("Animacion", f[0] & 0xFFFF), ("OffsetX", f[1]), ("OffsetY", f[2]), ("IsPNG", 1)]) for i, f in enumerate(fxs)])

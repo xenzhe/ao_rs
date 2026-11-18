@@ -88,6 +88,18 @@ impl World {
             if self.npc_alive_and_near(id, dead, dist, 5) {
                 self.travel_npc(id, nid);
             }
+        } else if kind == NpcType::PostOffice {
+            if self.npc_alive_and_near(id, dead, dist, 5) {
+                self.mail_npc(id, nid);
+            }
+        } else if kind == NpcType::ClanVault {
+            if self.npc_alive_and_near(id, dead, dist, 5) {
+                self.clan_vault_open(id, nid);
+            }
+        } else if kind == NpcType::Surgeon {
+            if self.npc_alive_and_near(id, dead, dist, 5) {
+                self.surgeon_open(id, nid);
+            }
         } else if kind == NpcType::Auctioneer && !dead {
             // Auctions run from anywhere (event system, window U); no official map places one.
             self.console(id, "Las subastas están abiertas: pulsa U para verlas.", Tone::Info);

@@ -30,6 +30,8 @@ pub mod gm;
 pub mod events;
 pub mod auction;
 pub mod travel;
+pub mod mail;
+pub mod surgeon;
 
 pub use frame::{Drag, Ui, WindowId};
 
@@ -68,6 +70,8 @@ pub fn frame(ui: &mut Ui, game: &mut Game, assets: &mut Assets, lay: &Layout, ho
             WindowId::Events => events::draw(ui, game, assets, r),
             WindowId::Auction => auction::draw(ui, game, assets, r),
             WindowId::Travel => travel::draw(ui, game, assets, r),
+            WindowId::Mail => mail::draw(ui, game, assets, r),
+            WindowId::Surgeon => surgeon::draw(ui, game, assets, r),
         }
     }
     // Floating "X invites you to trade" and orphan prompts.
@@ -86,6 +90,8 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
         (WindowId::Shop, l.social.trade.shop.is_some()),
         (WindowId::Trade, l.social.trade.player.is_some()),
         (WindowId::Travel, l.p4.travel.open.is_some()),
+        (WindowId::Mail, l.p4.mail.open.is_some()),
+        (WindowId::Surgeon, l.p4.surgeon.open.is_some()),
     ];
     for (w, on) in states {
         let was = ui.server_windows.contains(&w);
@@ -96,6 +102,8 @@ fn auto_windows(ui: &mut Ui, game: &mut Game) {
                     WindowId::Bank => game.bank_close(),
                     WindowId::Shop => game.shop_close(),
                     WindowId::Travel => game.travel_close(),
+                    WindowId::Mail => game.mail_close(),
+                    WindowId::Surgeon => game.surgeon_close(),
                     _ => game.trade_cancel(),
                 }
                 ui.server_windows.remove(&w);

@@ -68,6 +68,12 @@ pub enum NpcType {
     ArenaGuard,
     /// 26 `Transporter`: sells trips between cities (uses `City*`).
     Transporter,
+    /// 100 (Numic, TSAO `Correos`): post office, player mail.
+    PostOffice,
+    /// 101 (Numic, TSAO `BoveClan`): the clan vault.
+    ClanVault,
+    /// 102 (Numic, TSAO `cirujano`): changes the character's face.
+    Surgeon,
     Unknown(i32),
 }
 
@@ -99,6 +105,9 @@ impl NpcType {
             23 => EventMaster,
             24 => ArenaGuard,
             26 => Transporter,
+            100 => PostOffice,
+            101 => ClanVault,
+            102 => Surgeon,
             n => Unknown(n),
         }
     }
@@ -130,6 +139,9 @@ impl NpcType {
             EventMaster => 23,
             ArenaGuard => 24,
             Transporter => 26,
+            PostOffice => 100,
+            ClanVault => 101,
+            Surgeon => 102,
             Unknown(n) => n,
         }
     }

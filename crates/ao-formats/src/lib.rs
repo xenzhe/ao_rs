@@ -8,6 +8,7 @@
 pub mod csm;
 pub mod dat;
 pub mod graphics;
+pub mod heads;
 pub mod ini;
 pub mod paths;
 

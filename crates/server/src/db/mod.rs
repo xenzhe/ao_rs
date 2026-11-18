@@ -15,7 +15,10 @@ mod work;
 mod craft;
 mod gm;
 mod event;
+mod mail;
+mod clan_vault;
 
+pub use mail::MailLetter;
 pub use accounts::{Account, CharacterRecord, CharacterState, NewCharacter};
 
 use rusqlite::Connection;
@@ -33,6 +36,8 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0008_craft.sql"),
     include_str!("../../migrations/0009_gm.sql"),
     include_str!("../../migrations/0010_events.sql"),
+    include_str!("../../migrations/0011_mail.sql"),
+    include_str!("../../migrations/0012_clan_vault.sql"),
 ];
 
 #[derive(Debug, PartialEq)]

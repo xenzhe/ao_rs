@@ -1,5 +1,7 @@
 //! Vault (bank). OWNER: bank system (P1, Sonnet 2). Opened by the NPC system through
-//! `open_bank(player, banker_npc_id)` when a player interacts with a banker.
+//! `open_bank(player, banker_npc_id)` when a player interacts with a banker, and
+//! `clan_vault_open` for the clan vault (TSAO `BoveClan`), which uses the same window and
+//! operations on a vault shared by the clan.
 //!
 //! Port of modBanco.bas plus the bank handlers of Protocol.bas (HandleBankStart,
 //! HandleBankDeposit, HandleBankExtractItem, HandleBankDepositGold, HandleBankExtractGold,
@@ -13,14 +15,27 @@
 //! - Impossible requests (slot out of range, amount above what exists) are cheating and
 //!   get a strike, instead of the VB's silent clamp.
 //! - `ElementalTags` do not exist in this port.
-use crate::world::bank::{find_slot, MAX_BANK_SLOTS, OPEN_RANGE, OPERATE_RANGE};
+//! - Clan vault: TSAO let one member in at a time (a linear scan of every user) and wrote
+//!   the whole `.bov` file on close, so a crash lost the session and two windows could
+//!   overwrite each other. Here every member may have it open, each change is written at
+//!   once and shown to everyone looking, and leaving the clan closes it.
+use crate::world::bank::{find_slot, ClanVault, MAX_BANK_SLOTS, OPEN_RANGE, OPERATE_RANGE};
 use crate::world::inventory::{InvItem, BASE_INVENTORY_SLOTS, MAX_INVENTORY_SLOTS};
 use crate::world::World;
+use ao_formats::dat::npcs::NpcType;
 use ao_protocol::{Tone, S2C};
+use tracing::warn;
 
 /// VB `Distancia` on one map: Manhattan distance.
 fn distance(ax: i32, ay: i32, bx: i32, by: i32) -> i32 {
     (ax - bx).abs() + (ay - by).abs()
+}
+
+/// Which vault an operation works on.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Vault {
+    Own,
+    Clan(i64),
 }
 
 impl World {
@@ -47,16 +62,100 @@ impl World {
         self.send(id, &S2C::InventorySlot { slot, obj, amount, equipped: p.inv.equipped.is_equipped(slot) });
     }
 
+    fn vault_of(&self, id: u32) -> Vault {
+        self.player(id).and_then(|p| p.bank.clan).map_or(Vault::Own, Vault::Clan)
+    }
+
+    /// Loads a clan vault from the database the first time it is needed.
+    fn clan_vault_loaded(&mut self, guild: i64) -> &mut ClanVault {
+        if !self.clan_vaults.contains_key(&guild) {
+            let (rows, gold) = self.db.clan_vault(guild).unwrap_or_else(|e| {
+                warn!(?e, guild, "boveda de clan: no se pudo leer");
+                (Vec::new(), 0)
+            });
+            let mut slots = vec![None; MAX_BANK_SLOTS];
+            for (slot, obj, amount) in rows {
+                if let Some(s) = slots.get_mut(slot as usize - 1) {
+                    *s = Some(InvItem { obj, amount });
+                }
+            }
+            self.clan_vaults.insert(guild, ClanVault { slots, gold });
+        }
+        self.clan_vaults.get_mut(&guild).unwrap()
+    }
+
+    /// Takes the vault out to work on it next to the inventory (put it back with
+    /// `vault_put`).
+    fn vault_take(&mut self, id: u32) -> (Vault, Vec<Option<InvItem>>, u32) {
+        match self.vault_of(id) {
+            Vault::Own => {
+                let b = &mut self.player_mut(id).bank;
+                (Vault::Own, std::mem::take(&mut b.slots), b.gold)
+            }
+            Vault::Clan(g) => {
+                let v = self.clan_vault_loaded(g);
+                (Vault::Clan(g), std::mem::take(&mut v.slots), v.gold)
+            }
+        }
+    }
+
+    /// Puts the vault back; a clan vault writes the changed slot / gold and shows it to
+    /// every member who has it open.
+    fn vault_put(&mut self, id: u32, vault: Vault, slots: Vec<Option<InvItem>>, gold: u32, changed: Option<u8>, gold_changed: bool) {
+        match vault {
+            Vault::Own => {
+                let b = &mut self.player_mut(id).bank;
+                b.slots = slots;
+                b.gold = gold;
+            }
+            Vault::Clan(g) => {
+                if let Some(s) = changed {
+                    let it = slots[s as usize - 1].map(|i| (i.obj, i.amount));
+                    if let Err(e) = self.db.clan_vault_set_slot(g, s, it) {
+                        warn!(?e, g, "boveda de clan: no se pudo guardar");
+                    }
+                }
+                if gold_changed {
+                    if let Err(e) = self.db.clan_vault_set_gold(g, gold) {
+                        warn!(?e, g, "boveda de clan: no se pudo guardar el oro");
+                    }
+                }
+                self.clan_vaults.insert(g, ClanVault { slots, gold });
+                for other in self.player_ids() {
+                    if other != id && self.player(other).is_some_and(|p| p.bank.clan == Some(g)) {
+                        if let Some(s) = changed {
+                            self.send_bank_slot(other, s);
+                        }
+                        if gold_changed {
+                            self.send(other, &S2C::BankGold { gold });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn send_bank_slot(&self, id: u32, slot: u8) {
         let Some(p) = self.player(id) else { return };
-        let (obj, amount) = p.bank.slots.get(slot as usize - 1).copied().flatten().map_or((0, 0), |i| (i.obj, i.amount));
+        let slots = match p.bank.clan {
+            Some(g) => match self.clan_vaults.get(&g) {
+                Some(v) => &v.slots,
+                None => return,
+            },
+            None => &p.bank.slots,
+        };
+        let (obj, amount) = slots.get(slot as usize - 1).copied().flatten().map_or((0, 0), |i| (i.obj, i.amount));
         self.send(id, &S2C::BankSlot { slot, obj, amount });
     }
 
-    /// Gold in hand changed: bank gold and the vitals line that carries the hand gold.
+    /// Gold in hand changed: vault gold and the vitals line that carries the hand gold.
     fn send_gold(&self, id: u32) {
         let Some(p) = self.player(id) else { return };
-        self.send(id, &S2C::BankGold { gold: p.bank.gold });
+        let gold = match p.bank.clan {
+            Some(g) => self.clan_vaults.get(&g).map_or(0, |v| v.gold),
+            None => p.bank.gold,
+        };
+        self.send(id, &S2C::BankGold { gold });
         self.send(id, &S2C::Vitals { sta: p.stats.sta, max_sta: p.stats.max_sta, food: p.stats.food, water: p.stats.water, gold: p.inv.gold });
     }
 
@@ -64,6 +163,7 @@ impl World {
     /// call it when the player dies, changes map or starts something incompatible.
     pub(crate) fn close_bank(&mut self, id: u32) {
         let Some(p) = self.sessions.get_mut(&id).and_then(|s| s.player.as_mut()) else { return };
+        p.bank.clan = None;
         if p.bank.open_with.take().is_some() {
             self.send(id, &S2C::BankClosed);
         }
@@ -82,7 +182,8 @@ impl World {
     }
 
     /// Checks every vault operation starts with: alive, vault open, banker still there and
-    /// close enough. Closes the vault when the player walked away. Returns the banker.
+    /// close enough, and (clan vault) still in that clan. Closes the vault otherwise.
+    /// Returns the banker.
     fn bank_guard(&mut self, id: u32) -> Option<u32> {
         let p = self.player(id)?;
         if p.combat.dead {
@@ -94,6 +195,11 @@ impl World {
             self.console(id, "La boveda esta cerrada.", Tone::Warn);
             return None;
         };
+        if p.bank.clan.is_some() && p.bank.clan != p.guild.guild {
+            self.console(id, "Ya no perteneces a ese clan.", Tone::Warn);
+            self.close_bank(id);
+            return None;
+        }
         match self.banker_pos(p.map, banker) {
             Some((bx, by)) if distance(p.x, p.y, bx, by) <= OPERATE_RANGE => Some(banker),
             _ => {
@@ -111,6 +217,22 @@ impl World {
     /// `OPEN_RANGE`; then the whole vault is sent.
     #[allow(dead_code)]
     pub(crate) fn open_bank(&mut self, id: u32, banker: u32) {
+        self.open_vault(id, banker, None);
+    }
+
+    /// HOOK (interact): the clan vault NPC. Only members of a clan.
+    pub(crate) fn clan_vault_open(&mut self, id: u32, npc: u32) {
+        let Some(p) = self.player(id) else { return };
+        let Some(g) = p.guild.guild else {
+            return self.console(id, "Solo los miembros de un clan pueden usar su bóveda.", Tone::Warn);
+        };
+        let ok = self.instance(p.map).npcs.get(&npc).is_some_and(|n| n.kind == NpcType::ClanVault);
+        if ok {
+            self.open_vault(id, npc, Some(g));
+        }
+    }
+
+    fn open_vault(&mut self, id: u32, banker: u32, clan: Option<i64>) {
         let Some(p) = self.player(id) else { return };
         if p.combat.dead {
             return self.console(id, "!!Estas muerto!!", Tone::Info);
@@ -127,10 +249,17 @@ impl World {
         if distance(p.x, p.y, bx, by) > OPEN_RANGE {
             return self.console(id, "Estas demasiado lejos.", Tone::Warn);
         }
+        let (slots, gold) = match clan {
+            Some(g) => {
+                let v = self.clan_vault_loaded(g);
+                (v.slots.clone(), v.gold)
+            }
+            None => (self.player(id).unwrap().bank.slots.clone(), self.player(id).unwrap().bank.gold),
+        };
         let p = self.player_mut(id);
         p.bank.open_with = Some(banker);
-        let slots = p.bank.slots.iter().enumerate().filter_map(|(i, s)| s.map(|it| ((i + 1) as u8, it.obj, it.amount))).collect();
-        let gold = p.bank.gold;
+        p.bank.clan = clan;
+        let slots = slots.iter().enumerate().filter_map(|(i, s)| s.map(|it| ((i + 1) as u8, it.obj, it.amount))).collect();
         self.send(id, &S2C::BankOpen { slots, gold });
     }
 
@@ -165,14 +294,24 @@ impl World {
         if data.newbie == 1 {
             return self.console(id, "No puedes comerciar objetos newbie.", Tone::Warn);
         }
-        let Some(dest) = find_slot(&p.bank.slots, item.obj, amount) else {
+        if p.bank.clan.is_some() && data.non_transferable == 1 {
+            return self.console(id, "Los objetos intransferibles no pueden ir a la bóveda del clan.", Tone::Warn);
+        }
+        let (vault, mut slots, gold) = self.vault_take(id);
+        let Some(dest) = find_slot(&slots, item.obj, amount) else {
+            self.vault_put(id, vault, slots, gold, None, false);
             return self.console(id, "No tienes mas espacio en el banco.", Tone::Warn);
         };
-        let p = self.player_mut(id);
-        let bank_slot = p.bank.slots[dest].get_or_insert(InvItem { obj: item.obj, amount: 0 });
-        bank_slot.amount += amount;
+        slots[dest].get_or_insert(InvItem { obj: item.obj, amount: 0 }).amount += amount;
         let left = item.amount - amount;
-        p.inv.slots[slot as usize - 1] = (left > 0).then_some(InvItem { obj: item.obj, amount: left });
+        self.player_mut(id).inv.slots[slot as usize - 1] = (left > 0).then_some(InvItem { obj: item.obj, amount: left });
+        self.vault_put(id, vault, slots, gold, Some(dest as u8 + 1), false);
+        if let Vault::Clan(_) = vault {
+            // The player's side of a clan move is saved at once too (no dupe on a crash).
+            if let Some(p) = self.player(id) {
+                self.save_player(p);
+            }
+        }
         self.send_inv_slot(id, slot);
         self.send_bank_slot(id, dest as u8 + 1);
     }
@@ -185,25 +324,39 @@ impl World {
         if slot == 0 || slot as usize > MAX_BANK_SLOTS {
             return self.strike(id, "banco: casilla de boveda invalida");
         }
-        let p = self.player(id).expect("logged player");
-        let Some(item) = p.bank.slots[slot as usize - 1] else {
-            return self.console(id, "No hay nada en esa casilla.", Tone::Warn);
+        let (vault, mut slots, gold) = self.vault_take(id);
+        let fail = |w: &mut World, slots, msg: Option<&str>, strike: Option<&str>| {
+            w.vault_put(id, vault, slots, gold, None, false);
+            if let Some(m) = msg {
+                w.console(id, m, Tone::Warn);
+            }
+            if let Some(s) = strike {
+                w.strike(id, s);
+            }
+        };
+        let Some(item) = slots[slot as usize - 1] else {
+            return fail(self, slots, Some("No hay nada en esa casilla."), None);
         };
         if amount == 0 {
-            return self.console(id, "Cantidad invalida.", Tone::Warn);
+            return fail(self, slots, Some("Cantidad invalida."), None);
         }
         if amount > item.amount {
-            return self.strike(id, "banco: retira mas de lo que hay");
+            // Another clan member may have taken it a moment ago: not a cheat there.
+            return if vault == Vault::Own { fail(self, slots, None, Some("banco: retira mas de lo que hay")) } else { fail(self, slots, Some("Ya no hay tanta cantidad."), None) };
         }
         let cap = self.inventory_capacity(id);
-        let Some(dest) = find_slot(&p.inv.slots[..cap], item.obj, amount) else {
-            return self.console(id, "No podes tener mas objetos.", Tone::Warn);
+        let Some(dest) = find_slot(&self.player(id).unwrap().inv.slots[..cap], item.obj, amount) else {
+            return fail(self, slots, Some("No podes tener mas objetos."), None);
         };
-        let p = self.player_mut(id);
-        let inv_slot = p.inv.slots[dest].get_or_insert(InvItem { obj: item.obj, amount: 0 });
-        inv_slot.amount += amount;
+        self.player_mut(id).inv.slots[dest].get_or_insert(InvItem { obj: item.obj, amount: 0 }).amount += amount;
         let left = item.amount - amount;
-        p.bank.slots[slot as usize - 1] = (left > 0).then_some(InvItem { obj: item.obj, amount: left });
+        slots[slot as usize - 1] = (left > 0).then_some(InvItem { obj: item.obj, amount: left });
+        if let Vault::Clan(_) = vault {
+            if let Some(p) = self.player(id) {
+                self.save_player(p);
+            }
+        }
+        self.vault_put(id, vault, slots, gold, Some(slot), false);
         self.send_inv_slot(id, dest as u8 + 1);
         self.send_bank_slot(id, slot);
     }
@@ -217,17 +370,22 @@ impl World {
     /// HandleBankDepositGold: hand -> vault. The hand is debited first, like the VB.
     pub(crate) fn on_bank_deposit_gold(&mut self, id: u32, amount: u32) {
         let Some(banker) = self.bank_guard(id) else { return };
-        let p = self.player(id).expect("logged player");
-        if amount > i32::MAX as u32 || amount > p.inv.gold {
+        let hand = self.player(id).expect("logged player").inv.gold;
+        if amount > i32::MAX as u32 || amount > hand {
             return self.strike(id, "banco: deposita mas oro del que tiene");
         }
-        let total = p.bank.gold.checked_add(amount).filter(|_| amount > 0);
-        let Some(total) = total else {
+        let (vault, slots, gold) = self.vault_take(id);
+        let Some(total) = gold.checked_add(amount).filter(|_| amount > 0) else {
+            self.vault_put(id, vault, slots, gold, None, false);
             return self.banker_says(id, banker, "No tenes esa cantidad.".into());
         };
-        let p = self.player_mut(id);
-        p.inv.gold -= amount;
-        p.bank.gold = total;
+        self.player_mut(id).inv.gold -= amount;
+        if vault != Vault::Own {
+            if let Some(p) = self.player(id) {
+                self.save_player(p);
+            }
+        }
+        self.vault_put(id, vault, slots, total, None, true);
         self.banker_says(id, banker, format!("Tenes {total} monedas de oro en tu cuenta."));
         self.send_gold(id);
     }
@@ -235,18 +393,24 @@ impl World {
     /// HandleBankExtractGold: vault -> hand.
     pub(crate) fn on_bank_withdraw_gold(&mut self, id: u32, amount: u32) {
         let Some(banker) = self.bank_guard(id) else { return };
-        let p = self.player(id).expect("logged player");
-        if amount > i32::MAX as u32 || amount > p.bank.gold {
-            return self.strike(id, "banco: retira mas oro del que hay");
+        let hand = self.player(id).expect("logged player").inv.gold;
+        let (vault, slots, gold) = self.vault_take(id);
+        if amount > i32::MAX as u32 || amount > gold {
+            self.vault_put(id, vault, slots, gold, None, false);
+            return if vault == Vault::Own { self.strike(id, "banco: retira mas oro del que hay") } else { self.banker_says(id, banker, "Ya no hay tanto oro en la bóveda.".into()) };
         }
-        let hand = p.inv.gold.checked_add(amount).filter(|_| amount > 0);
-        let Some(hand) = hand else {
+        let Some(new_hand) = hand.checked_add(amount).filter(|_| amount > 0) else {
+            self.vault_put(id, vault, slots, gold, None, false);
             return self.banker_says(id, banker, "No tenes esa cantidad.".into());
         };
-        let p = self.player_mut(id);
-        p.bank.gold -= amount;
-        p.inv.gold = hand;
-        let left = p.bank.gold;
+        let left = gold - amount;
+        self.player_mut(id).inv.gold = new_hand;
+        if vault != Vault::Own {
+            if let Some(p) = self.player(id) {
+                self.save_player(p);
+            }
+        }
+        self.vault_put(id, vault, slots, left, None, true);
         self.banker_says(id, banker, format!("Tenes {left} monedas de oro en tu cuenta."));
         self.send_gold(id);
     }
@@ -641,5 +805,40 @@ mod tests {
         assert_eq!(state.bank_gold, 200);
         assert_eq!(state.gold, 300);
         assert!(state.inventory.contains(&(2, 39, 3, false)));
+    }
+
+    /// Clan vault: two members share one vault; a deposit shows up in the other's window,
+    /// the other can take it, and a member who leaves the clan is shut out.
+    #[test]
+    fn clan_vault_is_shared_by_members() {
+        const OTHER: u32 = 2;
+        const CLAN: i64 = 7;
+        let mut r = rig();
+        let at = (r.w.player(ME).unwrap().x, r.w.player(ME).unwrap().y);
+        let mut rx2 = join(&mut r.w, OTHER, "Socio", at, &CharacterState::default(), None);
+        r.w.player_mut(ME).guild.guild = Some(CLAN);
+        r.w.player_mut(OTHER).guild.guild = Some(CLAN);
+        r.w.open_vault(ME, BANKER_ID, Some(CLAN));
+        r.w.open_vault(OTHER, BANKER_ID, Some(CLAN));
+        drain(&mut rx2);
+        r.msgs();
+        r.give(1, r.a, 5);
+        r.w.on_bank_deposit(ME, 1, 5);
+        assert_eq!(r.inv(1), None);
+        assert!(r.w.player(ME).unwrap().bank.slots.iter().all(Option::is_none), "own vault untouched");
+        let seen = drain(&mut rx2);
+        assert!(seen.iter().any(|m| matches!(m, S2C::BankSlot { slot: 1, obj, amount: 5 } if *obj == r.a)), "the other member sees it");
+        r.w.on_bank_withdraw(OTHER, 1, 5);
+        assert_eq!(r.w.player(OTHER).unwrap().inv.slots.iter().flatten().map(|i| i.amount).sum::<u32>(), 5);
+        // Taking again what is gone is not a cheat in a shared vault.
+        r.w.on_bank_withdraw(OTHER, 1, 5);
+        assert!(r.w.player(OTHER).is_some());
+        // Leaves the clan: the next operation closes it.
+        r.w.player_mut(ME).guild.guild = None;
+        r.w.player_mut(ME).inv.gold = 100;
+        r.w.on_bank_deposit_gold(ME, 100);
+        assert_eq!(r.w.player(ME).unwrap().inv.gold, 100);
+        assert!(r.w.player(ME).unwrap().bank.open_with.is_none());
+        assert_eq!(r.w.clan_vaults[&CLAN].gold, 0);
     }
 }

@@ -1248,6 +1248,7 @@ fn window_icon(w: WindowId) -> Icon {
         WindowId::Options => Icon::Gear,
         WindowId::Events => Icon::Swords,
         WindowId::Auction | WindowId::Travel => Icon::Coins,
+        WindowId::Mail => Icon::Scroll,
         WindowId::Gm => Icon::Crown,
         WindowId::Crafting => Icon::Anvil,
         _ => Icon::Scroll,

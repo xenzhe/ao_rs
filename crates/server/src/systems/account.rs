@@ -125,7 +125,10 @@ impl World {
         if !valid_name(name) {
             return self.reply(id, false, "Nombre invalido (3-16 letras, numeros o _).");
         }
-        if !(valid_race(race) && valid_class(class) && valid_gender(gender)) || !(1..=MAX_HEAD).contains(&head) {
+        // The head must be one of its race and gender (it used to accept any 1..=757, so a
+        // forged packet could pick a head of another race or a GM-only one).
+        let head_ok = (1..=MAX_HEAD).contains(&head) && ao_formats::heads::for_recursos(&self.recursos).allows(race, gender, head);
+        if !(valid_race(race) && valid_class(class) && valid_gender(gender)) || !head_ok {
             // The client only offers valid options: anything else is a forged packet.
             return self.kick(id, "datos de creacion de personaje invalidos");
         }
