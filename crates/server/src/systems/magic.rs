@@ -1051,7 +1051,11 @@ impl World {
             // creature's own `SpellDamage` (TSAO: the fire elemental's 70..90).
             let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or(0, |n| n.def);
             let (lo, hi) = self.ao.npcs.get(def as u32).and_then(|d| d.special.spell_damage).unwrap_or((s.hp.min, s.hp.max));
-            let dmg = roll(self, lo, hi).max(0);
+            let mut dmg = roll(self, lo, hi).max(0);
+            if self.tsao_rules() {
+                // NpcLanzaSpellSobreUser: helmet, armour and ring take their DefensaMagica.
+                dmg = (dmg - self.tsao_npc_spell_absorb(pid)).max(0);
+            }
             self.pets_defend(pid, map, nid);
             self.damage_player(pid, dmg, &name);
         }

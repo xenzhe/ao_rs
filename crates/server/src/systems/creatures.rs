@@ -77,6 +77,10 @@ impl World {
             self.console(caster, "No puedes atacar a esa criatura.", Tone::Warn);
             return false;
         }
+        if let Some(why) = self.faction_npc_attack_refusal(caster, n.def) {
+            self.console(caster, why, Tone::Warn);
+            return false;
+        }
         if d.affected_by_paralysis != 0 {
             self.console(caster, "La criatura es inmune a ese hechizo.", Tone::Warn);
             return false;
@@ -145,7 +149,10 @@ impl World {
     /// kill (loot, quests), like `MuereNpc(Victima, MaestroUser)`.
     fn npc_damaged_by_npc(&mut self, map: u16, v: u32, damage: i32, a: u32) {
         let owner = self.maps.get(&map).and_then(|m| m.npcs.get(&a)).and_then(|n| n.pet.owner).filter(|o| self.player(*o).is_some());
-        let Some(c) = self.npc_combat(map, v) else { return };
+        let Some(mut c) = self.npc_combat(map, v) else { return };
+        if owner.is_some_and(|o| self.pet_gives_no_exp(map, v, o)) {
+            c.exp = 0;
+        }
         let Some(n) = self.maps.get_mut(&map).and_then(|m| m.npcs.get_mut(&v)) else { return };
         let before = n.hp;
         n.hp = (n.hp - damage.max(0)).max(0);
@@ -297,6 +304,71 @@ impl World {
         n > 0 && self.roll(1, n) == 1
     }
 
+    /// `NpcLanzaSpellSobreUser`: a creature's spell loses `RandomNumber(DefensaMagicaMin,
+    /// DefensaMagicaMax)` for each of helmet, armour and ring (plain ranges, no class table).
+    pub(crate) fn tsao_npc_spell_absorb(&mut self, pid: u32) -> i32 {
+        let Some(f) = self.fighter(pid) else { return 0 };
+        let mut total = 0;
+        for o in [f.helmet, f.armor, f.tool] {
+            if let Some((lo, hi)) = self.obj(o).map(|d| d.tsao_magic_def).filter(|(a, b)| *a > 0 || *b > 0) {
+                total += self.roll(lo, hi);
+            }
+        }
+        total
+    }
+
+    /// TSAO `NpcDaño` absorption: a blow to the head (1 in 6) meets the helmet, any other the
+    /// armour (no shield); when something absorbed, at least 1 still gets through.
+    pub(crate) fn tsao_npc_blow(&mut self, pid: u32, roll: i32) -> i32 {
+        let Some(f) = self.fighter(pid) else { return roll };
+        let piece = if self.roll(1, 6) == rules::BODY_HEAD { f.helmet } else { f.armor };
+        match self.obj(piece).map(|o| (o.min_def, o.max_def)) {
+            Some((lo, hi)) => (roll - self.roll(lo, hi)).max(1),
+            None => roll.max(0),
+        }
+    }
+
+    /// TSAO `PuedeApuñalar` + `DoApuñalar` (Trabajo.bas): with a stabbing weapon and 10 skill
+    /// points (assassins with any), a roll of `0..Suerte` under 15 stabs (Suerte 200 at 0-10
+    /// points down to 100 at 100; assassins 0..95, and always from behind a player). Returns
+    /// the extra damage: x1.5 of the hit on players, x2 on creatures.
+    pub(crate) fn tsao_stab(&mut self, f: &super::combat::Fighter, hit: i64, vs_user_same_heading: Option<bool>) -> i64 {
+        use ao_formats::dat::balance::{Class, Skill};
+        let skill = f.skill(Skill::Stab);
+        let assassin = f.class == Class::Assassin;
+        if !rules::can_stab(assassin, skill, self.obj(f.weapon)) {
+            return 0;
+        }
+        let res = if assassin { self.roll(0, 95) } else { self.roll(0, ao_rules::tsao_combat::stab_luck(skill)) };
+        let res = if assassin && vs_user_same_heading == Some(true) { 1 } else { res };
+        if res >= 15 {
+            return 0;
+        }
+        match vs_user_same_heading {
+            Some(_) => (hit as f64 * 1.5) as i64,
+            None => hit * 2,
+        }
+    }
+
+    /// TSAO UsuarioAtacaUsuario: a weapon with `Inmoviliza` paralyses the victim
+    /// `probInmov`% of the hits (always on the head) for `ImmobilizeSecs`.
+    pub(crate) fn tsao_gauntlet(&mut self, attacker: u32, victim: u32, head: bool) {
+        let Some(w) = self.fighter(attacker).and_then(|f| f.weapon) else { return };
+        let Some(s) = self.special_of(Some(w)).cloned().filter(|s| s.immobilize_pct > 0) else { return };
+        if !(head || self.chance(s.immobilize_pct as i64)) || self.resists_paralysis(victim, false) {
+            return;
+        }
+        let now = self.now();
+        let name = self.player(attacker).map_or(String::new(), |p| p.name.clone());
+        self.player_mut(victim).status.paralyzed_until = Some(now.after_secs(s.immobilize_secs.max(1) as u64));
+        let map = self.player(victim).unwrap().map;
+        if let Some(&fx) = self.profile().fx.get("paralyze") {
+            self.broadcast(map, &S2C::Fx { id: victim, fx, loops: 0 }, None);
+        }
+        self.console(victim, format!("{name} te ha inmovilizado con su manopla."), Tone::Combat);
+        self.refresh_status(victim);
+    }
+
     /// The magic lute (`SpellDamagePct` on the tool slot) on spells against players.
     pub(crate) fn spell_damage_pct(&self, id: u32) -> i32 {
         let Some(p) = self.player(id) else { return 0 };
@@ -423,5 +495,69 @@ mod tests {
         let fire = t.creature(MAP, 93, 48, 50);
         let r = t.w.ao.spells.get(12).unwrap().clone();
         assert_eq!(t.w.tsao_spell_vs_npc(1, 12, &r, MAP, fire, 10), None);
+    }
+
+    #[test]
+    fn blows_on_creatures_crit_pets_take_more_and_paladins_add() {
+        let Some(mut t) = tsao(MAP, 50, 50) else { return };
+        t.join(1, "Paladin");
+        let wolf = t.creature(MAP, WOLF, 52, 50);
+        let seen: std::collections::BTreeSet<i64> = (0..300).map(|_| t.w.tsao_melee_vs_npc(1, MAP, wolf, 100).0).collect();
+        assert_eq!(seen.into_iter().collect::<Vec<_>>(), vec![100, 200], "40% critical x2");
+        t.w.npc_mut(MAP, wolf).pet.owner = Some(99);
+        t.w.player_mut(1).class = 7; // Paladín
+        let seen: std::collections::BTreeSet<i64> = (0..300).map(|_| t.w.tsao_melee_vs_npc(1, MAP, wolf, 100).0).collect();
+        assert_eq!(seen.into_iter().collect::<Vec<_>>(), vec![195, 390], "pet x1.5 + 45");
+    }
+
+    #[test]
+    fn creature_blows_meet_helmet_or_armour_and_leave_at_least_one() {
+        let Some(mut t) = tsao(MAP, 50, 50) else { return };
+        t.join(1, "Blindado");
+        assert_eq!(t.w.tsao_npc_blow(1, 7), 7, "naked: the whole roll");
+        let armor = t.w.ao.objs.iter().find(|(_, o)| o.obj_type == ao_formats::dat::obj::ObjType::Armor && o.min_def >= 20).map(|(i, _)| i as u16).unwrap();
+        let helmet = t.w.ao.objs.iter().find(|(_, o)| o.obj_type == ao_formats::dat::obj::ObjType::Helmet && o.min_def >= 20).map(|(i, _)| i as u16).unwrap();
+        t.w.player_mut(1).class = WARRIOR;
+        let eq = &mut t.w.player_mut(1).inv;
+        eq.slots[1] = Some(InvItem { obj: armor, amount: 1 });
+        eq.slots[2] = Some(InvItem { obj: helmet, amount: 1 });
+        (eq.equipped.armor, eq.equipped.helmet) = (Some(2), Some(3));
+        assert!((0..100).all(|_| t.w.tsao_npc_blow(1, 7) == 1), "absorbed but 1 gets through");
+    }
+
+    #[test]
+    fn stabs_and_the_gauntlet() {
+        let Some(mut t) = tsao(MAP, 50, 50) else { return };
+        t.join(1, "Asesino");
+        t.join(2, "Victima");
+        t.w.player_mut(1).class = 4; // Asesino
+        let dagger = t.w.ao.objs.iter().find(|(_, o)| o.stabs == 1 && o.obj_type == ao_formats::dat::obj::ObjType::Weapon).map(|(i, _)| i as u16).unwrap();
+        wield(&mut t, 1, 1, dagger);
+        let f = t.w.fighter(1).unwrap();
+        assert!((0..50).all(|_| t.w.tsao_stab(&f, 100, Some(true)) == 150), "assassins always stab from behind for x1.5");
+        let on_npc = (0..2000).filter(|_| t.w.tsao_stab(&f, 100, None) == 200).count();
+        assert!((200..450).contains(&on_npc), "15 in 96 on creatures, x2: {on_npc}");
+        // Manopla con Púas (Inmoviliza, probInmov 12): a blow to the head always paralyses.
+        t.w.player_mut(1).class = WARRIOR;
+        wield(&mut t, 1, 5, 1543);
+        assert!(!t.w.player(2).unwrap().status.paralyzed_until.is_some_and(|u| t.w.now() < u));
+        t.w.tsao_gauntlet(1, 2, true);
+        assert!(t.w.player(2).unwrap().status.paralyzed_until.is_some_and(|u| t.w.now() < u));
+    }
+
+    #[test]
+    fn tsao_chasers_come_for_the_player() {
+        let Some(mut t) = tsao(MAP, 50, 50) else { return };
+        t.join(1, "Cebo");
+        let p = t.w.player_mut(1);
+        (p.hp, p.max_hp) = (1_000_000, 1_000_000);
+        let (x, y) = (p.x, p.y);
+        // The baby dragon had TSAO Movement=3 (NpcMaloAtacaUsersBuenos): it used to stand.
+        let d = t.creature(MAP, DRAGON, x + 6, y);
+        let start = { let n = t.npc(MAP, d).unwrap(); (n.x, n.y) };
+        let far = (start.0 - x).abs() + (start.1 - y).abs();
+        t.run(8000);
+        let n = t.npc(MAP, d).unwrap();
+        assert!((n.x - x).abs() + (n.y - y).abs() < far, "it came closer from {start:?} to {:?}", (n.x, n.y));
     }
 }

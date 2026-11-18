@@ -90,7 +90,11 @@ impl World {
 
         // NpcDamage
         let mut damage = 0;
-        if hit {
+        if hit && self.tsao_rules() {
+            // TSAO NpcDaño: helmet or armour (never the shield), at least 1 (creatures.rs).
+            let r = self.roll(npc.min_hit, npc.max_hit);
+            damage = self.tsao_npc_blow(pid, r);
+        } else if hit {
             let mut absorbed = 0;
             if self.roll(1, 6) == rules::BODY_HEAD {
                 if let Some(h) = obj(f.helmet) {
@@ -291,7 +295,9 @@ impl World {
         if !c.attackable {
             return false;
         }
-        let exp_total = c.exp;
+        // Fixes over TSAO: summons kept their GiveEXP (the 2 zombies of "Invokar Zombies" give
+        // 1000 each) and an owner could farm their own pets; neither gives experience here.
+        let exp_total = if self.pet_gives_no_exp(map, nid, attacker) { 0 } else { c.exp };
         if self.player(attacker).is_some() {
             let number = self.maps[&map].npcs[&nid].def;
             if let Some(why) = self.faction_npc_attack_refusal(attacker, number) {

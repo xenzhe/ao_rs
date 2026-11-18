@@ -272,6 +272,10 @@ pub struct SpecialObj {
     pub paralysis_resist_npcs: i32,
     /// `SpellDamagePct`: % more damage of the wearer's spells on players.
     pub spell_damage_pct: i32,
+    /// TSAO `Inmoviliza=1` + `probInmov` (weapon): % of hits on players that paralyse
+    /// (a blow to the head always does), for `ImmobilizeSecs`.
+    pub immobilize_pct: i32,
+    pub immobilize_secs: i32,
 }
 
 /// `"Clérigo"` -> `"CLERIGO"`: how TSAO data names classes.
@@ -314,6 +318,8 @@ impl SpecialObj {
             paralysis_resist_users: pair(&s.text("ParalysisResist"), ',').map_or(0, |p| p.0),
             paralysis_resist_npcs: pair(&s.text("ParalysisResist"), ',').map_or(0, |p| p.1),
             spell_damage_pct: s.int("SpellDamagePct"),
+            immobilize_pct: if s.flag("Inmoviliza") { s.int("probInmov") } else { 0 },
+            immobilize_secs: s.int("ImmobilizeSecs"),
         }
     }
 

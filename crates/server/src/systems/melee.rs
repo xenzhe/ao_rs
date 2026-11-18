@@ -270,7 +270,10 @@ impl World {
         }
         let w = self.obj(f.weapon).cloned();
         let mut extra = 0;
-        if rules::can_critical(f.class == Class::Bandit, w.as_ref()) {
+        if self.tsao_rules() {
+            // TSAO DoApuñalar on a creature: x2 of the hit (creatures.rs).
+            extra = self.tsao_stab(&f, damage, None);
+        } else if rules::can_critical(f.class == Class::Bandit, w.as_ref()) {
             if self.roll(1, 100) <= self.critical_chance(&f) {
                 extra = rules::vb_round(base as f64 * rules::NPC_CRITICAL_FACTOR);
             }
@@ -398,7 +401,12 @@ impl World {
         // GetBackHitBonusChanceAgainstUsers: same heading and adjacent.
         let back = if attacker_dir == victim_dir && near { self.ao.balance.backstab.extra_backstab_chance as f64 } else { 0.0 };
         let mut bonus = 0;
-        if rules::can_critical(fa.class == Class::Bandit, w.as_ref()) {
+        if self.tsao_rules() {
+            // TSAO DoApuñalar on a player: x1.5 of the hit; assassins from behind always.
+            bonus = self.tsao_stab(&fa, damage, Some(attacker_dir == victim_dir));
+            // The gauntlet (`Inmoviliza`): paralyses, always on a blow to the head.
+            self.tsao_gauntlet(a, v, place == rules::BODY_HEAD);
+        } else if rules::can_critical(fa.class == Class::Bandit, w.as_ref()) {
             let c = rules::clamp_chance(self.critical_chance(&fa) as f64 + back);
             if self.roll(1, 100) <= c {
                 bonus = rules::vb_round(damage as f64 * self.ao.balance.backstab.critical_hit_dmg_modifier as f64);

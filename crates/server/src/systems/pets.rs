@@ -31,7 +31,8 @@
 //!   whose spell is not harmful fights hand to hand.
 //!
 //! Kept from TSAO: pets only fight creatures (the fire elemental's revenge on players,
-//! `AllMascotasAtacanUser`, is not ported) and creatures never fight back against pets.
+//! `AllMascotasAtacanUser`, is not ported) and creatures do not fight back against pets,
+//! except a dragon, which answers a casting elemental with its spell.
 //!
 //! Not ported: tamed pets are not saved with the character (the VB kept `MASCOTAS` in the
 //! .chr file); they go back to the wild when the owner logs out.
@@ -100,6 +101,11 @@ impl World {
     fn fighting_pets(&self, owner: u32) -> Vec<u32> {
         let map = self.player(owner).map_or(0, |p| p.map);
         self.pets_of(owner).into_iter().filter(|nid| self.instance(map).npcs[nid].pet.kind != PetKind::Companion).collect()
+    }
+
+    /// Summoned creatures and one's own pets give no experience (see combat.rs).
+    pub(crate) fn pet_gives_no_exp(&self, map: u16, nid: u32, attacker: u32) -> bool {
+        self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).is_some_and(|n| matches!(n.pet.kind, PetKind::Summoned | PetKind::Companion) || n.pet.owner == Some(attacker))
     }
 
     /// `FollowAmo`: back to its owner's side, no target.
@@ -232,11 +238,6 @@ impl World {
             self.console(id, "Ese hechizo no invoca nada.", Tone::Warn);
             return false;
         }
-        let m = &self.instance(map).map;
-        if m.safe || m.trigger(px, py) == ao_rules::combat::TRIGGER_SAFE_ZONE {
-            self.console(id, "No puedes invocar criaturas en una zona segura.", Tone::Warn);
-            return false;
-        }
         if companion {
             // InvocarMascota: casting it again sends the companion away.
             let mine: Vec<u32> = self.pets_of(id).into_iter().filter(|n| self.instance(map).npcs[n].pet.kind == PetKind::Companion).collect();
@@ -252,6 +253,12 @@ impl World {
                 return false;
             }
             return self.spawn_for(Some(id), map, number as u16, (tx, ty), PetKind::Companion, None).is_some();
+        }
+        // HechizoInvocacion: no fighting summons in safe zones (companions may go anywhere).
+        let m = &self.instance(map).map;
+        if m.safe || m.trigger(px, py) == ao_rules::combat::TRIGGER_SAFE_ZONE {
+            self.console(id, "No puedes invocar criaturas en una zona segura.", Tone::Warn);
+            return false;
         }
         let max = self.pet_rules().max;
         if self.fighting_pets(id).len() >= max {
@@ -279,6 +286,11 @@ impl World {
     /// (healers stay out, as the water elemental did).
     pub(crate) fn pets_assist(&mut self, owner: u32, map: u16, nid: u32) {
         if self.player(owner).is_none_or(|p| p.map != map) {
+            return;
+        }
+        // Never against a creature the owner may not attack (faction NPCs...).
+        let number = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).map_or(0, |n| n.def);
+        if self.faction_npc_attack_refusal(owner, number).is_some() {
             return;
         }
         for pet in self.pets_of(owner) {
@@ -499,6 +511,13 @@ impl World {
                     self.npc_mut(map, nid).next_spell = now.after_ms(if d.spell_interval > 0 { d.spell_interval as u64 } else { 2000 });
                     self.npc_face(map, nid, heading_to(pos, tp));
                     self.npc_casts_on_npc(map, nid, t);
+                    // AiNpcAtacaNpc: a dragon answers a casting elemental with its own spell.
+                    if self.npc_paralyzed(map, t) {
+                        return;
+                    }
+                    if self.instance(map).npcs.get(&t).is_some_and(|v| v.alive() && v.kind == ao_formats::dat::npcs::NpcType::Dragon) {
+                        self.npc_casts_on_npc(map, t, nid);
+                    }
                 }
                 return;
             }
@@ -666,6 +685,32 @@ pub(crate) mod tests {
         // Expiry after SummonSecs.
         t.run(121_000);
         assert!(t.w.pets_of(1).is_empty());
+    }
+
+    #[test]
+    fn own_summons_give_no_experience() {
+        let Some(mut t) = tsao(MAP, 50, 50) else { return };
+        t.join(1, "Granjero");
+        let s17 = t.w.ao.spells.get(17).unwrap().clone();
+        assert!(t.w.cast_summon(1, &s17, 52, 50, false));
+        let zombie = t.w.pets_of(1)[0];
+        let exp0 = t.w.player(1).unwrap().exp;
+        t.w.damage_npc(MAP, zombie, 100, 1);
+        assert_eq!(t.w.player(1).unwrap().exp, exp0, "TSAO zombies gave 1000 exp to their own summoner");
+    }
+
+    #[test]
+    fn companions_come_even_in_town_fighting_summons_do_not() {
+        // Tanaris (map 28) is a safe city.
+        let Some(mut t) = tsao(28, 50, 50) else { return };
+        t.join(1, "Paseante");
+        let (x, y) = { let p = t.w.player(1).unwrap(); (p.x, p.y) };
+        let (cx, cy) = t.w.free_tile_near(28, x + 1, y, 2);
+        let companion = t.w.ao.spells.get(51).unwrap().clone();
+        assert!(t.w.cast_summon(1, &companion, cx, cy, true));
+        let zombies = t.w.ao.spells.get(17).unwrap().clone();
+        assert!(!t.w.cast_summon(1, &zombies, cx, cy + 1, false));
+        assert_eq!(t.w.pets_of(1).len(), 1);
     }
 
     #[test]

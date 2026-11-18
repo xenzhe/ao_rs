@@ -266,6 +266,10 @@ def remap_obj_classes(m):
     head, body = m.group(1), m.group(2)
     num = int(re.match(r"\[OBJ(\d+)\]", head).group(1))
     body = "".join(k + "\n" for k in OBJ_KEYS.get(num, [])) + body
+    # UsuarioAtacaUsuario: a weapon with `Inmoviliza=1` paralyses for IntervaloParalizado
+    # (500 ticks of the 40 ms game timer = 20 s) `probInmov`% of its hits.
+    if re.search(r"(?im)^Inmoviliza=1", body):
+        body = "ImmobilizeSecs=20\n" + body
     t = re.search(r"(?im)^ObjType=(\d+)", body)
     if t and int(t.group(1)) in OBJ_TYPE:
         old = int(t.group(1))
@@ -392,7 +396,9 @@ def remap_npc(m):
     extra = f"TsaoType={tsao}\n" if tsao not in NPC_TYPE and num not in NPC_FIX else ""
     extra += "".join(k + "\n" for k in NPC_KEYS.get(num, []))
     mv = re.search(r"(?im)^Movement=(\d+)", body)
-    if mv and int(mv.group(1)) in MOVEMENT:
+    hostile = re.search(r"(?im)^Hostile=1", body)
+    # Only hostile ones: the royal guard (10) and the ram (3) are not, and stand.
+    if mv and hostile and int(mv.group(1)) in MOVEMENT:
         body = body[:mv.start()] + f"Movement={MOVEMENT[int(mv.group(1))]}\nTsaoMovement={mv.group(1)}" + body[mv.end():]
     if re.search(r"(?im)^AfectaRelampago=1", body):
         extra += f"ImmuneSpells={RELAMPAGO}\n"
@@ -403,6 +409,28 @@ def remap_npc(m):
     if new == 26:
         extra += f"CityCount={len(TRAVEL)}\n" + "".join(f"City{i + 1}={c}\n" for i, c in enumerate(TRAVEL))
     return head + extra + body
+
+
+def fix_trainers(npcs):
+    """TSAO trainers (NpcType 3) name their creatures right (`CN1=Murciélago`) but number
+    them with an older npcs.dat: O'Riley de Banderbill's `CI1=566` is the Gran Dragón de la
+    Oscuridad (160000 HP). Each `CIn` becomes the hostile creature (>= 500) called `CNn`."""
+    by_name = {}
+    for m in re.finditer(r"(?ims)^\[NPC(\d+)\][^\n]*\n(.*?)(?=^\[|\Z)", npcs):
+        num, name = int(m.group(1)), re.search(r"(?im)^Name=([^\n]*)", m.group(2))
+        if name and num >= 500:
+            by_name.setdefault(name.group(1).strip().lower(), num)
+
+    def fix(m):
+        head, body = m.group(1), m.group(2)
+        if not re.search(r"(?im)^NpcType=3\s*$", body):
+            return m.group(0)
+        for i, cn in re.findall(r"(?im)^CN(\d+)=([^\n]*)", body):
+            n = by_name.get(cn.strip().lower())
+            if n:
+                body = re.sub(rf"(?im)^CI{i}=\d+", f"CI{i}={n}", body)
+        return head + body
+    return re.sub(r"(?ims)^(\[NPC\d+\][^\n]*\n)(.*?)(?=^\[|\Z)", fix, npcs)
 
 
 def convert_dats(src, dst):
@@ -422,6 +450,7 @@ def convert_dats(src, dst):
     # NPCs: friendly (< 500) and hostile (>= 500) live in two files in 0.11.5.
     npcs = read("NPCs.dat") + "\n" + re.sub(r"(?im)^\[INIT\][^\[]*", "", read("NPCs-HOSTILES.dat"))
     npcs = re.sub(r"(?ims)^(\[NPC(\d+)\][^\n]*\n)(.*?)(?=^\[|\Z)", remap_npc, npcs)
+    npcs = fix_trainers(npcs)
     for f in os.listdir(ddat):
         if f.lower() in ("npcs.dat", "obj.dat", "hechizos.dat"):
             os.remove(os.path.join(ddat, f))
@@ -504,7 +533,8 @@ def main(src, dst):
             # DoPasosFx: always 23/24 (50 sailing); no meditation sound.
             "[Sounds]", "StepsSimple=1", "Meditate=0", "",
             # CheckUserLevel CFF 58; the big meditation (FXMEDITARGRANDE 6) for the creation scene.
-            "[Fx]", "LevelUp=58", "Ritual=6", ""]
+            # SistemaCombate.bas: the gauntlet's paralysis shows FX 8.
+            "[Fx]", "LevelUp=58", "Ritual=6", "Paralyze=8", ""]
     open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",
