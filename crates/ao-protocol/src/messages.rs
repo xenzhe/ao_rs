@@ -160,6 +160,8 @@ pub enum S2C {
     MapObject { x: i32, y: i32, obj: u16 },
     /// A sound (`PlayWave`) at a tile of the map: instruments, horns, filling a bottle...
     Sound { wav: u16, x: i32, y: i32 },
+    /// A character's walking speed changed (`SpeedingACT`): steps last `WALK_MS / speed`.
+    Speed { id: u32, speed: f32 },
 
     // Bank
     BankOpen { slots: Vec<(u8, u16, u32)>, gold: u32 },

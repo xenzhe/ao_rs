@@ -22,6 +22,12 @@ pub struct Player {
     pub target_door: Option<(u16, i32, i32)>,
     /// `/hogar`: when the ghost arrives home (`Accion.TipoAccion = Hogar`).
     pub going_home: Option<crate::clock::GameTime>,
+    /// Walking speed multiplier (`Char.speeding`), kept by `systems::speed`.
+    pub speed: f32,
+    /// Inventory slot of the saddle ridden (`flags.Montado` + `EquippedSaddleSlot`).
+    pub mounted: Option<u8>,
+    /// `Stats.JineteLevel` (1..9): the rider's speed bonus on a mount.
+    pub rider_level: u8,
     pub race: u8,
     pub class: u8,
     pub gender: u8,

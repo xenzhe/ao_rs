@@ -148,6 +148,9 @@ impl World {
             last_refusal: None,
             target_door: None,
             going_home: None,
+            speed: 1.0,
+            mounted: None,
+            rider_level: 1,
             race: c.race,
             class: c.class,
             gender: c.gender,
@@ -297,6 +300,7 @@ impl World {
         self.broadcast(map, &me, Some(id));
         self.send_ground_items(id);
         self.send_doors(id, map);
+        self.send_speeds(id, map);
         self.faction_map_statuses(id);
         let m = &self.instance(map).map;
         self.console(id, format!("Entras a {}{}.", m.name, if m.safe { " (zona segura)" } else { "" }), Tone::Info);

@@ -75,6 +75,8 @@ pub enum Control {
 pub struct World {
     /// Next floor cleanup pass (`tick_floor_cleanup`).
     pub(crate) next_floor_cleanup: GameTime,
+    /// Next speed recomputation pass (`tick_speed`).
+    pub(crate) next_speed_check: GameTime,
     /// Arrival time of the frame being handled (None outside frames / in tests).
     pub(crate) frame_at: Option<crate::clock::GameTime>,
     /// Last player each player killed and counted for a quest (anti alt-farming).
@@ -147,6 +149,7 @@ impl World {
             probe,
             frame_at: None,
             next_floor_cleanup: GameTime::ZERO,
+            next_speed_check: GameTime::ZERO,
             addrs: HashMap::new(),
             map_npcs: npcs,
             guilds: Default::default(),
@@ -335,6 +338,7 @@ impl World {
         self.tick_thief(now);
         self.tick_floor_cleanup(now);
         self.tick_potions(now);
+        self.tick_speed(now);
         if now >= self.next_regen {
             self.next_regen = now.after_ms(REGEN_MS);
             self.regen();

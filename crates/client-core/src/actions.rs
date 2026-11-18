@@ -2,7 +2,7 @@
 //! courtesy): a legit player never sends a packet the server would count as cheating.
 use crate::Game;
 use ao_protocol::{Tone, C2S};
-use ao_rules::{tile_distance, walk, Dir, WALK_MS};
+use ao_rules::{tile_distance, walk, Dir};
 
 impl Game {
     /// Walks one tile with client-side prediction; the server confirms or corrects.
@@ -11,7 +11,7 @@ impl Game {
         let Some(map) = &self.map else { return false };
         let Some(me) = self.ents.get(&self.my_id) else { return false };
         // Whole milliseconds: 0.6 - 0.4 is 0.19999.. in f64 and must count as 200 ms.
-        if me.moving() || ((now - self.last_step) * 1000.0).round() < WALK_MS as f64 {
+        if me.moving() || ((now - self.last_step) * 1000.0).round() < ao_rules::step_ms(me.speed) as f64 {
             return false;
         }
         let (dx, dy) = dir.delta();

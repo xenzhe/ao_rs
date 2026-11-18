@@ -25,6 +25,11 @@ impl WalkLimiter {
         self.last = now;
     }
 
+    /// The pace changes with the character's speed (`ActualizarVelocidadDeUsuario`).
+    pub fn set_step_ms(&mut self, step_ms: u64) {
+        self.step_ms = step_ms.max(1) as f32;
+    }
+
     pub fn try_step(&mut self, now: GameTime) -> bool {
         // Frames arrive in order, but `now` may be older than `last` after a reset.
         let now = if now.0 < self.last.0 { self.last } else { now };

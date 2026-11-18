@@ -18,9 +18,8 @@
 //!
 //! Not ported (the spells that use them still say "todavía no está disponible" and cost
 //! nothing): taunt (3), traps (5), drunk (6), push/pull (7, 11), delayed blast (12),
-//! unequip (13, behind a feature flag off by default), and movement speed: this server
-//! has a fixed walking pace, so speed-only effects (Eco Veloz, Desplazamiento Veloz,
-//! Acelerar Mascotas) do nothing and stay refused.
+//! unequip (13, behind a feature flag off by default). Movement speed modifiers (Eco
+//! Veloz, Desplazamiento Veloz) are applied by `systems::speed`.
 use crate::clock::GameTime;
 use crate::world::spellbook::{ActiveEot, EotCaster, Transform};
 use crate::world::World;
@@ -85,9 +84,9 @@ fn applies_modifiers(k: EotKind) -> bool {
     matches!(k, ApplyModifiers | Taunted | Shield | DamageBonus | Transform | ApplyEffectToParty)
 }
 
+/// Any modifier at all (movement speed included: `systems::speed` applies it).
 fn has_non_speed_effect(d: &EotDef) -> bool {
-    let m = EotModifiers { speed: 0.0, ..d.mods };
-    m != EotModifiers::default() || d.cc_immunity
+    d.mods != EotModifiers::default() || d.cc_immunity
 }
 
 /// Does effect `id` do anything on this server? (Kind ported, and not only movement speed.)
@@ -991,17 +990,22 @@ pub(crate) mod tests {
         assert_eq!(t.mana(1), m);
     }
 
+    /// Eco Veloz (spell 252: bard song EOT21 -> EOT22 `SpeedModifier=0.1`) speeds the bard
+    /// up (`systems::speed`), and unported kinds stay refused for free.
     #[test]
-    fn speed_only_and_unported_effects_are_refused_for_free() {
+    fn speed_songs_speed_up_and_unported_effects_are_refused_for_free() {
         let mut t = T::new();
         t.join(1, 6, 50, 50);
         t.learn(1, 252);
         let mana = t.mana(1);
         t.drain(1);
         t.cast(1, 252, 50, 50);
-        assert!(t.said(1, "todavía no está disponible"));
-        assert_eq!(t.mana(1), mana);
-        assert!(eot_of(&t, 1).is_empty());
+        assert!(!t.said(1, "todavía no está disponible"));
+        assert!(t.mana(1) < mana, "the song costs mana");
+        t.advance(500);
+        t.w.update_speed(1);
+        let speed = t.w.player(1).unwrap().speed;
+        assert!((speed - 1.1).abs() < 1e-3, "+10 % speed: {speed}");
         let table = t.w.eots();
         assert!(!eot_works(&table, 5), "taunt");
         assert!(!eot_works(&table, 20), "delayed blast");

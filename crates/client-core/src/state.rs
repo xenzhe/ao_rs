@@ -28,6 +28,8 @@ pub struct Ent {
     pub hp: i32,
     pub max_hp: i32,
     pub walk_ms: f32,
+    /// Walking speed multiplier (`S2C::Speed`, 1 = normal).
+    pub speed: f32,
     /// Visible equipment (official weapon/shield/helmet animation ids, 0 = none).
     pub weapon: u16,
     pub shield: u16,
@@ -41,7 +43,7 @@ pub struct Ent {
 impl Ent {
     #[allow(clippy::too_many_arguments)]
     pub fn new(name: String, kind: EntityKind, body: u16, head: u16, x: i32, y: i32, dir: Dir, hp: i32, max_hp: i32) -> Ent {
-        Ent { name, kind, body, head, x, y, px: x, py: y, t: 1.0, dir, hp, max_hp, walk_ms: 0.0, weapon: 0, shield: 0, helmet: 0, status: 0, said: None }
+        Ent { name, kind, body, head, x, y, px: x, py: y, t: 1.0, dir, hp, max_hp, walk_ms: 0.0, speed: 1.0, weapon: 0, shield: 0, helmet: 0, status: 0, said: None }
     }
 
     /// Interpolated top-left of the character's tile, in world pixels.
@@ -281,6 +283,11 @@ impl Game {
             S2C::WorldTime { elapsed_ms, day_ms } => self.world_time = Some((elapsed_ms, day_ms.max(1), self.now)),
             S2C::MapObject { x, y, obj } => self.on_map_object(x, y, obj),
             S2C::Sound { wav, x, y } => self.events.push(ClientEvent::Sound { wav, at: (x, y) }),
+            S2C::Speed { id, speed } => {
+                if let Some(e) = self.ents.get_mut(&id) {
+                    e.speed = speed.max(0.1);
+                }
+            }
             S2C::SpellBook { spells } => {
                 self.spells = spells;
                 self.selected = self.selected.min(self.spells.len().saturating_sub(1));
@@ -418,7 +425,7 @@ impl Game {
     pub fn update(&mut self, dt: f32) {
         for e in self.ents.values_mut() {
             if e.t < 1.0 {
-                e.t += dt * 1000.0 / ao_rules::WALK_MS as f32;
+                e.t += dt * 1000.0 * e.speed / ao_rules::WALK_MS as f32;
                 // f32 sums like 0.35 + 0.65 can land just under 1: that step is done.
                 if e.t > 0.9999 {
                     e.t = 1.0;

@@ -137,6 +137,10 @@ impl World {
             0 => anim(e.tool, |o| o.weapon_anim),
             w => w,
         };
+        if p.mounted.is_some() {
+            // DoMontar: no weapon or shield on a mount.
+            return (p.body, p.head, 0, 0, anim(e.helmet, |o| o.helmet_anim));
+        }
         (p.body, p.head, weapon, anim(e.shield, |o| o.shield_anim), anim(e.helmet, |o| o.helmet_anim))
     }
 
@@ -618,6 +622,7 @@ impl World {
             }
             ObjType::Potions => self.use_potion(id, slot, o, free),
             ObjType::Keys => self.use_key(id, slot),
+            ObjType::Saddles => self.use_saddle(id, slot),
             ObjType::EmptyBottle => self.fill_bottle(id, slot, o),
             ObjType::MusicalInstruments => self.play_instrument(id, o),
             ObjType::Parchment => {

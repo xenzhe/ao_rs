@@ -127,6 +127,8 @@ pub struct StatusEffects {
     pub hidden_check: GameTime,
     /// TSAO `flags.Navegando`: the boat object in use.
     pub sailing: Option<u16>,
+    /// Speed multiplier of a spell effect (`flags.VelocidadHechizada`), None = none.
+    pub speed_spell: Option<f32>,
     /// Next steal / hide attempt allowed (TSAO `PuedoTrabajar`).
     pub skill_ready: GameTime,
     /// Last flags broadcast with `S2C::Status` (to send only changes).

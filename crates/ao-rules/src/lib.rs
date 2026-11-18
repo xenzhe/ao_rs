@@ -34,6 +34,14 @@ use serde::{Deserialize, Serialize};
 
 /// Time to walk one tile (classic AO pace).
 pub const WALK_MS: u64 = 200;
+
+/// Milliseconds per step at `speed` (`Char.speeding`: 1 normal, 1.4 ghosts, mounts...).
+pub fn step_ms(speed: f32) -> u64 {
+    if speed <= 0.0 {
+        return WALK_MS;
+    }
+    (WALK_MS as f32 / speed).round().max(1.0) as u64
+}
 pub const MAX_CHAT: usize = 120;
 /// Visible window in tiles, same as the official AO20 client (XWindow x YWindow).
 pub const VIEW_TILES_W: i32 = 23;
