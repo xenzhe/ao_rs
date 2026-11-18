@@ -37,6 +37,7 @@ mod campfire;
 pub(crate) mod cards;
 pub(crate) mod skins;
 mod quit;
+mod player_cmds;
 mod gm;
 mod gm_mod;
 mod gm_tsao;

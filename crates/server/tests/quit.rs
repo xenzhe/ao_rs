@@ -42,7 +42,7 @@ fn quitting_counts_down_outside_safe_maps_and_walking_cancels_it() {
     for _ in 0..12 {
         s.advance(1000);
     }
-    b.wait_until("fuera del mundo", |b| left(b));
+    b.wait_until("fuera del mundo", left);
     assert!(!b.closed(), "the account stays logged in");
     b.wait_until("lista de personajes", |b| b.log().iter().rev().take(3).any(|m| matches!(m, S2C::CharacterList { .. })));
     // And the same character can come back in.
@@ -55,5 +55,5 @@ fn quitting_in_a_safe_map_is_immediate() {
     let s = TestServer::start_at(1, 50, 50);
     let mut b = player(&s, "Ciudadano");
     b.say("/salir");
-    b.wait_until("fuera al instante", |b| left(b));
+    b.wait_until("fuera al instante", left);
 }

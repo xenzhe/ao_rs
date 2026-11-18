@@ -149,6 +149,10 @@ impl World {
     }
 
     /// Gold in hand changed: vault gold and the vitals line that carries the hand gold.
+    pub(crate) fn send_gold_pub(&self, id: u32) {
+        self.send_gold(id);
+    }
+
     fn send_gold(&self, id: u32) {
         let Some(p) = self.player(id) else { return };
         let gold = match p.bank.clan {

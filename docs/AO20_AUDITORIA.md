@@ -14,6 +14,35 @@ está entre el 75 y el 95 %. Lo que más baja la media es lo que falta casi ente
 efectos en el tiempo, hechizos de área, IA avanzada, reglas del mundo (triggers,
 restricciones de mapa), eventos automáticos y la mitad de los comandos de GM.
 
+## Revisión objetiva paquete por paquete (18/11, tras faltar `/salir`)
+
+Las cifras de las fases salían de los informes de auditoría, no de una comparación
+exhaustiva. Se rehizo contra la fuente: los 248 comandos de `ProtocolCmdParse.bas` y los
+~330 `ClientPacketID` de `PacketId.bas`.
+
+Hecho en esta revisión: `/salir` (cuenta atrás, cancelar), y `systems/player_cmds.rs`
+con `/exit /seg /cmsg /grupo /salirclan /onlineclan /meditar /comerciar /boveda
+/depositar /retirar /balance /informacion /recompensa /curar /resucitar /retirarfaccion
+/promedio /quieto /acompañar /apostar /perdon /donar /fmsg /realmsg /caosmsg /bmsg
+/onlinereal /onlinecaos`. Lo nuevo de verdad: perdón del sacerdote (`VolverCiudadano`,
+antes un criminal no podía volver a ser ciudadano), apuestas con el timbero, chat de
+facción y de consejo, órdenes a mascotas.
+
+Sigue faltando (mecánica entera, no solo el comando):
+- `eRest` (descansar junto a la fogata), `eTransFerGold` (dar oro a otro jugador),
+  `eDeleteItem`, `eSeguroResu`, `eSeguroClan`, `ePetLeaveAll/FollowAll`.
+- Pesca especial (`eFinalizarPescaEspecial`, `eRomperCania`), búsqueda del tesoro,
+  `eMapPriceEntrance` (mapas con entrada de pago), `eRequestRemort`.
+- Casas (`eHooHouseDoorAction`), foro (`eForumPost`), hotkeys guardadas en servidor
+  (`eSetHotkeySlot`), tienda AO20 y mercado de personajes (`eBuyShopItem`,
+  `ePublicarPersonajeMAO`: dependen de servicios externos).
+- Comandos de consejo y GM menores: `/aceptconse /aceptconsecaos /kickconse /noreal
+  /nocaos /banclan /rajarclan /voto /showcmsg /chatcolor /ignorado /piso /mapinfo
+  /mapsetting /nave /habilitar /reset /panelgm /showname /consulta
+  /mensajeinformacion /subasta /ofertainicial`.
+
+Con esto la cifra honesta baja: **~85 %** (no el ~93 % dicho antes).
+
 ## Hecho tras la auditoría (18/11)
 
 - **Puertas**: abrir y cerrar con clic, bloqueos según el `Subtipo` (7 formas), puertas con

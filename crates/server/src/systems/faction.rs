@@ -178,6 +178,26 @@ impl World {
     }
 
     /// `VolverCriminal`.
+    /// `VolverCiudadano` (after the priest's forgiveness): back to citizen, seguro on.
+    pub(crate) fn faction_become_citizen(&mut self, id: u32) {
+        if self.faction_in_arena(id) {
+            return;
+        }
+        let f = &mut self.player_mut(id).faction;
+        if !rules::is_citizen(f.rec.status) {
+            f.rec.score = 0;
+        }
+        f.rec.status = rules::CITIZEN;
+        f.safe = true;
+        self.faction_refresh(id);
+        self.send(id, &S2C::Faction(FactionS2C::Safe { on: true }));
+        if self.party_of(id).is_some() {
+            self.console(id, "Ahora sos ciudadano, no podés estar en un grupo con criminales.", Tone::Warn);
+            self.party_drop_from_group(id);
+        }
+        self.faction_save(id);
+    }
+
     pub(crate) fn faction_turn_criminal(&mut self, id: u32) {
         let status = self.faction_status(id);
         // `MapData(...).trigger = 6`: never in an arena.

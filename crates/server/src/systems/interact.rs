@@ -139,6 +139,10 @@ impl World {
 
     /// `HandleReviverNpcInteraction`: within 5 tiles, resurrects the dead (any player at a
     /// priest, newbies at a newbie priest) or heals the living to full.
+    pub(crate) fn priest_cmd(&mut self, id: u32, kind: NpcType, dist: i32, dead: bool, level: u32) {
+        self.priest(id, kind, dist, dead, level);
+    }
+
     fn priest(&mut self, id: u32, kind: NpcType, dist: i32, dead: bool, level: u32) {
         if dist > 5 {
             self.console(id, TOO_FAR, Tone::Info);
