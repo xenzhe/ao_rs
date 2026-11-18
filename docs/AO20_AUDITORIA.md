@@ -153,6 +153,24 @@ reiniciar; el cliente no mueve al azar a un jugador estúpido (solo lo marca); s
   criaturas con hechizos de apoyo por equipos. El buff no se ve en el cliente (no hay
   mensaje de buffs en el protocolo; `PROTOCOL_VERSION` sigue en 16).
 
+## Velocidad, monturas, fogatas, cartas y aspectos (18/11)
+
+- **Velocidad** (`ActualizarVelocidadDeUsuario`): normal x1, fantasmas x1,4, barcos y monturas
+  por su `Velocidad` (montura x nivel de jinete 1,05-1,45), armadura con `Velocidad` propia y los
+  efectos con `SpeedModifier` (Eco Veloz, Desplazamiento Veloz). El servidor ajusta el ritmo de
+  pasos permitido (antitrampas) y avisa al cliente (`S2C::Speed`), que acorta el paso y la
+  animación. Protocolo 19.
+- **Monturas** (`DoMontar`): cuerpo para razas altas o bajas, sin arma ni escudo a la vista;
+  no en calabozos ni en combate; las de facción solo para su ejército; se desmonta al morir.
+- **Fogatas**: daga sobre leña del suelo (fogata apagada), clic para encenderla, la lluvia
+  las apaga en mapas con lluvia.
+- **Cartas coleccionables**: colección por cuenta en la base de datos (bronce +1, plata +3, oro
+  +5, tope 10) con los bonus oficiales contra la criatura (experiencia, daño hecho, daño
+  recibido, botín). `/cartas` muestra la colección. Ajuste `collectible_cards`.
+- **Aspectos**: armadura, casco o cabeza, escudo, arma y barco cambian la apariencia desde el
+  inventario normal (en el oficial van en un inventario aparte de la tienda Patreon). Las alas
+  y los aspectos de hechizo quedan equipados pero el cliente no tiene capa para dibujarlos.
+
 ## Datos del servidor frente a los mapas oficiales (revisado)
 
 Comparando nombre por nombre con el cliente oficial (`init/sp_localindex.dat`), los NPCs,
