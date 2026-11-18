@@ -5,7 +5,6 @@ use crate::world::World;
 use ao_formats::csm::{BLOCK_ALL, FLAG_WATER};
 use ao_formats::dat::obj::{ObjData, ObjType};
 use ao_protocol::{Tone, S2C};
-use ao_rules::character::naked_body;
 use ao_rules::items::{self, potion, Role, GOLD_OBJ, MAX_FOOD, MAX_STACK};
 
 /// Pirates may throw gold into the water (TirarOro).
@@ -256,13 +255,14 @@ impl World {
         if self.player(id).is_none() {
             return;
         }
+        let prof = ao_formats::profile::for_recursos(&self.recursos);
         let p = self.player_mut(id);
         if !p.inv.equipped.is_equipped(slot) {
             return;
         }
         if p.inv.equipped.armor == Some(slot) {
             // SetNakedBody.
-            p.body = naked_body(p.race, p.gender);
+            p.body = prof.naked_body(p.race, p.gender);
         }
         for f in p.inv.equipped.fields_mut() {
             if *f == Some(slot) {
@@ -861,7 +861,7 @@ mod tests {
         let body = items::clothing_for(w.ao.objs.get(armour as u32).unwrap(), race, gender) as u16;
         assert_eq!(w.look_of(1).0, body);
         send(&mut w, 1, C2S::EquipItem { slot });
-        assert_eq!(w.look_of(1).0, naked_body(race, gender), "SetNakedBody al quitarla");
+        assert_eq!(w.look_of(1).0, ao_rules::character::naked_body(race, gender), "SetNakedBody al quitarla");
     }
 
     #[test]

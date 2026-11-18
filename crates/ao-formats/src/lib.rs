@@ -11,6 +11,7 @@ pub mod graphics;
 pub mod heads;
 pub mod ini;
 pub mod paths;
+pub mod profile;
 
 pub use csm::AoMap;
 pub use graphics::GraphicsDb;

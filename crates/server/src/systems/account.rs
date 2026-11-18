@@ -148,7 +148,9 @@ impl World {
             race,
             class,
             gender,
-            body: starting_body(race, gender),
+            // AO20 starting body, or (profile with naked bodies, e.g. TSAO) the naked body:
+            // the starting armour dresses it.
+            body: if ao_formats::profile::for_recursos(&self.recursos).naked.is_empty() { starting_body(race, gender) } else { ao_formats::profile::for_recursos(&self.recursos).naked_body(race, gender) },
             head,
             hp: vitals.hp,
             mana: vitals.mana,

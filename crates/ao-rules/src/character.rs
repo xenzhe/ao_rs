@@ -136,6 +136,8 @@ pub struct StartEquipment {
     pub common: StartSet,
     /// Index 0 = class 1.
     pub classes: Vec<StartSet>,
+    /// `[RACEn]` (Numic extension, TSAO dresses each race differently). Index 0 = race 1.
+    pub races: Vec<StartSet>,
 }
 
 impl StartEquipment {
@@ -174,7 +176,18 @@ impl StartEquipment {
             }
             set
         };
-        StartEquipment { common: load("COMMON"), classes: (1..=12).map(|c| load(&format!("CLASS{c}"))).collect() }
+        StartEquipment { common: load("COMMON"), classes: (1..=12).map(|c| load(&format!("CLASS{c}"))).collect(), races: (1..=6).map(|r| load(&format!("RACE{r}"))).collect() }
+    }
+
+    /// [`StartEquipment::loadout`] plus the race set (after the common one).
+    #[allow(clippy::type_complexity)]
+    pub fn loadout_for(&self, class: u8, race: u8, max_slots: usize) -> (Vec<(u8, u16, u32, bool)>, Vec<(u8, u16)>) {
+        let race_set = self.races.get((race as usize).wrapping_sub(1)).filter(|s| !s.items.is_empty() || !s.spells.is_empty());
+        let Some(rs) = race_set else { return self.loadout(class, max_slots) };
+        let mut with_race = self.clone();
+        with_race.common.items.extend(rs.items.iter().cloned());
+        with_race.common.spells.extend(rs.spells.iter().copied());
+        with_race.loadout(class, max_slots)
     }
 
     /// Items and spells of a new character of `class` (`RellenarInventario`): the common

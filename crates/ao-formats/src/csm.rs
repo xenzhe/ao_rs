@@ -191,7 +191,16 @@ pub fn map_path(root: &Path, number: u16) -> PathBuf {
 impl AoMap {
     pub fn load(root: &Path, number: u16) -> Result<AoMap, LoadError> {
         let data = std::fs::read(map_path(root, number))?;
-        Self::parse(number, &data)
+        let mut m = Self::parse(number, &data)?;
+        // Which floors are water depends on the resource set (init/profile.ini).
+        let p = crate::profile::for_recursos(root);
+        for i in 0..m.blocked.len() {
+            m.blocked[i] &= !FLAG_WATER;
+            if p.is_water(m.layers[0][i], m.layers[1][i]) {
+                m.blocked[i] |= FLAG_WATER;
+            }
+        }
+        Ok(m)
     }
 
     pub fn parse(number: u16, data: &[u8]) -> Result<AoMap, LoadError> {

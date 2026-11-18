@@ -77,10 +77,10 @@ impl World {
         let (race, class_id) = (Race::from_id(race as i32)?, Class::from_id(class as i32)?);
         let attributes = character::initial_attributes(&self.ao.balance, race);
         let sta = character::initial_stamina(stamina_roll.clamp(1, character::stamina_dice(&attributes)));
-        let (inventory, spells) = start_equipment(&self.recursos).loadout(class_id.id(), MAX_INVENTORY_SLOTS);
+        let (inventory, spells) = start_equipment(&self.recursos).loadout_for(class_id.id(), race.id() as u8, MAX_INVENTORY_SLOTS);
         Some(CharacterState {
             attributes,
-            skills: vec![0; 24],
+            skills: vec![self.data.balance.start_skills.min(100); 24],
             skill_points: START_SKILL_POINTS,
             sta,
             max_sta: sta,

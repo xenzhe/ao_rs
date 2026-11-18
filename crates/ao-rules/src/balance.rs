@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Balance {
+    /// Every skill of a new character starts here (AO20 0; TSAO 100).
+    #[serde(default)]
+    pub start_skills: u8,
     pub start_map: u16,
     pub start_x: i32,
     pub start_y: i32,
@@ -24,6 +27,7 @@ pub struct Balance {
 impl Default for Balance {
     fn default() -> Self {
         Balance {
+            start_skills: 0,
             start_map: 1,
             start_x: 50,
             start_y: 50,

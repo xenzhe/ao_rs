@@ -222,6 +222,8 @@ impl World {
         if !self.event_keeps_items_on_death(id) {
             self.drop_inventory_on_death(id);
         }
+        // The ghost's body and head belong to the resource set (AO20 829/0, TSAO 8/500).
+        let prof = ao_formats::profile::for_recursos(&self.recursos);
         let p = self.player_mut(id);
         p.hp = 0;
         p.stats.sta = 0;
@@ -230,8 +232,8 @@ impl World {
         if p.combat.alive_look.is_none() {
             p.combat.alive_look = Some((p.body, p.head));
         }
-        p.body = rules::DEAD_BODY;
-        p.head = 0;
+        p.body = prof.dead_body;
+        p.head = prof.dead_head;
         let map = p.map;
         let safe = self.maps.get(&map).is_some_and(|m| m.map.safe);
         self.broadcast(map, &S2C::Status { id, flags: status::DEAD }, None);

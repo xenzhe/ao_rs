@@ -5,6 +5,9 @@ start_map = 89
 start_x = 78
 start_y = 85
 
+# TSAO (TCP.bas ConnectNewUser): todas las habilidades a 100 al crear.
+start_skills = 100
+
 start_hp = 100
 start_mana = 120
 

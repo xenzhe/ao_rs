@@ -37,6 +37,33 @@ fn says(b: &Bot, t: &str) -> bool {
     b.console().any(|l| l.contains(t))
 }
 
+/// A new TSAO character gets the TSAO kit (no AO20 objects), its race's clothes worn, the
+/// TSAO first spell if it casts, and dies as a TSAO ghost.
+#[test]
+fn new_character_has_the_tsao_kit() {
+    let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };
+    let objs = ao_formats::dat::obj::load(&rec).unwrap().data;
+    let s = TestServer::with(|st| {
+        st.recursos = rec.clone();
+        st.data.balance.start_skills = 100; // tsao/data/balance.toml
+        (st.data.balance.start_map, st.data.balance.start_x, st.data.balance.start_y) = (28, CORREO.0, CORREO.1 + 2);
+    });
+    let mut b = s.connect();
+    assert!(b.create_account("cuenta_k", "clave-segura-1"));
+    // Elf mage, female (face 170).
+    assert!(b.create_character("Elfita", 2, 1, 2, 170));
+    b.play("Elfita");
+    let inv: Vec<_> = b.game.local.inventory.iter().flatten().map(|i| (i.obj, i.amount, i.equipped)).collect();
+    assert!(inv.iter().all(|(o, ..)| objs.get(*o as u32).is_some()), "every object exists in TSAO: {inv:?}");
+    assert!(inv.contains(&(460, 1, true)) && inv.contains(&(464, 1, true)), "dagger and elf clothes worn: {inv:?}");
+    assert!(inv.contains(&(467, 100, false)) && inv.contains(&(1491, 150, false)));
+    assert_eq!(b.game.spells.iter().map(|s| s.id).collect::<Vec<_>>(), vec![2], "Destello Mágico");
+    b.wait_until("habilidades", |b| !b.game.local.skills.is_empty());
+    assert!(b.game.local.skills.iter().all(|s| *s == 100), "TSAO starts every skill at 100");
+    let worn_body = objs.get(464).unwrap().clothing as u16;
+    b.wait_until("vestida", |b| b.me().body == worn_body);
+}
+
 #[test]
 fn mail_vault_and_surgeon() {
     let Some(rec) = tsao() else { return eprintln!("TSAO data not found, skipping") };

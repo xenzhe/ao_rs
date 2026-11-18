@@ -309,6 +309,32 @@ def convert_dats(src, dst):
             os.remove(os.path.join(ddat, f))
     open(os.path.join(ddat, "npcs.dat"), "w", encoding="latin-1", newline="\r\n").write(npcs.replace("\r\n", "\n"))
     convert_quests(read("QUESTS.DAT"), ddat)
+    # AO20 files that name AO20 objects or maps: wrong things in a TSAO world. TSAO's own
+    # version where it has one, else an empty set until that system is ported.
+    for f in ("ArmasHerrero.dat", "ArmadurasHerrero.dat", "Ciudades.Dat", "Invokar.dat", "Tesoros.dat", "Map.dat", "Help.dat", "Motd.ini", "NombresInvalidos.txt"):
+        open(os.path.join(ddat, f), "w", encoding="latin-1", newline="\r\n").write(read(f).replace("\r\n", "\n"))
+    empty = {
+        "ObjCarpintero.dat": "[INIT]\nNumObjs=0\n",
+        "ObjSastre.dat": "[INIT]\nNumObjs=0\n",
+        "ObjAlquimista.dat": "[INIT]\nNumObjs=0\n",
+        "BlackSmithElementalRunes.dat": "[INIT]\nNumRunes=0\n",
+        "RecursosEspeciales.dat": "[INIT]\nNum=0\n",
+        "recompensas_faccion.dat": "[INIT]\nNum=0\n",
+        "GlobalDropTable.dat": "[INIT]\nNum=0\n",
+        "itemsmagicos.dat": "[INIT]\nNum=0\n",
+        # TSAO fishing (Trabajo.bas DoPescar): always the same fish, obj 139.
+        "pesca.dat": "[PECES]\nNumPeces=1\nMaxlvlcaña=6\nPez1=139-1000-1-0\n",
+    }
+    for f, text in empty.items():
+        open(os.path.join(ddat, f), "w", encoding="latin-1", newline="\r\n").write(text)
+    # Starting kit (TCP.bas ConnectNewUser): food, drink, a newbie dagger, potions, the
+    # race's newbie clothes; casters (mage, cleric, assassin, bard, druid) know spell 2.
+    kit = ["[COMMON]", "NumObjs=6", "Obj1=467,100,0", "Obj2=468,100,0", "Obj3=460,1,1", "Obj4=461,150,0", "Obj5=462,150,0", "Obj6=1491,150,0", ""]
+    for race, obj in ((1, 463), (2, 464), (3, 465), (4, 466), (5, 466)):
+        kit += [f"[RACE{race}]", "NumObjs=1", f"Obj1={obj},1,1", ""]
+    for cls in (1, 2, 4, 5, 6):
+        kit += [f"[CLASS{cls}]", "NumObjs=0", "NumSpells=1", "Spell1=2", ""]
+    open(os.path.join(ddat, "EquipamientoInicial.dat"), "w", encoding="latin-1", newline="\r\n").write("\n".join(kit))
     objs = re.sub(r"(?ims)^(\[OBJ\d+\][^\n]*\n)(.*?)(?=^\[|\Z)", remap_obj_classes, read("Obj.dat"))
     open(os.path.join(ddat, "obj.dat"), "w", encoding="latin-1", newline="\r\n").write(objs.replace("\r\n", "\n"))
     open(os.path.join(ddat, "Hechizos.dat"), "w", encoding="latin-1", newline="\r\n").write(read("Hechizos.dat").replace("\r\n", "\n"))
@@ -328,6 +354,11 @@ def main(src, dst):
         write_sections(os.path.join(init, out), key, len(heads), "HEAD",
                        [(i + 1, [(f"Head{k + 1}", h[k] & 0xFFFF) for k in range(4)]) for i, h in enumerate(heads) if h[0]])
     write_head_ranges(os.path.join(init, "head_ranges.ini"), {i + 1 for i, h in enumerate(read_ind_records(os.path.join(cinit, "Cabezas.ind"), "<4h")) if h[0]})
+    # Resource-set numbers (ao_formats::profile): General.bas DarCuerpoDesnudo (elves fall
+    # in its `Case Else`), Declares.bas iCuerpoMuertoN/iCabezaMuertoN, General.bas HayAgua.
+    naked = {(1, 1): 21, (2, 1): 39, (1, 2): 21, (2, 2): 39, (1, 3): 32, (2, 3): 40, (1, 4): 53, (2, 4): 60, (1, 5): 53, (2, 5): 60}
+    prof = ["[Bodies]"] + [f"Naked{g}-{r}={b}" for (g, r), b in sorted(naked.items())] + ["DeadBody=8", "DeadHead=500", "", "[Water]", "Ranges=1505-1520", "EmptyLayer2=1", ""]
+    open(os.path.join(init, "profile.ini"), "w", newline="\r\n").write("\n".join(prof))
     fxs = read_ind_records(os.path.join(cinit, "Fxs.ind"), "<3h")
     write_sections(os.path.join(init, "FXs.ini"), "NumFxs", len(fxs), "FX",
                    [(i + 1, [("Animacion", f[0] & 0xFFFF), ("OffsetX", f[1]), ("OffsetY", f[2]), ("IsPNG", 1)]) for i, f in enumerate(fxs)])
