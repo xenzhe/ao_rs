@@ -190,6 +190,7 @@ impl World {
         self.send_vitals(id);
         self.send_skills(id);
         self.level_rewards(id, first, new_level);
+        self.tsao_on_level(id, first, new_level);
     }
 
     /// What levels `first..=last` give: TSAO gold below level 10, spells at a level, the

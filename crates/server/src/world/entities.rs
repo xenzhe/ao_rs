@@ -55,6 +55,8 @@ pub struct Player {
     pub craft: super::craft::CraftPiece,
     pub gm: super::gm::GmPiece,
     pub event: super::event::EventPiece,
+    /// TSAO progression (systems/tsao_progress.rs).
+    pub tsao: crate::systems::tsao_progress::TsaoPiece,
 }
 
 impl Player {

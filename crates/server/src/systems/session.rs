@@ -181,6 +181,7 @@ impl World {
             craft: Default::default(),
             gm: Default::default(),
             event: Default::default(),
+            tsao: Default::default(),
         };
         let name = c.name.clone();
         info!(id, %name, map = c.map, x, y, "entra");
@@ -195,6 +196,7 @@ impl World {
         self.social_on_enter(id);
         self.console(id, "Bienvenido a Numic AO.", Tone::Good);
         self.mail_on_enter(id);
+        self.tsao_on_enter(id);
         self.broadcast_all(&S2C::Console { text: format!("{name} se conecto."), color: Tone::Info }, Some(id));
         true
     }

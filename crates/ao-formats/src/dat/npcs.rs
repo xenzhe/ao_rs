@@ -462,6 +462,8 @@ pub struct Npc {
     // ---- rewards ----
     /// `GiveEXP`.
     pub exp: i32,
+    /// TSAO `GivePTS`: tournament points for the killer (MODULO_NPCs.bas NPCDarPuntos).
+    pub give_points: i32,
     /// `GiveEXPClan`.
     pub clan_exp: i32,
     /// `GiveGLD`.
@@ -628,6 +630,7 @@ fn read_npc(s: &mut Sec) -> Npc {
     n.projectile_type = s.int("ProjectileType");
     n.preferred_range = s.int("PreferedRange");
     n.exp = s.int("GiveEXP");
+    n.give_points = s.int("GivePTS");
     n.distance = s.int("Distancia");
     n.clan_exp = s.int("GiveEXPClan");
     n.poison = s.int("Veneno");

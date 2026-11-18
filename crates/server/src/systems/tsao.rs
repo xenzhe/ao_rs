@@ -54,6 +54,9 @@ impl World {
         if let Some(v) = victim.and_then(|v| self.fighter(v)) {
             d = self.pvp_balance().magic(d, fa.class.spanish_name(), v.class.spanish_name());
             d -= self.tsao_magic_absorb(&v);
+            // Class bonuses (modHechizos.bas `Bon2`/`Bon3`): caster's magic damage, victim's resistance.
+            let tenths = self.tsao_bonus(id).magic_damage - victim.map_or(0, |v| self.tsao_bonus(v).magic_resist);
+            d = super::tsao_progress::BonusMods::scale(d, tenths);
         }
         if let Some((lo, hi)) = weapon.map(|w| w.tsao_magic_damage).filter(|(lo, _)| *lo > 0) {
             d += self.roll(lo, hi) as i64;

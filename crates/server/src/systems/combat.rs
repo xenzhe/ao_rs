@@ -331,6 +331,7 @@ impl World {
             self.quest_on_npc_killed(killer, number, map);
             self.faction_on_npc_killed(killer, number);
             self.guild_on_npc_killed(killer, number);
+            self.tsao_on_npc_killed(killer, number);
         }
     }
 

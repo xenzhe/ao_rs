@@ -111,6 +111,8 @@ pub struct World {
     pub crafts: craft::CraftWorld,
     pub gms: gm::GmWorld,
     pub events: event::EventWorld,
+    /// TSAO progression (systems/tsao_progress.rs).
+    pub tsao: crate::systems::tsao_progress::TsaoWorld,
 }
 
 impl World {
@@ -149,6 +151,7 @@ impl World {
             crafts: Default::default(),
             gms: Default::default(),
             events: Default::default(),
+            tsao: Default::default(),
         }
     }
 

@@ -7,8 +7,10 @@ pub mod travel;
 pub mod mail;
 pub mod surgeon;
 pub mod skill;
+pub mod tsao;
 
 pub use skill::SkillC2S;
+pub use tsao::{TsaoC2S, TsaoS2C};
 
 pub use surgeon::{SurgeonC2S, SurgeonS2C};
 

@@ -12,7 +12,8 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Subida de nivel (vida por tabla clase/raza, maná, golpe, stamina) | ✅ | `tsao/data/levels.toml` |
 | **Premios por nivel** (oro <10, nivel 10 sale del Newbie Dungeon + Starterpack, nivel 20 Fuego Mágico) | ✅ | Esta tanda |
 | **Límite newbie (nivel 9)** y objetos newbie que se quitan | ✅ | Era 12 (AO20) |
-| Bonus de clase a niveles 53/56/60 (elegir mejora, `ClassBonus.dat`) | ❌ | |
+| Bonus de clase a niveles 53/56/60 (elegir mejora, `ClassBonus.dat`) | ✅ | Ventana «Bonificación de clase», una vez por tramo, `/bonus` la reabre. Efecto aplicado: vida, daño/resistencia mágica PvP. Evasión, escudo, golpe, flechas y apuñalar quedan en `tsao_bonus()` para el dueño del combate |
+| **Monedas TSAO** (puntos de torneo, puntos TS, créditos) | ✅ | Por nivel 50/60/65/70, `GivePTS` de criaturas, misiones; `/puntos` |
 | Vidas / Gran Poder / StatusMith / transformaciones | ❌ | Mecánicas propias de TSAO |
 | Atributos por raza | ✅ | |
 
@@ -53,9 +54,9 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Oro y botín de criaturas como TSAO | ✅ | |
 | **Cofres al azar (Starterpack, `Cofres.dat`)** | ✅ | Esta tanda |
 | Correo con paquetes | ✅ | |
-| Mejorar objetos (`Mejorados.dat`) | ❌ | |
-| Pergaminos de experiencia/oro (scrolls) | ❌ | |
-| Canje por puntos (torneo, TS, donación) | ❌ | Faltan esas monedas |
+| Mejorar objetos (`Mejorados.dat`) | ✅ | Usar la Gema Octarina (o `/mejorar`): ventana «Mejorar objetos» |
+| Pergaminos de experiencia/oro (scrolls) | ❌ | El código existe en TSAO pero `Obj.dat` no trae ningún objeto de tipo 50: nada que portar hasta que haya datos |
+| Canje por puntos (torneo, TS, donación) | ✅ | `/canje`: `Premios.dat`, tienda TS (`CanjeTS.dat`), `ItemsDonaciones.dat`; packs con premium/skins visibles pero no a la venta (no hay esos sistemas) |
 | Subastas | ✅ | (versión Numic) |
 
 ## 5. Trabajo
@@ -78,9 +79,10 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Ciudadanía | ❌ | |
 | Nobleza (quest de nobleza, ItemsNoble) | ❌ | |
 | Dioses y almas (Mifrit, Poseidón, Erebros, Tarraske) | ❌ | |
-| Parejas (/PAREJA) | ❌ | |
+| Matrimonio (/CASAR, /DIVORCIARSE) | ✅ | Guardado en BD; divorcio aunque la pareja esté desconectada |
+| Parejas 2v2 (/PAREJA, duelo pagado) | ❌ | Evento: pendiente |
 | Emoticonos | ❌ | |
-| Votaciones (/VOTAR) | ❌ | |
+| Votaciones (/VOTAR, /RESULTADOS, /ENCUESTA de GM) | ✅ | Consulta de `consultas.dat` al arrancar; un voto por cuenta, guardado |
 | Ranking | ❌ | |
 
 ## 7. Eventos y PvP organizado
@@ -95,7 +97,7 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Juegos del hambre | ❌ | |
 | Evento faccionario, evento luz, ARAM, batalla mística | ❌ | |
 | Misiones diarias | ❌ | |
-| Misiones (QUESTS.DAT) | ✅ | Sin puntos de torneo |
+| Misiones (QUESTS.DAT) | ✅ | Con puntos de torneo, TS y créditos |
 
 ## 8. Otros
 
@@ -108,6 +110,28 @@ Estado al 2026-11-17. Leyenda: ✅ hecho · 🟡 parcial · ❌ falta.
 | Comandos de jugador | 🟡 | /regresar y /online hechos; resto por interfaz |
 | Teclas configurables | ✅ | |
 | Sonido y música de TSAO | ✅ | |
+
+## Progresión y social TSAO (rama `worktree-agent-a3119a629ac9ab613`)
+
+Hecho y probado (`crates/server/tests/tsao_progress.rs`, capturas invisibles de las ventanas
+Canje, Bonificación de clase, Votación y Mejorar objetos): monedas TSAO y de dónde salen,
+canje de las tres monedas, bonus de clase, mejorar con Gema Octarina, votaciones, matrimonio.
+Datos: `tools/tsao/progress.py` (lo llama `build.cmd`). Migración `0013_tsao_progress.sql`,
+protocolo 14 (`C2S::Tsao` / `S2C::Tsao`). Comandos: `/canje`, `/puntos` (`/est`), `/bonus`,
+`/mejorar`, `/votar`, `/resultados`, `/casar`, `/divorciarse`; GM `/encuesta`.
+
+Pendiente de esta área, por orden de valor:
+- Efecto de los bonus de evasión, escudo, golpe, flechas y apuñalar en el combate: el valor
+  está en `World::tsao_bonus(id)` (décimas de %); falta usarlo en `tsao_evasion`,
+  `attack_power_of` y el apuñalar (código del dueño del combate).
+- Ciudadanía (NPC 13), renunciar (NPC 154) y nobleza: dependen de `StatusMith` (ciudadano /
+  criminal / neutral de TSAO), que aún no existe en el motor.
+- Dioses y almas, ranking, emoticonos, créditos por sacos (tipo 51: TSAO no trae ninguno en
+  `Obj.dat`), pergaminos (tipo 50: ninguno en `Obj.dat`).
+- Eventos: castillos y asedio, CVC, desafíos por arena y `/PAREJA` (2v2), torneos
+  automáticos, captura la bandera, juegos del hambre, evento faccionario, evento luz, ARAM,
+  batalla mística, misiones diarias, casas, monturas, centinela, apuestas.
+- Comandos de jugador que faltan: `/INFORMACION`, `/PING`, `/NICK`, `/EVENTOS`, `/PARTICIPAR`.
 
 ## Orden propuesto
 
