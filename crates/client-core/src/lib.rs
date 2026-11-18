@@ -9,6 +9,7 @@
 //! Time is injected: the frontend passes its frame clock, a bot passes the server's
 //! virtual clock. Nothing here reads the OS clock.
 pub mod actions;
+pub mod buffs;
 pub mod events;
 pub mod guard;
 pub mod local;

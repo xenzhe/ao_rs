@@ -332,6 +332,15 @@ impl World {
         let ao = self.ao.clone();
         let Some(d) = ao.npcs.get(n.def as u32) else { return };
         let (movement, hostile, kind) = (n.movement, n.hostile, n.kind);
+        // eTaunted: SelectCurrentTarget / PerseguirUsuarioCercano keep the taunter.
+        if !n.status.eots.is_empty() {
+            if let Some(p) = self.npc_taunter(map, nid) {
+                let n = self.npc_mut(map, nid);
+                n.target = Some(p);
+                n.hostile = true;
+                return if d.attack_range > 1 { self.range_attack(map, nid, d, now) } else { self.attack_target(map, nid, d, now) };
+            }
+        }
         match movement {
             Movement::Wander => {
                 if hostile && d.attack_range > 1 {
@@ -698,6 +707,8 @@ impl World {
         inst.move_npc(nid, tx, ty);
         inst.npcs.get_mut(&nid).unwrap().dir = dir;
         self.broadcast(map, &S2C::Moved { id: nid, x: tx, y: ty, dir }, None);
+        // MoveNPCChar: ModMap.ActivateTrap on the new tile.
+        self.activate_trap(super::eot::Who::Npc(map, nid), map, tx, ty);
         true
     }
 

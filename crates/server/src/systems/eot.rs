@@ -48,7 +48,7 @@ pub(crate) fn eot_table(recursos: &Path) -> EotTable {
         .clone()
 }
 
-fn next_uid() -> u32 {
+pub(crate) fn next_uid() -> u32 {
     static UID: AtomicU32 = AtomicU32::new(0);
     UID.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
 }
@@ -74,15 +74,18 @@ const EXTRA_BLOW_MS: u64 = 100;
 /// `e_StatusMask.eCastOnlyOnSelf` in `ApplyStatusMask`.
 const MASK_CAST_ONLY_ON_SELF: i32 = 8;
 
+/// Kinds `apply_eot` creates (traps, blasts and unequips have their own entry points in
+/// systems/eot_extra.rs).
 fn kind_ported(k: EotKind) -> bool {
     use EotKind::*;
-    matches!(k, ModifyHealth | ModifyMana | ApplyModifiers | Taunted | Shield | DamageBonus | Transform | ApplyEffectOnHit | MultipleAttacks | ApplyEffectToParty)
+    matches!(k, ModifyHealth | ModifyMana | ApplyModifiers | Taunt | Taunted | Drunk | Translation | PullTarget | Shield | DamageBonus | Transform | ApplyEffectOnHit | MultipleAttacks | ApplyEffectToParty)
 }
 
 /// Kinds whose `EotModifiers` hold while they last (`ApplyEotModifier` in their `Setup`).
+/// Not `Taunted`: `EffectProvoked` only weakens blows on others (`attack_mods`).
 fn applies_modifiers(k: EotKind) -> bool {
     use EotKind::*;
-    matches!(k, ApplyModifiers | Taunted | Shield | DamageBonus | Transform | ApplyEffectToParty)
+    matches!(k, ApplyModifiers | Taunt | PullTarget | Shield | DamageBonus | Transform | ApplyEffectToParty)
 }
 
 fn has_non_speed_effect(d: &EotDef) -> bool {
@@ -94,11 +97,11 @@ fn has_non_speed_effect(d: &EotDef) -> bool {
 pub(crate) fn eot_works(table: &HashMap<u16, EotDef>, id: u16) -> bool {
     fn go(t: &HashMap<u16, EotDef>, id: u16, depth: u8) -> bool {
         let Some(d) = t.get(&id) else { return false };
-        if !kind_ported(d.kind) || depth > 3 {
+        if !(kind_ported(d.kind) || d.kind == EotKind::DelayedBlast) || depth > 3 {
             return false;
         }
         match d.kind {
-            EotKind::ApplyModifiers | EotKind::Taunted => has_non_speed_effect(d),
+            EotKind::ApplyModifiers => has_non_speed_effect(d),
             EotKind::ApplyEffectOnHit => go(t, d.apply_effect_id, depth + 1),
             EotKind::ApplyEffectToParty => go(t, d.apply_effect_id, depth + 1) || has_non_speed_effect(d),
             _ => true,
@@ -119,14 +122,14 @@ impl World {
         }
     }
 
-    fn eot_list(&self, who: Who) -> Option<&Vec<ActiveEot>> {
+    pub(crate) fn eot_list(&self, who: Who) -> Option<&Vec<ActiveEot>> {
         match who {
             Who::User(id) => self.player(id).map(|p| &p.status.eots),
             Who::Npc(m, n) => self.maps.get(&m)?.npcs.get(&n).map(|n| &n.status.eots),
         }
     }
 
-    fn eot_list_mut(&mut self, who: Who) -> Option<&mut Vec<ActiveEot>> {
+    pub(crate) fn eot_list_mut(&mut self, who: Who) -> Option<&mut Vec<ActiveEot>> {
         match who {
             Who::User(id) => {
                 self.player(id)?;
@@ -219,6 +222,11 @@ impl World {
             if !def.override_ {
                 return false;
             }
+            // DrunkEffect / TranslationEffect / AttrackEffect.Reset keep their instance.
+            if old == eot && matches!(def.kind, EotKind::Drunk | EotKind::Translation | EotKind::PullTarget) {
+                self.reset_eot_at(target, i);
+                return true;
+            }
             if from_cast && old == eot && matches!(def.kind, EotKind::ApplyEffectToParty | EotKind::Transform) {
                 self.remove_eot_at(target, i);
                 return false;
@@ -235,7 +243,7 @@ impl World {
 
     fn new_eot(&mut self, caster: Who, eot: u16, def: &EotDef, now: GameTime) -> ActiveEot {
         use EotKind::*;
-        let total = matches!(def.kind, ApplyModifiers | Taunted | Shield | DamageBonus | ApplyEffectOnHit | MultipleAttacks);
+        let total = matches!(def.kind, ApplyModifiers | Taunt | Taunted | Shield | DamageBonus | ApplyEffectOnHit | MultipleAttacks);
         let lasts = def.tick_ms.max(1) * if def.kind == Shield && def.ticks > 0 { def.ticks as u64 } else { 1 };
         let shield = if def.kind == Shield { self.rng.range(def.power_min.min(def.power_max), def.power_min.max(def.power_max)) } else { 0 };
         // StatModifier.Setup: AffectedByMagicBonus scales by the caster's weapon.
@@ -259,10 +267,12 @@ impl World {
             scale,
             pending_blows: 0,
             blow_at: now,
+            stacks: if def.kind == Drunk { 1 } else { 0 },
+            ..Default::default()
         }
     }
 
-    fn eot_index(&self, who: Who, uid: u32) -> Option<usize> {
+    pub(crate) fn eot_index(&self, who: Who, uid: u32) -> Option<usize> {
         self.eot_list(who)?.iter().position(|e| e.uid == uid)
     }
 
@@ -278,14 +288,31 @@ impl World {
                 n.status.immobilized_until = None;
             }
         }
-        match (def.kind, who) {
-            (EotKind::Transform, Who::User(id)) => self.transform_into(id, def.npc_id),
-            (EotKind::ApplyEffectToParty, Who::User(id)) if !self.party_song_pulse(id, def) => {
-                if let Some(i) = self.eot_index(who, uid) {
-                    self.remove_eot_at(who, i);
-                }
+        if let Some(e) = self.eot_index(who, uid).map(|i| self.eot_list(who).unwrap()[i].clone()) {
+            self.send_eot_buff(who, &e, def, true);
+        }
+        let caster = self.eot_index(who, uid).and_then(|i| self.eot_list(who).unwrap()[i].caster_who());
+        let keep = match (def.kind, who) {
+            (EotKind::Transform, Who::User(id)) => {
+                self.transform_into(id, def.npc_id);
+                true
             }
-            _ => {}
+            (EotKind::ApplyEffectToParty, Who::User(id)) => self.party_song_pulse(id, def),
+            (EotKind::Taunt, _) => {
+                self.taunt_area(who, def);
+                true
+            }
+            (EotKind::Taunted, Who::Npc(m, n)) => {
+                self.taunted_npc_targets(m, n, caster.map_or(crate::world::spellbook::EotCaster::None, |c| c.caster()));
+                true
+            }
+            (EotKind::Translation, _) => caster.is_some_and(|c| self.translation_start(who, uid, def, c)),
+            _ => true,
+        };
+        if !keep {
+            if let Some(i) = self.eot_index(who, uid) {
+                self.remove_eot_at(who, i);
+            }
         }
     }
 
@@ -298,8 +325,13 @@ impl World {
         let e = list.remove(i);
         let table = self.eots();
         let Some(def) = table.get(&e.eot) else { return };
-        if let (EotKind::Transform, Who::User(id)) = (def.kind, who) {
-            self.transform_back(id);
+        self.send_eot_buff(who, &e, def, false);
+        match (def.kind, who) {
+            (EotKind::Transform, Who::User(id)) => self.transform_back(id),
+            // DelayedBlast.OnRemove: it always goes off, the caster may be gone (then the
+            // blast is lost: nobody to credit or to roll the damage of).
+            (EotKind::DelayedBlast, _) => self.do_blast(who, &e, def),
+            _ => {}
         }
     }
 
@@ -411,6 +443,28 @@ impl World {
                             return;
                         }
                         alive && (e.ticks_left > 1 || matches!(def.kind, EotKind::ApplyEffectToParty | EotKind::Transform))
+                    }
+                }
+                EotKind::Drunk if now >= e.next_tick => self.drunk_tick(who, i, def, now),
+                EotKind::Translation | EotKind::PullTarget if now >= e.next_tick => {
+                    if e.ticks_left == 0 {
+                        false
+                    } else {
+                        let l = &mut self.eot_list_mut(who).unwrap()[i];
+                        l.ticks_left -= 1;
+                        l.next_tick = now.after_ms(def.tick_ms.max(1));
+                        let moved = match (def.kind, e.caster_who()) {
+                            (EotKind::Translation, _) => self.translation_step(who, e.uid),
+                            (_, Some(c)) if self.eot_alive(c) => self.pull_step(who, c),
+                            _ => false,
+                        };
+                        if !self.eot_alive(who) {
+                            return;
+                        }
+                        if self.eot_index(who, e.uid) != Some(i) {
+                            continue;
+                        }
+                        moved && e.ticks_left > 1
                     }
                 }
                 EotKind::MultipleAttacks if e.pending_blows > 0 && now >= e.blow_at => {
@@ -1003,8 +1057,10 @@ pub(crate) mod tests {
         assert_eq!(t.mana(1), mana);
         assert!(eot_of(&t, 1).is_empty());
         let table = t.w.eots();
-        assert!(!eot_works(&table, 5), "taunt");
-        assert!(!eot_works(&table, 20), "delayed blast");
+        // Phase 7: taunt and the delayed blast do work now (systems/eot_extra.rs); the
+        // harpoon's slow (EOT19) is speed only and stays refused.
+        assert!(eot_works(&table, 5) && eot_works(&table, 20), "taunt, delayed blast");
+        assert!(!eot_works(&table, 19), "slow");
         assert!(eot_works(&table, 1) && eot_works(&table, 29) && eot_works(&table, 30));
         // EOT62 (núcleo enano, RequireArmor): Ticks=40 x TickTime=2 s, not just 2 s.
         let armor = t.first_obj(|o| o.obj_type == ObjType::Armor);

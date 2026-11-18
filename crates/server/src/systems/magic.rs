@@ -168,7 +168,10 @@ impl World {
         let Some(p) = self.player(id) else { return false };
         let now = self.now();
         let on = |t: Option<GameTime>| t.is_some_and(|t| now < t);
-        !(on(p.status.paralyzed_until) || on(p.status.immobilized_until))
+        // UserMod.CanMove: also not while stunned or being pushed (flags.TranslationActive).
+        let table = self.eots();
+        let pushed = p.status.eots.iter().any(|e| table.get(&e.eot).is_some_and(|d| d.kind == ao_formats::dat::eots::EotKind::Translation));
+        !(on(p.status.paralyzed_until) || on(p.status.immobilized_until) || on(p.status.stun_until) || pushed)
     }
 
     /// Current `S2C::Status` bits of a player.
@@ -413,6 +416,18 @@ impl World {
             }
             return;
         }
+        // HandleHechizoTerreno (materialise, multishot, the terrain status) and
+        // HandlePetSpell (systems/magic_extra.rs).
+        if matches!(spell.target, SpellTarget::Terrain | SpellTarget::Pets) {
+            let target = Target::Tile(tx, ty);
+            if self.can_cast(id, spell_id, &spell, target) {
+                let ok = if spell.target == SpellTarget::Pets { self.cast_on_pets(id, &spell) } else { self.cast_on_terrain(id, &spell, tx, ty) };
+                if ok {
+                    self.after_cast(id, spell_id, &spell, target);
+                }
+            }
+            return;
+        }
         let Some(target) = self.resolve_target(id, &spell, tx, ty) else { return };
         if !self.can_cast(id, spell_id, &spell, target) {
             return;
@@ -460,7 +475,7 @@ impl World {
 
     /// `PuedeAtacar` / `CanAttackUser` for a harmful spell (factions, guilds, groups and
     /// the citizen "seguro" are not in P1: everyone may fight outside safe zones).
-    fn spell_can_hit_user(&self, caster: u32, target: u32) -> Result<(), &'static str> {
+    pub(crate) fn spell_can_hit_user(&self, caster: u32, target: u32) -> Result<(), &'static str> {
         let t = self.player(target).unwrap();
         if t.combat.dead || t.hp <= 0 {
             return Err("No podés atacar a un espíritu.");
@@ -549,6 +564,13 @@ impl World {
             return refuse(self, "Estás muy cansado para lanzar este hechizo.".into());
         }
         let eq = &p.inv.equipped;
+        // PuedeLanzar: RequireWeaponType (Flecha Cargada, Danza de Flechas: a bow).
+        if let Some(wt) = s.require_weapon_type {
+            let ok = eq.weapon.and_then(|sl| p.inv.get(sl)).and_then(|it| self.ao.objs.get(it.obj as u32)).is_some_and(|o| o.weapon_type == Some(wt));
+            if !ok {
+                return refuse(self, "No tenés equipada el arma que requiere este hechizo.".into());
+            }
+        }
         let r = s.requirements;
         if r.contains(Req::WEAPON) && eq.weapon.is_none()
             || r.contains(Req::SHIELD) && eq.shield.is_none()
@@ -580,6 +602,7 @@ impl World {
             }
             SpellType::Status => self.status_on_user(id, s, t),
             SpellType::Properties => self.props_on_user(id, s, t),
+            SpellType::PhysicalSkill => self.physical_skill(id, s, Who::User(t)),
             // HechizoCombinados applies both families.
             SpellType::Combined => {
                 let a = self.status_on_user(id, s, t);
@@ -832,7 +855,7 @@ impl World {
                 rules::damage_vs_user(dmg, self.user_magic_resistance(t, false), pen, s.anti_magic_resistance != 0)
             };
             // GetMagicDamageModifier(caster) x GetMagicDamageReduction(target).
-            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::User(t)).magic_taken()) as i32;
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::User(t)).magic_factor()), self.modifiers(Who::User(t)).magic_taken()) as i32;
             let tname = self.player(t).unwrap().name.clone();
             self.console(id, format!("Le has quitado {dmg} puntos de vida a {tname}."), Tone::Combat);
             // As a player hit (not a named source): faction and kill credit apply to spells too.
@@ -904,6 +927,8 @@ impl World {
                 self.status_on_npc(id, s, map, nid);
             }
             true
+        } else if s.spell_type == SpellType::PhysicalSkill {
+            self.physical_skill(id, s, Who::Npc(map, nid))
         } else {
             self.cast_on_npc_effects(id, spell_id, s, nid)
         };
@@ -956,7 +981,7 @@ impl World {
                 rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0)
             };
             let _ = name;
-            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
             self.damage_npc(map, nid, dmg, id);
             return true;
         }
@@ -1026,7 +1051,7 @@ impl World {
         let def = self.maps.get(&map).and_then(|m| m.npcs.get(&nid)).and_then(|n| self.ao.npcs.get(n.def as u32));
         let npc_def = def.map(|d| rules::NpcMagicDefense { magic_resistance: d.magic_resistance, magic_def: d.magic_def, def_m: d.magic_defense_flat }).unwrap_or_default();
         let dmg = rules::damage_vs_npc(dmg, npc_def, skill, pen, s.anti_magic_resistance != 0);
-        let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
+        let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::Npc(map, nid)).magic_factor()), self.modifiers(Who::Npc(map, nid)).magic_taken()) as i32;
         self.damage_npc(map, nid, dmg.max(0), id);
         true
     }
@@ -1044,7 +1069,7 @@ impl World {
             let (dmg, pen) = rules::spell_damage(r, level, &self.magic_items(id));
             let dmg = ao_rules::eot::area_falloff(dmg, dist);
             let dmg = rules::damage_vs_user(dmg, self.user_magic_resistance(t, false), pen, s.anti_magic_resistance != 0);
-            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.modifiers(Who::User(id)).magic_factor()), self.modifiers(Who::User(t)).magic_taken()) as i32;
+            let dmg = ao_rules::eot::scale(ao_rules::eot::scale(dmg as i64, self.attack_mods(Who::User(id), Who::User(t)).magic_factor()), self.modifiers(Who::User(t)).magic_taken()) as i32;
             self.hurt_player(t, dmg.max(0), super::combat::Source::Player(id));
             self.raise_skill(t, ao_formats::dat::balance::Skill::MagicResistance);
             hit = true;
@@ -1101,6 +1126,11 @@ impl World {
             // Area spells put their FX on each creature or player hit (cast_area).
             Target::Tile(x, y) => (0, x, y),
         };
+        // LanzarHechizo: a spell with Cooldown and CdEffectId shows its cooldown (uid -spell).
+        if s.cooldown > 0 && s.cd_effect_id > 0 {
+            let ms = (s.cooldown as u32).saturating_mul(1000);
+            self.send(id, &S2C::Buff { icon: s.cd_effect_id.clamp(0, u16::MAX as i32) as u16, uid: -(spell_id as i32), remaining_ms: ms, total_ms: ms, kind: ao_protocol::buff_kind::COOLDOWN, stacks: 0 });
+        }
         self.broadcast(map, &S2C::Effect { spell: spell_id, from: id, tx, ty }, None);
         if s.fx > 0 && tid != 0 && !self.spell_has_particles(spell_id) {
             self.broadcast(map, &S2C::Fx { id: tid, fx: s.fx as u16, loops: s.loops.clamp(0, 255) as u8 }, None);
@@ -1143,6 +1173,10 @@ impl World {
         }
         let (px, py) = (p.x, p.y);
         self.broadcast(map, &S2C::Effect { spell, from: nid, tx: px, ty: py }, None);
+        // HandlePhysicalSkill from a creature: pushing arrow or cannon (systems/magic_extra.rs).
+        if s.spell_type == SpellType::PhysicalSkill {
+            return self.npc_physical_skill(map, nid, pid, &s);
+        }
         if s.fx > 0 && !self.spell_has_particles(spell) {
             self.broadcast(map, &S2C::Fx { id: pid, fx: s.fx as u16, loops: s.loops.clamp(0, 255) as u8 }, None);
         }

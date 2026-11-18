@@ -162,6 +162,10 @@ pub struct EotDef {
     pub affected_by_self_healing: bool,
     pub secondary_target_modifier: f32,
     pub mods: EotModifiers,
+    /// `ClientEffectTypeId`: icon row of the client's `init/Effects.ini` (0 = not shown).
+    pub client_effect_type_id: u16,
+    /// `OnHitWAV`: sound of a trap or blast going off.
+    pub on_hit_wav: u16,
 }
 
 /// VB `Val`: the leading number of a value (`5   'comment` = 5, `` = 0).
@@ -244,6 +248,8 @@ pub fn parse(text: &str) -> HashMap<u16, EotDef> {
             "magichealingbonus" => m.magic_healing = f,
             "physicallinearbonus" => m.physical_linear = f,
             "defensebonus" => m.defense = f,
+            "clienteffecttypeid" => d.client_effect_type_id = u16v,
+            "onhitwav" => d.on_hit_wav = u16v,
             _ => {}
         }
     }
@@ -276,5 +282,9 @@ mod tests {
         assert_eq!(t[&49].mods.physical_linear, 15.0);
         assert!(t[&49].require_weapon && t[&49].physical_bonus_pve_only);
         assert_eq!(t[&21].apply_effect_id, 22);
+        assert_eq!((t[&5].kind, t[&5].client_effect_type_id, t[&5].area), (EotKind::Taunt, 4, 20));
+        assert_eq!((t[&7].kind, t[&7].subtype, t[&7].on_hit_wav), (EotKind::Trap, 2, 162));
+        assert_eq!((t[&20].kind, t[&20].area, t[&20].on_hit_fx), (EotKind::DelayedBlast, 5, 121));
+        assert_eq!((t[&11].kind, t[&11].ticks, t[&11].apply_effect_id), (EotKind::Translation, 5, 12));
     }
 }
