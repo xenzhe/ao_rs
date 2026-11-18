@@ -191,6 +191,9 @@ impl World {
 
     /// `UserMod.DoDamageOrHeal` with a negative amount. Returns true if it died.
     pub(crate) fn hurt_player(&mut self, id: u32, dmg: i32, source: Source) -> bool {
+        if dmg > 0 {
+            self.cancel_quit(id);
+        }
         if self.player(id).is_none() || self.is_dead(id) {
             return false;
         }

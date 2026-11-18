@@ -199,6 +199,10 @@ impl World {
                 self.cards_list(id);
                 true
             }
+            "/salir" => {
+                self.begin_quit(id);
+                true
+            }
             "/hogar" => {
                 self.go_home(id);
                 true

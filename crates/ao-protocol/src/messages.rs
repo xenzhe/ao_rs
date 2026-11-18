@@ -167,6 +167,8 @@ pub enum S2C {
     Sound { wav: u16, x: i32, y: i32 },
     /// A character's walking speed changed (`SpeedingACT`): steps last `WALK_MS / speed`.
     Speed { id: u32, speed: f32 },
+    /// The character left the world (`/salir`): back to the character list.
+    LeftWorld,
 
     // Bank
     BankOpen { slots: Vec<(u8, u16, u32)>, gold: u32 },

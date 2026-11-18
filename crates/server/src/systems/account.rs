@@ -42,6 +42,10 @@ impl World {
         self.send(id, &S2C::AccountResult { ok, message: message.into() });
     }
 
+    pub(crate) fn send_character_list_pub(&self, id: u32, account_id: i64) {
+        self.send_character_list(id, account_id);
+    }
+
     fn send_character_list(&self, id: u32, account_id: i64) {
         match self.db.characters(account_id) {
             Ok(list) => self.send(id, &S2C::CharacterList { characters: list.iter().map(summary).collect() }),

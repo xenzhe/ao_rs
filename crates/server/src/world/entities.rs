@@ -22,6 +22,8 @@ pub struct Player {
     pub target_door: Option<(u16, i32, i32)>,
     /// Last floor stack clicked (wood for the dagger, campfires).
     pub target_floor: Option<(u16, i32, i32)>,
+    /// `/salir` countdown: (when it leaves, seconds last announced).
+    pub quitting: Option<(crate::clock::GameTime, u64)>,
     /// Last tile clicked (`flags.TargetMap/X/Y`): castle relics, `/TELEPLOC`.
     pub target_tile: Option<(u16, i32, i32)>,
     /// Last creature clicked (`flags.TargetNPC`): `/SEGUIR`, `/TALKAS`, `/RMATA`.

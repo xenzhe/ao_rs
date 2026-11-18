@@ -148,6 +148,7 @@ impl World {
             last_refusal: None,
             target_door: None,
             target_floor: None,
+            quitting: None,
             target_tile: None,
             target_npc: None,
             target_user: None,

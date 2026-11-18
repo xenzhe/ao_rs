@@ -36,6 +36,7 @@ mod speed;
 mod campfire;
 pub(crate) mod cards;
 pub(crate) mod skins;
+mod quit;
 mod gm;
 mod gm_mod;
 mod gm_tsao;

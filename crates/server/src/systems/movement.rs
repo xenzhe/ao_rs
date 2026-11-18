@@ -87,6 +87,7 @@ impl World {
             return;
         }
 
+        self.cancel_quit(id);
         let p = self.player_mut(id);
         p.x = nx;
         p.y = ny;
