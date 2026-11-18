@@ -29,6 +29,9 @@ pub fn recursos_dir() -> PathBuf {
 /// The public ao-org/Recursos checkout (its maps match its own `Dat/npcs.dat` NPC numbers;
 /// the official client's maps place some NPCs by newer numbers). None if absent.
 pub fn public_recursos_dir() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("AO_PUBLIC_RECURSOS") {
+        return Some(PathBuf::from(p));
+    }
     let here = env!("CARGO_MANIFEST_DIR");
     ["../ao20/Recursos".to_string(), "../../ao20/Recursos".to_string(), format!("{here}/../../../ao20/Recursos")].into_iter().map(PathBuf::from).find(|p| p.join("Mapas").is_dir())
 }
